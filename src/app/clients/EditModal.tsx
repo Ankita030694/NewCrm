@@ -12,6 +12,7 @@ interface Client {
   id: string
   name: string
   phone: string
+  altPhone: string
   email: string
   status: string
   city: string
