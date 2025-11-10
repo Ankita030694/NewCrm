@@ -159,6 +159,15 @@ export default function EditModal({
                 />
               </div>
               <div>
+                <label className="text-sm text-gray-400 block mb-1">Alternate Phone</label>
+                <Input 
+                  name="altPhone"
+                  value={client.altPhone}
+                  onChange={handleEditInputChange}
+                  className="bg-gray-950 border-gray-700 text-white"
+                />
+              </div>
+              <div>
                 <label className="text-sm text-gray-400 block mb-1">Email</label>
                 <Input 
                   name="email"

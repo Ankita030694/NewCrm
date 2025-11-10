@@ -14,6 +14,8 @@ import {
   limit,
   addDoc,
   startAfter,
+  startAt,
+  endAt,
   getCountFromServer,
   type QueryDocumentSnapshot,
   type DocumentData,
@@ -220,6 +222,7 @@ function ClientsPageWithParams() {
 
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState<string>("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [primaryAdvocateFilter, setPrimaryAdvocateFilter] = useState<string>("all")
   const [secondaryAdvocateFilter, setSecondaryAdvocateFilter] = useState<string>("all")
@@ -295,35 +298,42 @@ function ClientsPageWithParams() {
   // Add URL parameter handling
   const searchParams = useSearchParams()
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim())
+    }, 500)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [searchTerm])
+
   const mergeAndSortClients = useCallback((existing: Client[], incoming: Client[]) => {
     const mergedMap = new Map<string, Client>()
     existing.forEach((client) => mergedMap.set(client.id, client))
     incoming.forEach((client) => mergedMap.set(client.id, client))
 
     const mergedClients = Array.from(mergedMap.values())
+
+        const clientsWithStartDate: Client[] = []
     const clientsWithoutStartDate: Client[] = []
-    const clientsWithStartDate: Client[] = []
 
     mergedClients.forEach((client) => {
-      const startDateValue = typeof client.startDate === "string" ? client.startDate : ""
-      if (!startDateValue || startDateValue.trim() === "") {
-        clientsWithoutStartDate.push(client)
+      const startDateValue = typeof client.startDate === "string" ? client.startDate.trim() : ""
+      if (startDateValue) {
+            clientsWithStartDate.push(client)
       } else {
-        clientsWithStartDate.push(client)
-      }
-    })
+        clientsWithoutStartDate.push(client)
+          }
+        })
 
-    clientsWithStartDate.sort((a, b) => {
-      const startA = typeof a.startDate === "string" ? a.startDate : ""
-      const startB = typeof b.startDate === "string" ? b.startDate : ""
-      if (!startA || !startB) return 0
+        clientsWithStartDate.sort((a, b) => {
+      const dateA = new Date(a.startDate ?? "")
+      const dateB = new Date(b.startDate ?? "")
+          return dateB.getTime() - dateA.getTime()
+        })
 
-      const dateA = new Date(startA)
-      const dateB = new Date(startB)
-      return dateB.getTime() - dateA.getTime()
-    })
-
-    return [...clientsWithoutStartDate, ...clientsWithStartDate]
+    return [...clientsWithStartDate, ...clientsWithoutStartDate]
   }, [])
 
   const enhanceClientData = useCallback(
@@ -333,50 +343,139 @@ function ClientsPageWithParams() {
         adv_status: client.adv_status || "Inactive",
       }
 
-      if (client.source_database === "billcut" && !client.documentUrl) {
-        try {
-          const documentName = `${client.name}_billcut_agreement.docx`
-          const storagePath = `clients/billcut/documents/${documentName}`
-          const docRef = ref(storage, storagePath)
-          const url = await getDownloadURL(docRef)
-          enhancedClient = { ...enhancedClient, documentUrl: url, documentName }
-        } catch (error: any) {
-          if (error.code !== "storage/object-not-found") {
-            console.error(`Error checking for document for ${client.name}:`, error)
-          }
-        }
-      }
+            if (client.source_database === "billcut" && !client.documentUrl) {
+              try {
+                const documentName = `${client.name}_billcut_agreement.docx`
+                const storagePath = `clients/billcut/documents/${documentName}`
+                const docRef = ref(storage, storagePath)
+                const url = await getDownloadURL(docRef)
+                enhancedClient = { ...enhancedClient, documentUrl: url, documentName }
+              } catch (error: any) {
+                if (error.code !== "storage/object-not-found") {
+                  console.error(`Error checking for document for ${client.name}:`, error)
+                }
+              }
+            }
 
-      try {
-        const historyQuery = query(
-          collection(db, "clients", client.id, "history"),
-          orderBy("timestamp", "desc"),
-          limit(1),
-        )
-        const historySnapshot = await getDocs(historyQuery)
+            try {
+              const historyQuery = query(
+                collection(db, "clients", client.id, "history"),
+                orderBy("timestamp", "desc"),
+                limit(1),
+              )
+              const historySnapshot = await getDocs(historyQuery)
 
-        if (!historySnapshot.empty) {
-          const latestHistoryDoc = historySnapshot.docs[0]
-          const historyData = latestHistoryDoc.data()
-          enhancedClient = {
-            ...enhancedClient,
-            latestRemark: {
-              remark: historyData.remark || "",
-              advocateName: historyData.advocateName || "",
-              timestamp: historyData.timestamp,
-            },
-          }
-        }
-      } catch (error) {
-        console.error(`Error fetching history for client ${client.name}:`, error)
-      }
+              if (!historySnapshot.empty) {
+                const latestHistoryDoc = historySnapshot.docs[0]
+                const historyData = latestHistoryDoc.data()
+                enhancedClient = {
+                  ...enhancedClient,
+                  latestRemark: {
+                    remark: historyData.remark || "",
+                    advocateName: historyData.advocateName || "",
+                    timestamp: historyData.timestamp,
+                  },
+                }
+              }
+            } catch (error) {
+              console.error(`Error fetching history for client ${client.name}:`, error)
+            }
 
-      return enhancedClient
+            return enhancedClient
     },
     [],
   )
 
-  const buildServerConstraints = useCallback((): QueryConstraint[] => {
+  const executeSearchQueries = useCallback(
+    async (term: string, baseConstraints: QueryConstraint[]) => {
+      const normalizedTerm = term.trim()
+      if (!normalizedTerm) return []
+
+      const collectionRef = collection(db, "clients")
+      const queries: Array<ReturnType<typeof query>> = []
+      const limitClause = limit(200)
+
+      try {
+        queries.push(
+          query(
+            collectionRef,
+            ...baseConstraints,
+            orderBy("name"),
+            startAt(normalizedTerm),
+            endAt(`${normalizedTerm}\uf8ff`),
+            limitClause,
+          ),
+        )
+      } catch (error) {
+        console.warn("Skipping name search query due to missing index or field:", error)
+      }
+
+      try {
+        queries.push(query(collectionRef, ...baseConstraints, where("phone", "==", normalizedTerm), limitClause))
+      } catch (error) {
+        console.warn("Skipping phone search query due to missing index or field:", error)
+      }
+
+      try {
+        queries.push(query(collectionRef, ...baseConstraints, where("email", "==", normalizedTerm), limitClause))
+      } catch (error) {
+        console.warn("Skipping email search query due to missing index or field:", error)
+      }
+
+      try {
+        queries.push(
+          query(collectionRef, ...baseConstraints, where("aadharNumber", "==", normalizedTerm), limitClause),
+        )
+      } catch (error) {
+        console.warn("Skipping aadhar search query due to missing index or field:", error)
+      }
+
+      if (queries.length === 0) {
+        return []
+      }
+
+      const snapshots = await Promise.all(
+        queries.map(async (q) => {
+          try {
+            return await getDocs(q)
+          } catch (error) {
+            console.error("Search query failed:", error)
+            return null
+          }
+        }),
+      )
+
+      const uniqueClients = new Map<string, Client>()
+
+      snapshots.forEach((snapshot) => {
+        if (!snapshot) return
+        snapshot.docs.forEach((docSnap) => {
+          const data = docSnap.data()
+          const client = {
+            id: docSnap.id,
+            ...(data ?? {}),
+          } as Client
+          uniqueClients.set(docSnap.id, client)
+        })
+      })
+
+      const enhanced = await Promise.all(
+        Array.from(uniqueClients.values()).map(async (client) => {
+          const enhancedClient = await enhanceClientData(client)
+          return enhancedClient
+        }),
+      )
+
+      return enhanced.sort((a, b) => {
+        const nameA = (a.name || "").toLowerCase()
+        const nameB = (b.name || "").toLowerCase()
+        return nameA.localeCompare(nameB)
+      })
+    },
+    [enhanceClientData],
+  )
+
+  const buildBaseFilterConstraints = useCallback((): QueryConstraint[] => {
     const constraints: QueryConstraint[] = []
 
     if (statusFilter !== "all") {
@@ -406,7 +505,7 @@ function ClientsPageWithParams() {
 
   const fetchFilteredCount = useCallback(async () => {
     try {
-      const constraints = buildServerConstraints()
+      const constraints = buildBaseFilterConstraints()
       const countQuery = query(collection(db, "clients"), ...constraints)
       const totalSnapshot = await getCountFromServer(countQuery)
       const count = totalSnapshot.data().count
@@ -417,14 +516,16 @@ function ClientsPageWithParams() {
     } catch (error) {
       console.error("Error fetching filtered clients count:", error)
       setFilteredTotalCount(0)
-      if (buildServerConstraints().length === 0) {
+      if (buildBaseFilterConstraints().length === 0) {
         setTotalClientCount(0)
       }
     }
-  }, [buildServerConstraints])
+  }, [buildBaseFilterConstraints])
 
   const fetchClientsBatch = useCallback(
     async ({ reset = false }: { reset?: boolean } = {}) => {
+      const trimmedSearch = debouncedSearchTerm
+
       if (reset) {
         setLoading(true)
         setError(null)
@@ -436,9 +537,13 @@ function ClientsPageWithParams() {
         setSelectedClients(new Set())
         setIsFetchingMore(false)
         isFetchingMoreRef.current = false
-        await fetchFilteredCount()
+        if (!trimmedSearch) {
+          await fetchFilteredCount()
+        } else {
+          setFilteredTotalCount(0)
+        }
       } else {
-        if (!hasMoreRef.current || isFetchingMoreRef.current) {
+        if (!hasMoreRef.current || isFetchingMoreRef.current || trimmedSearch) {
           return
         }
         setIsFetchingMore(true)
@@ -446,17 +551,28 @@ function ClientsPageWithParams() {
       }
 
       try {
-        const constraints = buildServerConstraints()
+        const baseConstraints = buildBaseFilterConstraints()
         const collectionRef = collection(db, "clients")
 
+        if (trimmedSearch) {
+          const searchResults = await executeSearchQueries(trimmedSearch, baseConstraints)
+          setClients(searchResults)
+          setFilteredClients(searchResults)
+          setHasMore(false)
+          hasMoreRef.current = false
+          setFilteredTotalCount(searchResults.length)
+          setLoading(false)
+          return
+        }
+
         const paginationConstraints: QueryConstraint[] = [
-          ...constraints,
+          ...baseConstraints,
+          orderBy("startDate", "desc"),
           ...(lastDocRef.current ? [startAfter(lastDocRef.current)] : []),
           limit(ITEMS_PER_PAGE),
         ]
 
         const clientsQuery = query(collectionRef, ...paginationConstraints)
-
         const querySnapshot = await getDocs(clientsQuery)
 
         if (querySnapshot.empty) {
@@ -498,14 +614,14 @@ function ClientsPageWithParams() {
         setHasMore(false)
       } finally {
         if (reset) {
-          setLoading(false)
+        setLoading(false)
         } else {
           setIsFetchingMore(false)
           isFetchingMoreRef.current = false
         }
       }
     },
-    [enhanceClientData, mergeAndSortClients, buildServerConstraints, fetchFilteredCount],
+    [debouncedSearchTerm, executeSearchQueries, enhanceClientData, mergeAndSortClients, buildBaseFilterConstraints, fetchFilteredCount],
   )
 
   // Toast function to add new toast
@@ -572,6 +688,7 @@ function ClientsPageWithParams() {
     }
     if (searchFromUrl) {
       setSearchTerm(searchFromUrl)
+      setDebouncedSearchTerm(searchFromUrl.trim())
     }
     if (documentFromUrl) {
       setDocumentFilter(documentFromUrl)
@@ -870,14 +987,14 @@ function ClientsPageWithParams() {
     let results = [...clients]
 
     // Apply search term
-    if (searchTerm.trim() !== "") {
-      const searchLower = searchTerm.toLowerCase()
+    if (debouncedSearchTerm.trim() !== "") {
+      const searchLower = debouncedSearchTerm.toLowerCase()
       results = results.filter(
         (client) =>
           (client.name && client.name.toLowerCase().includes(searchLower)) ||
           (client.email && client.email.toLowerCase().includes(searchLower)) ||
-          (client.phone && client.phone.includes(searchTerm)) ||
-          (client.aadharNumber && client.aadharNumber.includes(searchTerm)),
+          (client.phone && client.phone.includes(debouncedSearchTerm)) ||
+          (client.aadharNumber && client.aadharNumber.includes(debouncedSearchTerm)),
       )
     }
 
@@ -929,7 +1046,7 @@ function ClientsPageWithParams() {
     setFilteredClients(results)
   }, [
     clients,
-    searchTerm,
+    debouncedSearchTerm,
     primaryAdvocateFilter,
     secondaryAdvocateFilter,
     statusFilter,
@@ -1582,8 +1699,7 @@ function ClientsPageWithParams() {
     }
   }
 
-  const requiresClientSideRefinement =
-    searchTerm.trim() !== "" || documentFilter !== "all" || bankNameFilter !== "all"
+  const requiresClientSideRefinement = documentFilter !== "all" || bankNameFilter !== "all"
 
   const baseTotalCount = filteredTotalCount || totalClientCount || filteredClients.length
   const displayedTotalCount = requiresClientSideRefinement ? filteredClients.length : baseTotalCount
