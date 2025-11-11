@@ -307,6 +307,12 @@ const EditClientModal = ({
       setLocalSaveError('Please fill in all required fields (marked with *)');
       return;
     }
+
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(lead.phone || '') || !phoneRegex.test(lead.altPhone || '')) {
+      setLocalSaveError('Phone numbers must contain exactly 10 digits.');
+      return;
+    }
     
     // Additional validation for billcut clients
     if (lead.source_database === 'billcut') {
@@ -1073,7 +1079,8 @@ const InputField = ({ id, label, value, onChange, type = 'text', required = fals
   // Special handling for phone input
   const inputProps = id === 'phone' ? {
     maxLength: 10,
-    pattern: '[0-9]*',
+    minLength: 10,
+    pattern: '[0-9]{10}',
     inputMode: 'numeric' as const,
     onKeyPress: (e: React.KeyboardEvent) => {
       // Allow only numeric input for phone
@@ -1086,7 +1093,8 @@ const InputField = ({ id, label, value, onChange, type = 'text', required = fals
   // Special handling for altPhone input
   const altPhoneProps = id === 'altPhone' ? {
     maxLength: 10,
-    pattern: '[0-9]*',
+    minLength: 10,
+    pattern: '[0-9]{10}',
     inputMode: 'numeric' as const,
     onKeyPress: (e: React.KeyboardEvent) => {
       // Allow only numeric input for altPhone
@@ -1129,7 +1137,13 @@ const InputField = ({ id, label, value, onChange, type = 'text', required = fals
         type={id === 'phone' || id === 'altPhone' ? 'tel' : type}
         id={id}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          let newValue = e.target.value;
+          if (id === 'phone' || id === 'altPhone') {
+            newValue = newValue.replace(/\D/g, '').slice(0, 10);
+          }
+          onChange(newValue);
+        }}
         className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:opacity-75 disabled:cursor-not-allowed"
         required={required}
         placeholder={placeholder}

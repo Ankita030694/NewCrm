@@ -39,9 +39,15 @@ const EditClientDetailsModal = ({ clientData: initialClientData, onClose, onSave
 
   // Handle field changes
   const handleFieldChange = (field: string, value: any) => {
+    let nextValue = value;
+
+    if (field === 'phone' || field === 'altPhone') {
+      nextValue = String(value ?? '').replace(/\D/g, '').slice(0, 10);
+    }
+
     setClientData((prevData: any) => ({
       ...prevData,
-      [field]: value
+      [field]: nextValue
     }));
   };
 
@@ -182,9 +188,19 @@ const EditClientDetailsModal = ({ clientData: initialClientData, onClose, onSave
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
+
+    const phoneRegex = /^\d{10}$/;
+    const phoneValue = String(clientData.phone || '');
+    const altPhoneValue = String(clientData.altPhone || '');
+
+    if (!phoneRegex.test(phoneValue) || !phoneRegex.test(altPhoneValue)) {
+      setSaveError('Phone numbers must contain exactly 10 digits.');
+      return;
+    }
+
+    setSaving(true);
 
     try {
       // Get a reference to the client document
@@ -438,10 +454,29 @@ const EditClientDetailsModal = ({ clientData: initialClientData, onClose, onSave
                     <label htmlFor="phone" className="block text-sm font-medium text-gray-400">Phone*</label>
                     <input
                       id="phone"
-                      type="text"
+                      type="tel"
                       value={clientData.phone || ''}
                       onChange={(e) => handleFieldChange('phone', e.target.value)}
                       required
+                      minLength={10}
+                      maxLength={10}
+                      pattern="[0-9]{10}"
+                      inputMode="numeric"
+                      className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="altPhone" className="block text-sm font-medium text-gray-400">Alternate Phone*</label>
+                    <input
+                      id="altPhone"
+                      type="tel"
+                      value={clientData.altPhone || ''}
+                      onChange={(e) => handleFieldChange('altPhone', e.target.value)}
+                      required
+                      minLength={10}
+                      maxLength={10}
+                      pattern="[0-9]{10}"
+                      inputMode="numeric"
                       className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
