@@ -38,6 +38,7 @@ import SalesSidebar from "@/components/navigation/SalesSidebar"
 import OverlordSidebar from "@/components/navigation/OverlordSidebar"
 import BillcutSidebar from "@/components/navigation/BillcutSidebar"
 import BulkWhatsAppModal from "./components/BulkWhatsAppModal"
+import { resolveLeadState } from "./utils/location"
 
 // Import types
 import type { Lead, User, EditingLeadsState, HistoryItem } from "./types"
@@ -61,91 +62,6 @@ const statusOptions = [
   "Retargeting",
   "Closed Lead",
 ]
-
-// Utility functions
-const extractStateFromAddress = (address: string): string => {
-  const states = [
-    "ANDHRA PRADESH",
-    "ARUNACHAL PRADESH",
-    "ASSAM",
-    "BIHAR",
-    "CHHATTISGARH",
-    "GOA",
-    "GUJARAT",
-    "HARYANA",
-    "HIMACHAL PRADESH",
-    "JHARKHAND",
-    "KARNATAKA",
-    "KERALA",
-    "MADHYA PRADESH",
-    "MAHARASHTRA",
-    "MANIPUR",
-    "MEGHALAYA",
-    "MIZORAM",
-    "NAGALAND",
-    "ODISHA",
-    "PUNJAB",
-    "RAJASTHAN",
-    "SIKKIM",
-    "TAMIL NADU",
-    "TELANGANA",
-    "TRIPURA",
-    "UTTAR PRADESH",
-    "UTTARAKHAND",
-    "WEST BENGAL",
-    "DELHI",
-    "JAMMU AND KASHMIR",
-    "LADAKH",
-    "PUDUCHERRY",
-  ]
-
-  const addressUpper = address.toUpperCase()
-  for (const state of states) {
-    if (addressUpper.includes(state)) {
-      return state
-    }
-  }
-  return "Unknown State"
-}
-
-const getStateFromPincode = (pincode: string): string => {
-  const firstTwoDigits = pincode.substring(0, 2)
-  const firstThreeDigits = pincode.substring(0, 3)
-
-  if (firstThreeDigits === "682") return "Lakshadweep"
-  if (firstThreeDigits === "744") return "Andaman & Nicobar"
-
-  const digits = Number.parseInt(firstTwoDigits)
-
-  if (digits === 11) return "Delhi"
-  if (digits >= 12 && digits <= 13) return "Haryana"
-  if (digits >= 14 && digits <= 16) return "Punjab"
-  if (digits === 17) return "Himachal Pradesh"
-  if (digits >= 18 && digits <= 19) return "Jammu & Kashmir"
-  if (digits >= 20 && digits <= 28) return "Uttar Pradesh"
-  if (digits >= 30 && digits <= 34) return "Rajasthan"
-  if (digits >= 36 && digits <= 39) return "Gujarat"
-  if (digits >= 0 && digits <= 44) return "Maharashtra"
-  if (digits >= 45 && digits <= 48) return "Madhya Pradesh"
-  if (digits === 49) return "Chhattisgarh"
-  if (digits >= 50 && digits <= 53) return "Andhra Pradesh & Telangana"
-  if (digits >= 56 && digits <= 59) return "Karnataka"
-  if (digits >= 60 && digits <= 64) return "Tamil Nadu"
-  if (digits >= 67 && digits <= 69) return "Kerala"
-  if (digits >= 70 && digits <= 74) return "West Bengal"
-  if (digits >= 75 && digits <= 77) return "Orissa"
-  if (digits === 78) return "Assam"
-  if (digits === 79) return "North Eastern States"
-  if (digits >= 80 && digits <= 85) return "Bihar"
-  if ((digits >= 80 && digits <= 83) || digits === 92) return "Jharkhand"
-
-  return "Unknown State"
-}
-
-const extractPincodeFromAddress = (address: string): string => {
-  const pincodeMatch = address.match(/\b\d{6}\b/)
-  return pincodeMatch ? pincodeMatch[0] : ""
-}
 
 const formatDateForInput = (date: Date): string => {
   const year = date.getFullYear()
@@ -449,9 +365,7 @@ const BillCutLeadsPage = () => {
             seenIds.add(docSnapshot.id)
             
             const data = docSnapshot.data()
-            const address = data.address || ""
-            const pincode = extractPincodeFromAddress(address)
-            const state = pincode ? getStateFromPincode(pincode) : "Unknown State"
+            const state = resolveLeadState(data)
 
             const lead: Lead = {
               id: docSnapshot.id,
@@ -782,9 +696,7 @@ const BillCutLeadsPage = () => {
         const fetchedLeads = await Promise.all(
           querySnapshot.docs.map(async (docSnapshot) => {
             const data = docSnapshot.data()
-            const address = data.address || ""
-            const pincode = extractPincodeFromAddress(address)
-            const state = pincode ? getStateFromPincode(pincode) : "Unknown State"
+            const state = resolveLeadState(data)
 
             const lead: Lead = {
               id: docSnapshot.id,
@@ -1952,9 +1864,7 @@ const BillCutLeadsPage = () => {
       const fetchedLeads = await Promise.all(
         querySnapshot.docs.map(async (docSnapshot) => {
           const data = docSnapshot.data()
-          const address = data.address || ""
-          const pincode = extractPincodeFromAddress(address)
-          const state = pincode ? getStateFromPincode(pincode) : "Unknown State"
+          const state = resolveLeadState(data)
 
           const lead: Lead = {
             id: docSnapshot.id,

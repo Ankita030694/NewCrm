@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useMemo } from "react"
 import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore"
 import { db as crmDb } from "@/firebase/firebase"
 import { debounce } from "lodash"
+import { resolveLeadState } from "../utils/location"
 
 type BillcutLeadsFiltersProps = {
   searchQuery: string
@@ -216,9 +217,7 @@ const BillcutLeadsFiltersOptimized = ({
 
         // Transform results to match your Lead type
         const transformedResults = searchResults.map((data) => {
-          const address = data.address || ""
-          const pincode = extractPincodeFromAddress(address)
-          const state = pincode ? getStateFromPincode(pincode) : "Unknown State"
+          const state = resolveLeadState(data)
 
           return {
             id: data.id,
@@ -250,23 +249,6 @@ const BillcutLeadsFiltersOptimized = ({
     },
     [onSearchResults, setIsSearching],
   )
-
-  // Helper functions (you'll need to import these from your existing code)
-  const extractPincodeFromAddress = (address: string): string => {
-    const pincodeMatch = address.match(/\b\d{6}\b/)
-    return pincodeMatch ? pincodeMatch[0] : ""
-  }
-
-  const getStateFromPincode = (pincode: string): string => {
-    const firstTwoDigits = pincode.substring(0, 2)
-    const digits = Number.parseInt(firstTwoDigits)
-
-    if (digits === 11) return "Delhi"
-    if (digits >= 12 && digits <= 13) return "Haryana"
-    if (digits >= 14 && digits <= 16) return "Punjab"
-    // Add other state mappings as needed
-    return "Unknown State"
-  }
 
   // Debounced search function
   const debouncedSearch = useMemo(
