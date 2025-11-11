@@ -44,6 +44,17 @@ import { getFunctions, httpsCallable } from "firebase/functions"
 import { app } from "@/firebase/firebase"
 import { Spinner } from "@/components/ui/spinner"
 
+const createSearchVariants = (value: string): string[] => {
+  const normalized = value.trim()
+  if (!normalized) return []
+
+  const lower = normalized.toLowerCase()
+  const upper = normalized.toUpperCase()
+  const titleCase = lower.replace(/\b\w/g, (char) => char.toUpperCase())
+
+  return Array.from(new Set([normalized, lower, upper, titleCase])).filter((variant) => variant.length > 0)
+}
+
 interface User {
   uid: string
   firstName: string
@@ -391,24 +402,28 @@ function ClientsPageWithParams() {
       const normalizedTerm = term.trim()
       if (!normalizedTerm) return []
 
+      const searchVariants = createSearchVariants(normalizedTerm)
+      const normalizedLowerTerm = normalizedTerm.toLowerCase()
       const collectionRef = collection(db, "clients")
       const queries: Array<ReturnType<typeof query>> = []
       const limitClause = limit(200)
 
-      try {
-        queries.push(
-          query(
-            collectionRef,
-            ...baseConstraints,
-            orderBy("name"),
-            startAt(normalizedTerm),
-            endAt(`${normalizedTerm}\uf8ff`),
-            limitClause,
-          ),
-        )
-      } catch (error) {
-        console.warn("Skipping name search query due to missing index or field:", error)
-      }
+      searchVariants.forEach((variant) => {
+        try {
+          queries.push(
+            query(
+              collectionRef,
+              ...baseConstraints,
+              orderBy("name"),
+              startAt(variant),
+              endAt(`${variant}\uf8ff`),
+              limitClause,
+            ),
+          )
+        } catch (error) {
+          console.warn("Skipping name search query due to missing index or field:", error)
+        }
+      })
 
       try {
         queries.push(query(collectionRef, ...baseConstraints, where("phone", "==", normalizedTerm), limitClause))
@@ -416,19 +431,21 @@ function ClientsPageWithParams() {
         console.warn("Skipping phone search query due to missing index or field:", error)
       }
 
-      try {
-        queries.push(query(collectionRef, ...baseConstraints, where("email", "==", normalizedTerm), limitClause))
-      } catch (error) {
-        console.warn("Skipping email search query due to missing index or field:", error)
-      }
+      searchVariants.forEach((variant) => {
+        try {
+          queries.push(query(collectionRef, ...baseConstraints, where("email", "==", variant), limitClause))
+        } catch (error) {
+          console.warn("Skipping email search query due to missing index or field:", error)
+        }
+      })
 
-      try {
-        queries.push(
-          query(collectionRef, ...baseConstraints, where("aadharNumber", "==", normalizedTerm), limitClause),
-        )
-      } catch (error) {
-        console.warn("Skipping aadhar search query due to missing index or field:", error)
-      }
+      searchVariants.forEach((variant) => {
+        try {
+          queries.push(query(collectionRef, ...baseConstraints, where("aadharNumber", "==", variant), limitClause))
+        } catch (error) {
+          console.warn("Skipping aadhar search query due to missing index or field:", error)
+        }
+      })
 
       if (queries.length === 0) {
         return []
@@ -466,7 +483,22 @@ function ClientsPageWithParams() {
         }),
       )
 
-      return enhanced.sort((a, b) => {
+      const caseInsensitiveFiltered = enhanced.filter((client) => {
+        const valuesToCheck = [
+          client.name,
+          client.email,
+          client.phone,
+          client.altPhone,
+          client.aadharNumber,
+          client.panNumber,
+        ]
+
+        return valuesToCheck.some(
+          (value) => typeof value === "string" && value.toLowerCase().includes(normalizedLowerTerm),
+        )
+      })
+
+      return caseInsensitiveFiltered.sort((a, b) => {
         const nameA = (a.name || "").toLowerCase()
         const nameB = (b.name || "").toLowerCase()
         return nameA.localeCompare(nameB)
@@ -989,13 +1021,20 @@ function ClientsPageWithParams() {
     // Apply search term
     if (debouncedSearchTerm.trim() !== "") {
       const searchLower = debouncedSearchTerm.toLowerCase()
-      results = results.filter(
-        (client) =>
-          (client.name && client.name.toLowerCase().includes(searchLower)) ||
-          (client.email && client.email.toLowerCase().includes(searchLower)) ||
-          (client.phone && client.phone.includes(debouncedSearchTerm)) ||
-          (client.aadharNumber && client.aadharNumber.includes(debouncedSearchTerm)),
-      )
+      results = results.filter((client) => {
+        const valuesToCheck = [
+          client.name,
+          client.email,
+          client.phone,
+          client.altPhone,
+          client.aadharNumber,
+          client.panNumber,
+        ]
+
+        return valuesToCheck.some(
+          (value) => typeof value === "string" && value.toLowerCase().includes(searchLower),
+        )
+      })
     }
 
     // Apply primary advocate filter
