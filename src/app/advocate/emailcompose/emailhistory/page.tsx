@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { db, auth } from '@/firebase/firebase';
 import AdvocateSidebar from "@/components/navigation/AdvocateSidebar";
 import AssistantSidebar from "@/components/navigation/AssistantSidebar";
-import { FaEnvelope, FaPaperclip, FaCheck, FaTimes, FaFile, FaSearch, FaEye, FaTimes as FaTimesCircle, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import { FaEnvelope, FaPaperclip, FaCheck, FaTimes, FaFile, FaDownload, FaSearch, FaEye, FaTimes as FaTimesCircle, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { format } from 'date-fns';
 import OverlordSidebar from '@/components/navigation/OverlordSidebar';
 
@@ -49,12 +51,9 @@ export default function EmailHistoryPage() {
   const [selectedEmail, setSelectedEmail] = useState<EmailHistory | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [userRole, setUserRole] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const pageSize = 30;
+  const itemsPerPage = 30;
   
   useEffect(() => {
     // Access localStorage only on client side
@@ -62,49 +61,31 @@ export default function EmailHistoryPage() {
     setUserRole(role || '');
   }, []);
 
-  // Debounce search term
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-      setCurrentPage(1); // Reset to first page on new search
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
   useEffect(() => {
     async function fetchEmailHistory() {
-      setLoading(true);
       try {
-        const params = new URLSearchParams({
-          page: currentPage.toString(),
-          pageSize: pageSize.toString(),
-          search: debouncedSearchTerm,
+        const userId = auth.currentUser?.uid;
+        const emailHistoryRef = collection(db, "emailHistory");
+        const emailHistoryQuery = query(
+          emailHistoryRef,
+          orderBy("sentAt", "desc")
+        );
+        
+        const snapshot = await getDocs(emailHistoryQuery);
+        const historyData: EmailHistory[] = [];
+        
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          // Filter out emails that have leadId field or emailType "agreement"
+          if (!data.leadId && data.emailType !== "agreement") {
+            historyData.push({
+              id: doc.id,
+              ...data,
+            } as EmailHistory);
+          }
         });
         
-        console.log('Fetching email history with params:', params.toString());
-        const response = await fetch(`/api/email-history?${params}`);
-        console.log('Response status:', response.status);
-        
-        const result = await response.json();
-        console.log('API Response:', result);
-        
-        if (result.success) {
-          // Convert ISO date strings back to Date objects for display
-          const historyData = result.data.map((email: any) => ({
-            ...email,
-            sentAt: email.sentAt ? { toDate: () => new Date(email.sentAt) } : null,
-          }));
-          
-          console.log('Processed history data:', historyData.length, 'records');
-          setEmailHistory(historyData);
-          setHasMore(result.pagination.hasMore);
-          setTotalRecords(result.pagination.totalRecords);
-          setError(null);
-        } else {
-          console.error('API returned error:', result.error);
-          setError(result.error || "Failed to load email history.");
-        }
+        setEmailHistory(historyData);
       } catch (err) {
         console.error("Error fetching email history:", err);
         setError("Failed to load email history. Please try again later.");
@@ -114,7 +95,7 @@ export default function EmailHistoryPage() {
     }
     
     fetchEmailHistory();
-  }, [currentPage, debouncedSearchTerm]);
+  }, []);
   
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return bytes + ' bytes';
@@ -159,16 +140,64 @@ export default function EmailHistoryPage() {
     document.body.style.overflow = 'unset'; // Enable scrolling again
   };
 
-  const handleNextPage = () => {
-    if (hasMore) {
-      setCurrentPage(prev => prev + 1);
-    }
+  // Filter emails globally based on search term
+  const filteredEmails = emailHistory.filter(email => 
+    email.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (email.recipients && email.recipients.some(r => r.email.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+    (email.recipients && email.recipients.some(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+    (email.leadEmail && email.leadEmail.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (email.leadName && email.leadName.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+  
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredEmails.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedEmails = filteredEmails.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+  
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(prev => prev - 1);
+  
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPagesToShow = 5;
+    
+    if (totalPages <= maxPagesToShow) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pages.push(i);
+        }
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        pages.push(1);
+        pages.push('...');
+        pages.push(currentPage - 1);
+        pages.push(currentPage);
+        pages.push(currentPage + 1);
+        pages.push('...');
+        pages.push(totalPages);
+      }
     }
+    
+    return pages;
   };
   
   return (
@@ -186,7 +215,7 @@ export default function EmailHistoryPage() {
           <p className="text-gray-400 mb-6">View the history of emails sent from your account</p>
           
           {/* Search bar */}
-          <div className="relative mb-6">
+          <div className="relative mb-4">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <FaSearch className="text-gray-500" />
             </div>
@@ -199,6 +228,14 @@ export default function EmailHistoryPage() {
             />
           </div>
           
+          {/* Results count */}
+          {!loading && !error && (
+            <div className="mb-4 text-gray-400 text-sm">
+              Showing {startIndex + 1}-{Math.min(endIndex, filteredEmails.length)} of {filteredEmails.length} email{filteredEmails.length !== 1 ? 's' : ''}
+              {searchTerm && ` (filtered from ${emailHistory.length} total)`}
+            </div>
+          )}
+          
           {loading ? (
             <div className="bg-gray-800/50 rounded-xl p-8 backdrop-blur-sm border border-gray-700/50 shadow-xl flex justify-center">
               <div className="flex flex-col items-center">
@@ -210,27 +247,26 @@ export default function EmailHistoryPage() {
             <div className="bg-gray-800/50 rounded-xl p-8 backdrop-blur-sm border border-red-700/50 shadow-xl">
               <p className="text-red-400 text-center">{error}</p>
             </div>
-          ) : emailHistory.length === 0 ? (
+          ) : filteredEmails.length === 0 ? (
             <div className="bg-gray-800/50 rounded-xl p-8 backdrop-blur-sm border border-gray-700/50 shadow-xl">
               <p className="text-gray-300 text-center">
-                {debouncedSearchTerm ? "No emails matching your search." : "No email history found."}
+                {searchTerm ? "No emails matching your search." : "No email history found."}
               </p>
             </div>
           ) : (
-            <>
-              <div className="bg-gray-800/50 rounded-xl overflow-hidden backdrop-blur-sm border border-gray-700/50 shadow-xl">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-900/50 text-gray-400 text-left">
-                      <th className="p-4">Status</th>
-                      <th className="p-4">Subject</th>
-                      <th className="p-4 hidden md:table-cell">Recipient</th>
-                      <th className="p-4 hidden lg:table-cell">Date</th>
-                      <th className="p-4 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {emailHistory.map((email, index) => (
+            <div className="bg-gray-800/50 rounded-xl overflow-hidden backdrop-blur-sm border border-gray-700/50 shadow-xl">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-900/50 text-gray-400 text-left">
+                    <th className="p-4">Status</th>
+                    <th className="p-4">Subject</th>
+                    <th className="p-4 hidden md:table-cell">Recipient</th>
+                    <th className="p-4 hidden lg:table-cell">Date</th>
+                    <th className="p-4 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedEmails.map((email, index) => (
                     <tr 
                       key={email.id} 
                       className={`border-t border-gray-700/30 hover:bg-gray-700/20 transition-colors cursor-pointer ${
@@ -289,44 +325,68 @@ export default function EmailHistoryPage() {
                         </button>
                       </td>
                     </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
               
               {/* Pagination Controls */}
-              <div className="mt-6 flex items-center justify-between bg-gray-800/50 rounded-xl p-4 backdrop-blur-sm border border-gray-700/50">
-                <div className="text-gray-400 text-sm">
-                  Page {currentPage} • Showing {totalRecords} records
+              {totalPages > 1 && (
+                <div className="p-4 border-t border-gray-700/30 bg-gray-900/30">
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <button
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className={`flex items-center px-4 py-2 rounded-lg transition-colors w-full sm:w-auto justify-center ${
+                        currentPage === 1
+                          ? 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
+                          : 'bg-purple-600/30 text-purple-300 hover:bg-purple-600/50'
+                      }`}
+                    >
+                      <FaChevronLeft className="mr-2" />
+                      <span className="hidden sm:inline">Previous</span>
+                      <span className="sm:hidden">Prev</span>
+                    </button>
+                    
+                    <div className="flex gap-2 flex-wrap justify-center">
+                      {getPageNumbers().map((page, index) => (
+                        <button
+                          key={index}
+                          onClick={() => typeof page === 'number' ? handlePageChange(page) : null}
+                          disabled={page === '...'}
+                          className={`px-3 py-2 rounded-lg transition-colors min-w-[40px] ${
+                            page === currentPage
+                              ? 'bg-purple-600 text-white font-semibold'
+                              : page === '...'
+                              ? 'text-gray-500 cursor-default'
+                              : 'bg-gray-700/30 text-gray-300 hover:bg-gray-700/50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    <button
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className={`flex items-center px-4 py-2 rounded-lg transition-colors w-full sm:w-auto justify-center ${
+                        currentPage === totalPages
+                          ? 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
+                          : 'bg-purple-600/30 text-purple-300 hover:bg-purple-600/50'
+                      }`}
+                    >
+                      Next
+                      <FaChevronRight className="ml-2" />
+                    </button>
+                  </div>
+                  
+                  {/* Page info for mobile */}
+                  <div className="text-center text-gray-400 text-sm mt-3 sm:hidden">
+                    Page {currentPage} of {totalPages}
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handlePrevPage}
-                    disabled={currentPage === 1}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                      currentPage === 1
-                        ? 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
-                        : 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300'
-                    }`}
-                  >
-                    <FaChevronLeft />
-                    Previous
-                  </button>
-                  <button
-                    onClick={handleNextPage}
-                    disabled={!hasMore}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                      !hasMore
-                        ? 'bg-gray-700/30 text-gray-500 cursor-not-allowed'
-                        : 'bg-purple-600/30 hover:bg-purple-600/50 text-purple-300'
-                    }`}
-                  >
-                    Next
-                    <FaChevronRight />
-                  </button>
-                </div>
-              </div>
-            </>
+              )}
+            </div>
           )}
         </div>
       </div>
