@@ -58,7 +58,7 @@ const AmaBulkWhatsAppModal: React.FC<AmaBulkWhatsAppModalProps> = ({
       await onSendBulkWhatsApp(selectedTemplate, leadData.map(lead => lead.id), leadData);
       onClose();
     } catch (error) {
-      console.error("Error sending bulk WhatsApp:", error);
+      // Error sending bulk WhatsApp
     } finally {
       setIsSending(false);
     }

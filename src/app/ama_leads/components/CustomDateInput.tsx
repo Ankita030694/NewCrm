@@ -85,15 +85,6 @@ const CustomDateInput = ({
     onChange('');
   };
 
-  const formatDisplayDate = (date: Date | null) => {
-    if (!date) return '';
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
-  };
-
   return (
     <div className={`relative ${className}`}>
       {label && (

@@ -35,7 +35,6 @@ type LeadsFiltersProps = {
   isSearching?: boolean
   setIsSearching?: (searching: boolean) => void
   allLeadsCount?: number
-  filteredLeadsCount?: number
   onSearchCleared?: () => void
   databaseFilteredCount?: number // Total count from database matching all filters
 }
@@ -66,7 +65,6 @@ const AmaLeadsFilters = ({
   isSearching = false,
   setIsSearching = () => {},
   allLeadsCount = 0,
-  filteredLeadsCount = 0,
   onSearchCleared,
   databaseFilteredCount = 0,
 }: LeadsFiltersProps) => {
@@ -236,7 +234,7 @@ const AmaLeadsFilters = ({
         // Convert Map to Array and sort by relevance
         const searchResults = Array.from(allResults.values())
           .sort((a, b) => (b.searchRelevance || 0) - (a.searchRelevance || 0))
-          .slice(0, 100) // Limit final results
+          .slice(0, 50) // Limit final results
 
 
         // Transform results to match AMA Lead type
@@ -279,7 +277,6 @@ const AmaLeadsFilters = ({
         } else {
         }
       } catch (error) {
-        console.error("❌ Search error:", error)
         onSearchResults?.([])
         setSearchResultsCount(0)
       } finally {
@@ -377,7 +374,7 @@ const AmaLeadsFilters = ({
 
         setSalesUsers(users)
       } catch (error) {
-        console.error("Error fetching sales users:", error)
+        // Error fetching sales users
       } finally {
         setIsLoading(false)
       }

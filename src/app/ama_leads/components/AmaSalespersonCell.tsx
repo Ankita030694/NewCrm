@@ -81,7 +81,7 @@ const AmaSalespersonCell = ({
         });
         setSalesTeamMembers(Array.from(mergedMap.values()));
       } catch (err) {
-        console.error('Error fetching sales team members:', err);
+        // Error fetching sales team members
       } finally {
         setLoading(false);
       }
@@ -151,12 +151,6 @@ const AmaSalespersonCell = ({
     }
     
     return [];
-  };
-
-  const handleUnassign = async () => {
-    if (unassignLead && canUnassign(lead)) {
-      await unassignLead(lead.id);
-    }
   };
 
   const handleAssignmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {

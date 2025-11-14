@@ -164,7 +164,7 @@ const AmaLeadsTable = (props: LeadsTableProps) => {
         })
         setDynamicSalesTeamMembers(Array.from(mergedMap.values()))
       } catch (err) {
-        console.error("Error fetching sales team members:", err)
+        // Error fetching sales team members
       } finally {
         setLoadingSalesTeam(false)
       }
@@ -281,7 +281,6 @@ const AmaLeadsTable = (props: LeadsTableProps) => {
 
     if (hasDuplicates && !duplicateToastShown) {
       setDuplicateToastShown(true)
-      console.warn("Duplicate lead IDs detected and handled.")
     }
   }, [list, duplicateToastShown])
 

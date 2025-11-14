@@ -75,7 +75,6 @@ const AmaLeadsPage = () => {
   // Search state
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const [allLeadsCount, setAllLeadsCount] = useState(0)
   const [databaseFilteredCount, setDatabaseFilteredCount] = useState(0)
   const [searchResultsCount, setSearchResultsCount] = useState(0)
 
@@ -138,27 +137,10 @@ const AmaLeadsPage = () => {
   const [conversionLeadName, setConversionLeadName] = useState("")
   const [isConvertingLead, setIsConvertingLead] = useState(false)
 
-  // Debug: Track modal state changes
-  useEffect(() => {
-    console.log("🔍 Conversion modal state changed:", {
-      showConversionModal,
-      conversionLeadId,
-      conversionLeadName,
-      isConvertingLead,
-    })
-  }, [showConversionModal, conversionLeadId, conversionLeadName, isConvertingLead])
-
-  // Debug: Track leads state changes
-  useEffect(() => {
-    if (conversionLeadId) {
-      const convertedLead = leads.find((l) => l.id === conversionLeadId)
-      console.log("🔍 Leads state changed - converted lead status:", convertedLead?.status)
-    }
-  }, [leads, conversionLeadId])
-
   // Refs
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const initialLoadCompleteRef = useRef(false)
 
   // Helper function to get callback priority for sorting
   const getCallbackPriority = (lead: any): number => {
@@ -261,7 +243,6 @@ const AmaLeadsPage = () => {
         const salesPersonnel = usersData.filter((u: any) => u.role === "salesperson" || u.role === "sales")
         setSalesTeamMembers(salesPersonnel as any)
       } catch (error) {
-        console.error("Error fetching team members: ", error)
         toast.error("Failed to load team members")
       }
     }
@@ -296,15 +277,6 @@ const AmaLeadsPage = () => {
       }
       const dbSourceValue = sourceMap[sourceFilter as keyof typeof sourceMap] || sourceFilter.toLowerCase()
 
-      // Debug logging for CredSettle + No Status filter
-      if (sourceFilter === "credsettlee" && statusFilter === "No Status") {
-        console.log("🔍 [buildQuery] CredSettle + No Status filter:", {
-          sourceFilter,
-          dbSourceValue,
-          statusFilter,
-          isLoadMore,
-        })
-      }
 
       // Handle array of possible values for source_database
       if (Array.isArray(dbSourceValue)) {
@@ -317,14 +289,6 @@ const AmaLeadsPage = () => {
     // Status filter
     if (statusFilter !== "all") {
       if (statusFilter === "No Status") {
-        // Debug logging for CredSettle + No Status filter
-        if (sourceFilter === "credsettlee") {
-          console.log("🔍 [buildQuery] Adding No Status constraint for CredSettle:", {
-            statusValues: ["", "-", "–", "No Status"],
-            sourceFilter,
-            statusFilter,
-          })
-        }
         constraints.push(where("status", "in", ["", "-", "–", "No Status"] as any))
       } else {
         constraints.push(where("status", "==", statusFilter))
@@ -365,15 +329,13 @@ const AmaLeadsPage = () => {
       const snapshot = await getDocs(countQuery)
       const count = snapshot.size
       setTotalLeadsCount(count)
-      setAllLeadsCount(count) // Also set for search functionality
     } catch (e) {
       setTotalLeadsCount(0)
-      setAllLeadsCount(0)
     }
   }
 
   // Fetch filtered count from database based on current filters
-  const fetchFilteredCount = async (excludePagination = false) => {
+  const fetchFilteredCount = async () => {
     try {
       const baseQuery = collection(crmDb, "ama_leads")
       const constraints: any[] = []
@@ -441,18 +403,8 @@ const AmaLeadsPage = () => {
 
       const countSnapshot = await getDocs(countQuery)
       
-      console.log('🔍 [fetchFilteredCount] Count results:', {
-        totalCount: countSnapshot.size,
-        fromDate,
-        toDate,
-        statusFilter,
-        salesPersonFilter,
-        sourceFilter
-      })
-      
       return countSnapshot.size
     } catch (error) {
-      console.error("❌ Error fetching filtered count:", error)
       return 0
     }
   }
@@ -489,31 +441,6 @@ const AmaLeadsPage = () => {
       }
       const dbSourceValue = sourceMap[sourceFilter as keyof typeof sourceMap] || sourceFilter.toLowerCase()
 
-      // Debug logging for CredSettle + No Status filter
-      if (sourceFilter === "credsettlee" && statusFilter === "No Status") {
-        console.log("🔍 [applyFiltersToLeads] CredSettle + No Status filter:", {
-          sourceFilter,
-          dbSourceValue,
-          statusFilter,
-          totalLeads: leadsArray.length,
-          beforeSourceFilter: result.length,
-        })
-
-        // Debug: Show all unique source_database values in the leads
-        const uniqueSources = [...new Set(leadsArray.map((lead) => lead.source_database))]
-        console.log("🔍 [applyFiltersToLeads] All unique source_database values:", uniqueSources)
-
-        // Debug: Show sample leads with their source_database values
-        console.log(
-          "🔍 [applyFiltersToLeads] Sample leads with source_database:",
-          leadsArray.slice(0, 5).map((lead) => ({
-            id: lead.id,
-            name: lead.name,
-            source_database: lead.source_database,
-            source: lead.source,
-          })),
-        )
-      }
 
       // Handle array of possible values for source_database
       if (Array.isArray(dbSourceValue)) {
@@ -522,36 +449,11 @@ const AmaLeadsPage = () => {
         result = result.filter((lead) => lead.source_database === dbSourceValue)
       }
 
-      // Debug logging after source filter
-      if (sourceFilter === "credsettlee" && statusFilter === "No Status") {
-        console.log("🔍 [applyFiltersToLeads] After source filter:", {
-          afterSourceFilter: result.length,
-          sampleLeads: result.slice(0, 3).map((lead) => ({
-            id: lead.id,
-            name: lead.name,
-            source_database: lead.source_database,
-            status: lead.status,
-          })),
-        })
-      }
     }
 
     // Status filter
     if (statusFilter !== "all") {
       if (statusFilter === "No Status") {
-        // Debug logging for CredSettle + No Status filter
-        if (sourceFilter === "credsettlee") {
-          console.log("🔍 [applyFiltersToLeads] Before No Status filter:", {
-            beforeStatusFilter: result.length,
-            sampleStatuses: result.slice(0, 5).map((lead) => ({
-              id: lead.id,
-              name: lead.name,
-              status: lead.status,
-              statusType: typeof lead.status,
-            })),
-          })
-        }
-
         result = result.filter((lead) => {
           const status = lead.status
           const isNoStatus =
@@ -563,31 +465,8 @@ const AmaLeadsPage = () => {
             (typeof status === "string" && status.trim() === "") ||
             (typeof status === "string" && status.trim() === "-")
 
-          // Debug individual lead filtering for CredSettle
-          if (sourceFilter === "credsettlee" && !isNoStatus) {
-            console.log("🔍 [applyFiltersToLeads] Lead filtered out (not No Status):", {
-              id: lead.id,
-              name: lead.name,
-              status: lead.status,
-              statusType: typeof lead.status,
-              isNoStatus,
-            })
-          }
-
           return isNoStatus
         })
-
-        // Debug logging after status filter
-        if (sourceFilter === "credsettlee") {
-          console.log("🔍 [applyFiltersToLeads] After No Status filter:", {
-            afterStatusFilter: result.length,
-            finalSampleLeads: result.slice(0, 3).map((lead) => ({
-              id: lead.id,
-              name: lead.name,
-              status: lead.status,
-            })),
-          })
-        }
       } else {
         result = result.filter((lead) => lead.status === statusFilter)
       }
@@ -697,11 +576,6 @@ const AmaLeadsPage = () => {
     return result
   }
 
-  // Update the original applyFilters to use the new function
-  const applyFilters = () => {
-    return applyFiltersToLeads(leads)
-  }
-
   // Apply filters with debounce
   useEffect(() => {
     const t = setTimeout(() => {
@@ -732,7 +606,10 @@ const AmaLeadsPage = () => {
   // Fetch leads
   const fetchAmaLeads = async (isLoadMore = false) => {
     if (isLoadMore) setIsLoadingMore(true)
-    else setIsLoading(true)
+    else {
+      setIsLoading(true)
+      initialLoadCompleteRef.current = false // Reset flag on new initial load
+    }
     try {
       if (!isLoadMore) await fetchTotalCount()
 
@@ -748,29 +625,8 @@ const AmaLeadsPage = () => {
       const fetchedLeads: any[] = querySnapshot.docs.map((docSnap) => {
         const d = docSnap.data() as any
 
-        // Debug logging for CredSettle + No Status filter
-        if (sourceFilter === "credsettlee" && statusFilter === "No Status") {
-          console.log("🔍 [fetchAmaLeads] Raw lead data from DB:", {
-            id: docSnap.id,
-            name: d.name,
-            source_database: d.source_database,
-            source: d.source,
-            status: d.status,
-            statusType: typeof d.status,
-          })
-        }
-
         // Treat "-" status as "No Status"
         const normalizedStatus = d.status === "-" || d.status === "–" ? "No Status" : d.status || "No Status"
-
-        // Debug logging for status normalization
-        if (sourceFilter === "credsettlee" && statusFilter === "No Status" && (d.status === "-" || d.status === "–")) {
-          console.log("🔍 [fetchAmaLeads] Status normalized:", {
-            id: docSnap.id,
-            originalStatus: d.status,
-            normalizedStatus,
-          })
-        }
 
         return {
           id: docSnap.id,
@@ -846,31 +702,6 @@ const AmaLeadsPage = () => {
       setLastDoc(lastDocument)
       setHasMoreLeads(querySnapshot.docs.length === LEADS_PER_PAGE)
 
-      // Debug logging for CredSettle + No Status filter
-      if (sourceFilter === "credsettlee" && statusFilter === "No Status") {
-        console.log("🔍 [fetchAmaLeads] Final results summary:", {
-          totalFetched: fetchedLeads.length,
-          credsettleLeads: fetchedLeads.filter((lead) => lead.source_database === "credsettlee").length,
-          noStatusLeads: fetchedLeads.filter((lead) => {
-            const status = lead.status
-            return !status || status === "" || status === "-" || status === "–" || status === "No Status"
-          }).length,
-          credsettleNoStatusLeads: fetchedLeads.filter((lead) => {
-            const status = lead.status
-            return (
-              lead.source_database === "credsettlee" &&
-              (!status || status === "" || status === "-" || status === "–" || status === "No Status")
-            )
-          }).length,
-          sampleResults: fetchedLeads.slice(0, 3).map((lead) => ({
-            id: lead.id,
-            name: lead.name,
-            source_database: lead.source_database,
-            status: lead.status,
-          })),
-        })
-      }
-
       // Initialize editing state for notes
       const initialEditingState: { [key: string]: any } = {}
       ;(isLoadMore ? leadsWithCallbackInfo : leadsWithCallbackInfo).forEach((lead) => {
@@ -941,11 +772,16 @@ const AmaLeadsPage = () => {
         }
       }
     } catch (error) {
-      console.error("Error fetching AMA leads: ", error)
       toast.error("Failed to load AMA leads")
     } finally {
       setIsLoading(false)
       setIsLoadingMore(false)
+      // Mark initial load as complete after a short delay to prevent immediate infinite scroll
+      if (!isLoadMore) {
+        setTimeout(() => {
+          initialLoadCompleteRef.current = true
+        }, 500)
+      }
     }
   }
 
@@ -955,7 +791,8 @@ const AmaLeadsPage = () => {
     observerRef.current = new IntersectionObserver(
       (entries) => {
         const target = entries[0]
-        if (target.isIntersecting && hasMoreLeads && !isLoadingMore && !isLoading && !isLoadAllLoading) {
+        // Only trigger if initial load is complete and user has scrolled (leads are loaded)
+        if (target.isIntersecting && hasMoreLeads && !isLoadingMore && !isLoading && !isLoadAllLoading && initialLoadCompleteRef.current && leads.length > 0) {
           fetchAmaLeads(true)
         }
       },
@@ -963,39 +800,18 @@ const AmaLeadsPage = () => {
     )
     if (loadMoreRef.current) observerRef.current.observe(loadMoreRef.current)
     return () => observerRef.current?.disconnect()
-  }, [hasMoreLeads, isLoadingMore, isLoading, isLoadAllLoading])
+  }, [hasMoreLeads, isLoadingMore, isLoading, isLoadAllLoading, leads.length])
 
   // Fetch when filters change
   useEffect(() => {
     const t = setTimeout(() => {
       setLastDoc(null)
       setHasMoreLeads(true)
+      initialLoadCompleteRef.current = false // Reset flag when filters change
       fetchAmaLeads(false)
     }, 300)
     return () => clearTimeout(t)
   }, [fromDate, toDate, statusFilter, salesPersonFilter, sortConfig, activeTab])
-
-  // Calculate counts for tabs
-  const callbackCount = useMemo(() => {
-    if (typeof window === "undefined") return 0
-    const currentUserName = localStorage.getItem("userName")
-    const currentUserRole = localStorage.getItem("userRole")
-
-    return leads.filter((lead) => {
-      if (lead.status === "Callback") {
-        if (currentUserRole === "admin" || currentUserRole === "overlord") {
-          return true
-        } else {
-          return lead.assignedTo === currentUserName
-        }
-      }
-      return false
-    }).length
-  }, [leads])
-
-  const allLeadsDisplayCount = useMemo(() => {
-    return filteredLeads.length
-  }, [filteredLeads])
 
   // Fetch callback count from database
   const fetchCallbackCount = async () => {
@@ -1015,7 +831,6 @@ const AmaLeadsPage = () => {
       const callbackSnapshot = await getDocs(callbackQuery)
       return callbackSnapshot.size
     } catch (error) {
-      console.error("Error fetching callback count:", error)
       return 0
     }
   }
@@ -1057,7 +872,7 @@ const AmaLeadsPage = () => {
           setDatabaseFilteredCount(totalLeadsCount)
         }
       } catch (error) {
-        console.error("Error fetching counts:", error)
+        // Error fetching counts
       }
     }
 
@@ -1244,7 +1059,6 @@ const AmaLeadsPage = () => {
         },
       )
     } catch (error) {
-      console.error("Error bulk assigning leads: ", error)
       // Revert optimistic updates on error
       leadIds.forEach((leadId) => {
         const originalLead = leads.find((l) => l.id === leadId)
@@ -1318,7 +1132,6 @@ const AmaLeadsPage = () => {
         },
       )
     } catch (error) {
-      console.error("Error bulk unassigning leads: ", error)
       // Revert optimistic updates on error
       leadIds.forEach((leadId) => {
         const originalLead = leads.find((l) => l.id === leadId)
@@ -1343,13 +1156,9 @@ const AmaLeadsPage = () => {
 
   // Update lead
   const updateLead = async (id: string, data: any) => {
-    console.log("🔍 updateLead called with:", { id, data })
-    console.log("🔍 updateLead call stack:", new Error().stack)
     try {
       const leadRef = doc(crmDb, "ama_leads", id)
       const updateData: any = { ...data, lastModified: serverTimestamp() }
-      console.log("🔍 leadRef:", leadRef)
-      console.log("🔍 updateData:", updateData)
 
       // If updating salesNotes, also reflect in lastNote and meta for quick access
       if (Object.prototype.hasOwnProperty.call(data, "salesNotes")) {
@@ -1364,36 +1173,23 @@ const AmaLeadsPage = () => {
         }
       }
 
-      console.log("🔍 About to call updateDoc...")
       await updateDoc(leadRef, updateData)
-      console.log("🔍 updateDoc completed successfully")
 
       // Update the filtered count if status was changed
       if (data.status) {
-        console.log('🔍 Status changed in updateLead, updating filtered count')
         try {
           const newFilteredCount = await fetchFilteredCount()
           setDatabaseFilteredCount(newFilteredCount)
-          console.log('🔍 Updated databaseFilteredCount to:', newFilteredCount)
         } catch (countError) {
-          console.error('❌ Error updating filtered count:', countError)
           // Don't fail the lead update if count update fails
         }
       }
-
-      // Log before state update
-      const leadBeforeUpdate = leads.find((l) => l.id === id)
-      console.log("🔍 Lead before local state update:", leadBeforeUpdate)
-      console.log("🔍 Data being applied to lead:", data)
 
       flushSync(() => {
         setLeads((prev) => {
           const updated = prev.map((l) =>
             l.id === id ? { ...l, ...data, lastModified: new Date(), lastNote: updateData.lastNote ?? l.lastNote } : l,
           )
-          console.log("🔍 setLeads updated, new length:", updated.length)
-          const updatedLead = updated.find((l) => l.id === id)
-          console.log("🔍 Updated lead in setLeads:", updatedLead)
           return updated
         })
 
@@ -1411,16 +1207,13 @@ const AmaLeadsPage = () => {
             const updated = prev.map((l) =>
               l.id === id ? { ...l, ...data, lastModified: new Date(), lastNote: updateData.lastNote ?? l.lastNote } : l,
             )
-            console.log("🔍 setFilteredLeads updated, new length:", updated.length)
             return updated
           })
         }
       })
 
-      console.log("🔍 Local state updated")
       return true
     } catch (error) {
-      console.error("❌ Error updating lead:", error)
       return false
     }
   }
@@ -1432,7 +1225,6 @@ const AmaLeadsPage = () => {
       let lead = leads.find((l) => l.id === leadId)
       if (!lead && searchResults.length > 0) {
         lead = searchResults.find((l) => l.id === leadId)
-        console.log("🔍 Lead found in searchResults for decrement")
       }
       const assignedSalesPerson = lead?.assignedTo
       const assignedSalesPersonId = lead?.assignedToId
@@ -1446,8 +1238,6 @@ const AmaLeadsPage = () => {
         const monthDocId = `${currentMonth}_${currentYear}`
 
         try {
-          console.log(`Decrementing targets for ${assignedSalesPerson} in ${monthDocId}`)
-
           // First, check if the monthly document exists
           const monthlyDocRef = doc(crmDb, "targets", monthDocId)
           const monthlyDocSnap = await getDoc(monthlyDocRef)
@@ -1477,47 +1267,24 @@ const AmaLeadsPage = () => {
               // Ensure we don't go below 0
               const newCount = Math.max(0, currentConvertedLeads - 1)
 
-              console.log(
-                `Decrementing convertedLeads from ${currentConvertedLeads} to ${newCount} for ${assignedSalesPerson}`,
-              )
-
               await updateDoc(targetRef, {
                 convertedLeads: newCount,
                 updatedAt: serverTimestamp(),
               })
-
-              console.log(`Successfully decremented targets for ${assignedSalesPerson}`)
-              
-              // Verify the update worked by reading the document back
-              const verifyDoc = await getDoc(targetRef)
-              const verifyData = verifyDoc.data()
-              console.log(`🔍 Verification: Target document now has convertedLeads: ${verifyData?.convertedLeads}`)
-            } else {
-              console.warn(`No target document found for ${assignedSalesPerson} in ${monthDocId}, nothing to decrement`)
             }
-          } else {
-            console.warn(`No monthly document found for ${monthDocId}, nothing to decrement`)
           }
         } catch (error) {
-          console.error("Error decrementing targets count:", error)
           // Don't fail the status update if targets update fails
         }
-      } else {
-        console.warn(`Lead ${leadId} is not assigned to any salesperson, skipping targets decrement`)
       }
     } catch (error) {
-      console.error("Error decrementing targets count:", error)
       // Don't fail the status update if targets update fails
     }
   }
 
   // Status confirmation handlers
   const handleStatusConfirmation = async () => {
-    console.log('🔍 ===== handleStatusConfirmation START =====')
-    console.log('🔍 Status confirmation triggered:', { statusConfirmLeadId, pendingStatusChange })
-    
     if (!statusConfirmLeadId || !pendingStatusChange) {
-      console.log('🔍 Missing required data, returning early')
       return
     }
 
@@ -1527,16 +1294,11 @@ const AmaLeadsPage = () => {
       let currentLead = leads.find((l) => l.id === statusConfirmLeadId)
       if (!currentLead && searchResults.length > 0) {
         currentLead = searchResults.find((l) => l.id === statusConfirmLeadId)
-        console.log("🔍 Lead found in searchResults for status confirmation")
       }
       const currentStatus = currentLead?.status || "Select Status"
-      
-      console.log('🔍 Current lead and status:', { currentLead: currentLead?.name, currentStatus, pendingStatusChange })
 
       // Check if changing from "Converted" to another status
       if (currentStatus === "Converted" && pendingStatusChange !== "Converted") {
-        console.log("🔍 Removing conversion - will decrement targets count")
-        
         // Show a toast notification about the conversion being removed
         toast.info(
           <div className="min-w-0 flex-1">
@@ -1608,28 +1370,20 @@ const AmaLeadsPage = () => {
       const leadRef = doc(crmDb, "ama_leads", statusConfirmLeadId)
       const updateData: any = { ...dbData, lastModified: serverTimestamp() }
       
-      console.log('🔍 About to update lead status in database:', { leadId: statusConfirmLeadId, updateData })
       await updateDoc(leadRef, updateData)
-      console.log('🔍 Lead status updated successfully in database')
 
       // Update the filtered count to reflect the status change
-      console.log('🔍 Updating filtered count after status change')
       try {
         const newFilteredCount = await fetchFilteredCount()
         setDatabaseFilteredCount(newFilteredCount)
-        console.log('🔍 Updated databaseFilteredCount to:', newFilteredCount)
       } catch (countError) {
-        console.error('❌ Error updating filtered count:', countError)
         // Don't fail the status update if count update fails
       }
 
       // If converting to "Converted", update targets collection
       if (pendingStatusChange === "Converted") {
-        console.log("🔍 Status change to Converted detected in handleStatusConfirmation")
         const currentLead = leads.find((l) => l.id === statusConfirmLeadId)
-        console.log("🔍 Current lead found:", currentLead)
         const assignedSalesPerson = currentLead?.assignedTo
-        console.log("🔍 Assigned salesperson info:", { assignedSalesPerson })
 
         if (assignedSalesPerson) {
           // Get current month and year for targets collection
@@ -1640,8 +1394,6 @@ const AmaLeadsPage = () => {
           const monthDocId = `${currentMonth}_${currentYear}`
 
           try {
-            console.log(`Updating targets for ${assignedSalesPerson} in ${monthDocId}`)
-
             // First, check if the monthly document exists
             const monthlyDocRef = doc(crmDb, "targets", monthDocId)
             const monthlyDocSnap = await getDoc(monthlyDocRef)
@@ -1669,25 +1421,12 @@ const AmaLeadsPage = () => {
                 const currentConvertedLeads = (userTargetDoc as any).convertedLeads || 0
                 const newCount = currentConvertedLeads + 1
 
-                console.log(
-                  `Incrementing convertedLeads from ${currentConvertedLeads} to ${newCount} for ${assignedSalesPerson}`,
-                )
-
                 await updateDoc(targetRef, {
                   convertedLeads: newCount,
                   updatedAt: serverTimestamp(),
                 })
-
-                console.log(`Successfully updated targets for ${assignedSalesPerson}`)
-                
-                // Verify the update worked by reading the document back
-                const verifyDoc = await getDoc(targetRef)
-                const verifyData = verifyDoc.data()
-                console.log(`🔍 Verification: Target document now has convertedLeads: ${verifyData?.convertedLeads}`)
               } else {
                 // User's target document doesn't exist, create it with convertedLeads = 1
-                console.log(`Creating new target document for ${assignedSalesPerson} with convertedLeads = 1`)
-
                 const newTargetRef = doc(collection(crmDb, "targets", monthDocId, "sales_targets"))
                 await setDoc(newTargetRef, {
                   userId: assignedSalesPerson,
@@ -1700,13 +1439,9 @@ const AmaLeadsPage = () => {
                   updatedAt: serverTimestamp(),
                   createdBy: currentUser?.uid || assignedSalesPerson,
                 })
-
-                console.log(`Successfully created new target document for ${assignedSalesPerson}`)
               }
             } else {
               // Monthly document doesn't exist, create it with user's target
-              console.log(`Creating new monthly document ${monthDocId} with target for ${assignedSalesPerson}`)
-
               const newTargetRef = doc(collection(crmDb, "targets", monthDocId, "sales_targets"))
               await setDoc(newTargetRef, {
                 userId: assignedSalesPerson,
@@ -1717,31 +1452,13 @@ const AmaLeadsPage = () => {
                 amountCollectedTarget: 0, // Default value
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
-                createdBy: currentUser?.uid || assignedSalesPerson,
-              })
-
-              console.log(`Successfully created new monthly document and target for ${assignedSalesPerson}`)
+                  createdBy: currentUser?.uid || assignedSalesPerson,
+                })
             }
           } catch (targetError) {
-            console.error("Error updating targets collection:", targetError)
             // Don't fail the entire conversion if targets update fails
-            // Just log the error and continue
           }
-        } else {
-          console.warn(`Lead ${statusConfirmLeadId} is not assigned to any salesperson, skipping targets update`)
         }
-      }
-
-      // Debug logging for converted status
-      if (pendingStatusChange === "Converted") {
-        console.log("🔄 Converting lead:", {
-          leadId: statusConfirmLeadId,
-          leadName: statusConfirmLeadName,
-          currentStatus,
-          pendingStatusChange,
-          dbData,
-          updateData,
-        })
       }
 
       // Update local state immediately
@@ -1766,29 +1483,6 @@ const AmaLeadsPage = () => {
               }
             : l,
         )
-
-      // Debug logging for local state update
-      if (pendingStatusChange === "Converted") {
-        const currentLeadInLeads = leads.find((l) => l.id === statusConfirmLeadId)
-        const currentLeadInFiltered = filteredLeads.find((l) => l.id === statusConfirmLeadId)
-        const updatedLead = updateFn(leads).find((l) => l.id === statusConfirmLeadId)
-        console.log("🔄 Local state updated:", {
-          leadId: statusConfirmLeadId,
-          currentLeadInLeads: currentLeadInLeads ? "Found" : "Not found",
-          currentLeadInFiltered: currentLeadInFiltered ? "Found" : "Not found",
-          leadsArrayLength: leads.length,
-          filteredLeadsArrayLength: filteredLeads.length,
-          updatedLead: updatedLead
-            ? {
-                id: updatedLead.id,
-                name: updatedLead.name,
-                status: updatedLead.status,
-                convertedToClient: updatedLead.convertedToClient,
-                convertedAt: updatedLead.convertedAt,
-              }
-            : "Lead not found",
-        })
-      }
 
       // Update both leads and filteredLeads consistently using the same pattern as other functions
       setLeads(updateFn)
@@ -1878,7 +1572,6 @@ const AmaLeadsPage = () => {
           )
         }
       } catch (emailError) {
-        console.error("❌ Error sending email:", emailError)
         // Still show success for status update, but mention email failure
         toast.success(
           <div>
@@ -1892,21 +1585,12 @@ const AmaLeadsPage = () => {
         )
       }
     } catch (error) {
-      console.error("Error updating status: ", error)
-      console.error("Status update error details:", {
-        error,
-        statusConfirmLeadId,
-        pendingStatusChange,
-        currentStatus: leads.find(l => l.id === statusConfirmLeadId)?.status
-      })
       toast.error(`Failed to update status: ${(error as Error).message || 'Unknown error'}`)
     } finally {
-      console.log('🔍 ===== handleStatusConfirmation FINALLY BLOCK =====')
       setIsUpdatingStatus(false)
       setStatusConfirmLeadId("")
       setStatusConfirmLeadName("")
       setPendingStatusChange("")
-      console.log('🔍 ===== handleStatusConfirmation END =====')
     }
   }
 
@@ -2031,37 +1715,21 @@ const AmaLeadsPage = () => {
 
   // Handle status change to converted
   const handleStatusChangeToConverted = (leadId: string, leadName: string) => {
-    console.log("🔍 handleStatusChangeToConverted called with:", { leadId, leadName })
-    console.log("🔍 Current modal state before setting:", { showConversionModal, conversionLeadId, conversionLeadName })
-    console.log("🔍 About to set conversion modal state...")
-
     // Use setTimeout to prevent immediate state conflicts
     setTimeout(() => {
-      console.log("🔍 setTimeout executing - setting modal state")
       setConversionLeadId(leadId)
       setConversionLeadName(leadName)
       setShowConversionModal(true)
-      console.log("🔍 Conversion modal state set with setTimeout - should be true now")
     }, 10)
   }
 
   // Handle conversion modal confirmation
   const handleConversionConfirm = async () => {
-    console.log("🔍 ===== handleConversionConfirm START =====")
-    console.log("🔍 handleConversionConfirm called")
-    console.log("🔍 conversionLeadId:", conversionLeadId)
-    console.log("🔍 conversionLeadName:", conversionLeadName)
-    console.log("🔍 Current leads array length:", leads.length)
-
     // Find the lead in current state - check both leads and searchResults
     let currentLead = leads.find((l) => l.id === conversionLeadId)
     if (!currentLead && searchResults.length > 0) {
       currentLead = searchResults.find((l) => l.id === conversionLeadId)
-      console.log("🔍 Lead found in searchResults instead of leads")
     }
-    console.log("🔍 Current lead before conversion:", currentLead)
-    console.log("🔍 currentUser:", currentUser)
-    console.log("🔍 leads array length:", leads.length)
 
     setIsConvertingLead(true)
 
@@ -2074,9 +1742,7 @@ const AmaLeadsPage = () => {
         lastModified: serverTimestamp(),
       }
 
-      console.log("🔍 About to update database with dbData:", dbData)
       await updateDoc(leadRef, dbData)
-      console.log("🔍 Database update successful")
 
       const updateFn = (arr: any[]) =>
         arr.map((l) =>
@@ -2116,25 +1782,15 @@ const AmaLeadsPage = () => {
         }
       })
 
-      console.log("🔍 Local state updated immediately")
-
       try {
-        console.log("🔍 ===== STARTING TARGET UPDATE PROCESS =====")
         // Get the assigned salesperson's information from the lead - check both leads and searchResults
         let lead = leads.find((l) => l.id === conversionLeadId)
         if (!lead && searchResults.length > 0) {
           lead = searchResults.find((l) => l.id === conversionLeadId)
-          console.log("🔍 Lead found in searchResults for target update")
         }
-        console.log("🔍 Found lead:", lead)
-        console.log("🔍 Lead assignedTo:", lead?.assignedTo)
-        console.log("🔍 Lead assignedToId:", lead?.assignedToId)
 
         const assignedSalesPerson = lead?.assignedTo
         const assignedSalesPersonId = lead?.assignedToId
-
-        console.log("🔍 assignedSalesPerson:", assignedSalesPerson)
-        console.log("🔍 assignedSalesPersonId:", assignedSalesPersonId)
 
         if (assignedSalesPerson && assignedSalesPersonId) {
           // Get current month and year for targets collection
@@ -2144,29 +1800,14 @@ const AmaLeadsPage = () => {
           const currentYear = now.getFullYear()
           const monthDocId = `${currentMonth}_${currentYear}`
 
-          console.log("🔍 Date info:", { now, currentMonth, currentYear, monthDocId })
-
-          console.log(`🔍 Updating targets for ${assignedSalesPerson} in ${monthDocId}`)
-          console.log("🔍 About to check monthly document existence...")
-
           // First, check if the monthly document exists
           const monthlyDocRef = doc(crmDb, "targets", monthDocId)
-          console.log("🔍 monthlyDocRef:", monthlyDocRef)
           const monthlyDocSnap = await getDoc(monthlyDocRef)
-          console.log("🔍 monthlyDocSnap.exists():", monthlyDocSnap.exists())
-          console.log("🔍 monthlyDocSnap.data():", monthlyDocSnap.data())
 
           if (monthlyDocSnap.exists()) {
-            console.log("🔍 Monthly document exists, proceeding to find user target...")
             // Monthly document exists, now find the user's target document by userName
             const salesTargetsRef = collection(crmDb, "targets", monthDocId, "sales_targets")
-            console.log("🔍 salesTargetsRef:", salesTargetsRef)
             const salesTargetsSnap = await getDocs(salesTargetsRef)
-            console.log("🔍 salesTargetsSnap.docs.length:", salesTargetsSnap.docs.length)
-            console.log(
-              "🔍 All sales targets docs:",
-              salesTargetsSnap.docs.map((d) => ({ id: d.id, data: d.data() })),
-            )
 
             let userTargetDoc = null
             let userTargetId = null
@@ -2174,11 +1815,9 @@ const AmaLeadsPage = () => {
             // Find the document where userName matches assignedSalesPerson
             salesTargetsSnap.forEach((doc) => {
               const data = doc.data()
-              console.log("🔍 Checking doc:", { id: doc.id, userName: data.userName, assignedSalesPerson })
               if (data.userName === assignedSalesPerson) {
                 userTargetDoc = data
                 userTargetId = doc.id
-                console.log("🔍 Found matching user target doc:", { userTargetDoc, userTargetId })
               }
             })
 
@@ -2188,25 +1827,12 @@ const AmaLeadsPage = () => {
               const currentConvertedLeads = (userTargetDoc as any).convertedLeads || 0
               const newCount = currentConvertedLeads + 1
 
-              console.log(
-                `Incrementing convertedLeads from ${currentConvertedLeads} to ${newCount} for ${assignedSalesPerson}`,
-              )
-
               await updateDoc(targetRef, {
                 convertedLeads: newCount,
-                updatedAt: serverTimestamp(),
-              })
-
-              console.log(`Successfully updated targets for ${assignedSalesPerson}`)
-              
-              // Verify the update worked by reading the document back
-              const verifyDoc = await getDoc(targetRef)
-              const verifyData = verifyDoc.data()
-              console.log(`🔍 Verification: Target document now has convertedLeads: ${verifyData?.convertedLeads}`)
+                  updatedAt: serverTimestamp(),
+                })
             } else {
               // User's target document doesn't exist, create it with convertedLeads = 1
-              console.log(`Creating new target document for ${assignedSalesPerson} with convertedLeads = 1`)
-
               const newTargetRef = doc(collection(crmDb, "targets", monthDocId, "sales_targets"))
               await setDoc(newTargetRef, {
                 userId: assignedSalesPersonId,
@@ -2217,14 +1843,10 @@ const AmaLeadsPage = () => {
                 amountCollectedTarget: 0, // Default value
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
-                createdBy: currentUser?.uid || assignedSalesPersonId,
-              })
-
-              console.log(`Successfully created new target document for ${assignedSalesPerson}`)
+                  createdBy: currentUser?.uid || assignedSalesPersonId,
+                })
             }
           } else {
-            console.log(`Monthly document ${monthDocId} does not exist, creating it...`)
-
             // Create the monthly document first
             await setDoc(monthlyDocRef, {
               month: currentMonth,
@@ -2244,21 +1866,11 @@ const AmaLeadsPage = () => {
               amountCollectedTarget: 0,
               createdAt: serverTimestamp(),
               updatedAt: serverTimestamp(),
-              createdBy: currentUser?.uid || assignedSalesPersonId,
-            })
-
-            console.log(`Successfully created monthly document and target for ${assignedSalesPerson}`)
+                  createdBy: currentUser?.uid || assignedSalesPersonId,
+                })
           }
-        } else {
-          console.log("🔍 No assigned salesperson found, skipping targets update")
         }
-        console.log("🔍 ===== TARGET UPDATE PROCESS COMPLETED =====")
       } catch (targetsError) {
-        console.error("❌ Error updating targets (lead conversion still successful):", targetsError)
-        console.error("❌ Targets error details:", {
-          error: targetsError,
-          leadId: conversionLeadId
-        })
         toast.error(
           <div>
             <p className="font-medium">Lead Converted Successfully</p>
@@ -2282,8 +1894,6 @@ const AmaLeadsPage = () => {
         },
       )
     } catch (error) {
-      console.error("❌ Error converting lead:", error)
-
       const revertFn = (arr: any[]) =>
         arr.map((l) =>
           l.id === conversionLeadId
@@ -2323,18 +1933,15 @@ const AmaLeadsPage = () => {
 
       toast.error("Failed to convert lead. Please try again.")
     } finally {
-      console.log("🔍 handleConversionConfirm finally block - closing modal")
       setIsConvertingLead(false)
       setShowConversionModal(false)
       setConversionLeadId("")
       setConversionLeadName("")
-      console.log("🔍 ===== handleConversionConfirm END =====")
     }
   }
 
   // Handle conversion modal close
   const handleConversionClose = () => {
-    console.log("🔍 handleConversionClose called - closing conversion modal")
     setShowConversionModal(false)
     setConversionLeadId("")
     setConversionLeadName("")
@@ -2471,13 +2078,8 @@ const AmaLeadsPage = () => {
         )
       }
 
-      // Log detailed errors if any
-      if (errors.length > 0) {
-        console.log("WhatsApp sending errors:", errors)
-      }
     } catch (error) {
       toast.dismiss(toastId)
-      console.error("Error in bulk WhatsApp sending:", error)
       toast.error("Failed to send bulk WhatsApp messages")
     }
   }
@@ -2713,7 +2315,6 @@ const AmaLeadsPage = () => {
       await deleteDoc(doc(crmDb, "ama_leads", leadId))
       toast.success("Lead deleted successfully")
     } catch (error) {
-      console.error("Error deleting AMA lead:", error)
       fetchAmaLeads(false)
       toast.error("Failed to delete lead")
     }
@@ -2855,12 +2456,6 @@ const AmaLeadsPage = () => {
             callbackCount={databaseCallbackCount}
             allLeadsCount={searchQuery ? searchResultsCount : databaseFilteredCount || totalLeadsCount}
           />
-
-          {(() => {
-            const countToShow = searchQuery ? searchResultsCount : databaseFilteredCount
-
-            return null
-          })()}
 
           <LeadsFilters
             searchQuery={searchQuery}

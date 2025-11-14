@@ -44,7 +44,6 @@ const canUserEditLead = (lead: any) => {
   return false
 }
 
-const formatPhoneNumber = (phone: string) => phone
 const getFormattedDate = (lead: any) => {
   let date = "",
     time = ""
@@ -110,7 +109,6 @@ const getFormattedDate = (lead: any) => {
       }
     }
   } catch (error) {
-    console.error("Error formatting date:", error)
     date = ""
     time = ""
   }
@@ -193,18 +191,6 @@ const getCallbackDateColor = (scheduledDate: Date) => {
       rowBg: "bg-gray-600",
     }
   }
-}
-
-// Simple status color mapping (fallback if StatusCell not used)
-const statusColorClass: Record<string, string> = {
-  Interested: "text-green-400",
-  "Not Interested": "text-red-400",
-  "Not Answering": "text-yellow-400",
-  Callback: "text-blue-400",
-  "Future Potential": "text-emerald-400",
-  Converted: "text-green-500",
-  "Language Barrier": "text-purple-400",
-  "Closed Lead": "text-gray-400",
 }
 
 type AmaLeadRowProps = {
@@ -409,7 +395,6 @@ const AmaLeadRow = ({
           const userString = typeof window !== "undefined" ? localStorage.getItem("user") : null
           loggedInUser = userString ? JSON.parse(userString) : {}
         } catch (e) {
-          console.error("Error parsing user from localStorage:", e)
           loggedInUser = {}
         }
       }
@@ -448,7 +433,6 @@ const AmaLeadRow = ({
         throw new Error("Failed to update lead document")
       }
     } catch (error) {
-      console.error("Error saving note:", error)
       toast.error("Failed to save note: " + (error instanceof Error ? error.message : String(error)))
     } finally {
       setSaving(false)
@@ -496,8 +480,6 @@ const AmaLeadRow = ({
 
       const result = await sendWhatsappMessageFn(messageData)
 
-      console.log("WhatsApp function response:", result)
-
       if (result.data && (result.data as any).success) {
         const templateDisplayName = whatsappTemplates.find((t) => t.templateName === templateName)?.name || templateName
         toast.success(
@@ -513,11 +495,9 @@ const AmaLeadRow = ({
           },
         )
       } else {
-        console.log("Success check failed. Result data:", result.data)
         toast.error("Failed to send WhatsApp message")
       }
     } catch (error: any) {
-      console.error("Error sending WhatsApp message:", error)
       const errorMessage = error.message || error.details || "Unknown error"
       toast.error(`Failed to send WhatsApp message: ${errorMessage}`)
     } finally {
@@ -594,7 +574,7 @@ const AmaLeadRow = ({
                   href={`tel:${phone}`}
                   className={`hover:underline font-medium text-[16px] ${rowColors.textColor || "text-[#D2A02A]"}`}
                 >
-                  {formatPhoneNumber(phone)}
+                  {phone}
                 </a>
               </div>
             </div>
@@ -718,19 +698,8 @@ const AmaLeadRow = ({
                 <div className="flex-1 break-words whitespace-pre-wrap line-clamp-2">
                   {lead.query && lead.query.length > 50 ? `${lead.query.substring(0, 50)}...` : lead.query || "N/A"}
                 </div>
-                {/* Temporary: Always show button for debugging */}
                 <button
                   onClick={() => {
-                    console.log("Query data:", {
-                      query: lead.query,
-                      leadId: lead.id,
-                      leadName: lead.name,
-                      queryLength: lead.query?.length,
-                      wordCount: lead.query?.split(/\s+/)?.length,
-                      hasQuery: !!lead.query,
-                      isNotEmpty: lead.query?.trim() !== "",
-                      isNotNA: lead.query !== "N/A",
-                    })
                     setShowQueryModal(true)
                   }}
                   className="flex-shrink-0 text-[#D2A02A] hover:text-[#B8911E] text-[10px] px-1 py-0.5 border border-[#D2A02A]/50 rounded hover:border-[#D2A02A] transition-colors bg-[#D2A02A]/10 hover:bg-[#D2A02A]/20"

@@ -63,7 +63,6 @@ const AmaLanguageBarrierModal: React.FC<AmaLanguageBarrierModalProps> = ({
       await onConfirm(selectedLanguage)
       onClose()
     } catch (error) {
-      console.error("Error updating language barrier:", error)
       toast.error("Failed to update language barrier")
     } finally {
       setIsSubmitting(false)
