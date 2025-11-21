@@ -46,12 +46,62 @@ export default function PaymentApprovalPage() {
   const [loadingPayments, setLoadingPayments] = useState(true);
   const [userRole, setUserRole] = useState<string>('');
   const [userName, setUserName] = useState<string>('');
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   
+  // Validation functions
+  const validateName = (value: string): string => {
+    // Only allow alphabets and whitespaces
+    return value.replace(/[^a-zA-Z\s]/g, '');
+  };
+
+  const validatePhone = (value: string): string => {
+    // Only allow numbers, limit to 10 digits
+    const numbersOnly = value.replace(/[^0-9]/g, '');
+    return numbersOnly.slice(0, 10);
+  };
+
+  const validateAmount = (value: string): string => {
+    // Only allow numbers and decimal point
+    const cleaned = value.replace(/[^0-9.]/g, '');
+    // Prevent multiple decimal points
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+      return parts[0] + '.' + parts.slice(1).join('');
+    }
+    return cleaned;
+  };
+
+  const validateEmail = (value: string): boolean => {
+    // Basic email validation regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(value);
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    let processedValue = value;
+
+    // Apply validation based on field type
+    if (name === 'clientName') {
+      processedValue = validateName(value);
+    } else if (name === 'clientPhone') {
+      processedValue = validatePhone(value);
+    } else if (name === 'amount') {
+      processedValue = validateAmount(value);
+    }
+
+    // Clear error for this field when user starts typing
+    if (errors[name]) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+
     setFormData((prev) => ({
       ...prev,
-      [name]: name === 'clientPhone' ? String(value) : value
+      [name]: processedValue
     }));
   };
 
@@ -182,19 +232,41 @@ export default function PaymentApprovalPage() {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Reset errors
+    setErrors({});
+    
+    // Validate email
+    if (!validateEmail(formData.clientEmail)) {
+      setErrors({ clientEmail: 'Please enter a valid email address' });
+      return;
+    }
+    
+    // Validate phone number length
+    if (formData.clientPhone.length !== 10) {
+      setErrors({ clientPhone: 'Phone number must be exactly 10 digits' });
+      return;
+    }
+    
+    // Validate amount
+    if (!formData.amount || parseFloat(formData.amount) <= 0) {
+      setErrors({ amount: 'Please enter a valid amount' });
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
       // Get salesperson name from localStorage
       const salesPersonName = localStorage.getItem('userName') || 'Unknown';
       
-      // Prepare data for submission
+      // Prepare data for submission - ensure phone and amount are strings
       const paymentData = {
         status: 'pending',
-        clientName: formData.clientName,
-        clientEmail: formData.clientEmail, 
-        clientPhone: formData.clientPhone,
-        amount: formData.amount,
+        clientName: formData.clientName.trim(),
+        clientEmail: formData.clientEmail.trim(), 
+        clientPhone: String(formData.clientPhone), // Ensure it's a string
+        amount: String(formData.amount), // Ensure it's a string
         source: formData.source,
         paymentType: formData.paymentType,
         reasonOfPayment: formData.reasonOfPayment,
@@ -215,6 +287,7 @@ export default function PaymentApprovalPage() {
       // Reset form after 3 seconds
       setTimeout(() => {
         setIsSubmitted(false);
+        setErrors({});
         setFormData({
           clientName: '',
           clientEmail: '',
@@ -632,9 +705,18 @@ export default function PaymentApprovalPage() {
                         value={formData.clientName}
                         onChange={handleChange}
                         required
-                        className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg focus:ring-green-500 focus:border-green-500 block w-full pl-10 p-2.5"
+                        pattern="[a-zA-Z\s]+"
+                        title="Only alphabets and spaces are allowed"
+                        className={`bg-white dark:bg-gray-700 border ${
+                          errors.clientName 
+                            ? 'border-red-500 dark:border-red-500' 
+                            : 'border-gray-300 dark:border-gray-600'
+                        } text-gray-900 dark:text-white rounded-lg focus:ring-green-500 focus:border-green-500 block w-full pl-10 p-2.5`}
                       />
                     </div>
+                    {errors.clientName && (
+                      <p className="text-red-500 text-xs mt-1">{errors.clientName}</p>
+                    )}
                   </motion.div>
                   
                   <motion.div 
@@ -655,9 +737,16 @@ export default function PaymentApprovalPage() {
                         value={formData.clientEmail}
                         onChange={handleChange}
                         required
-                        className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg focus:ring-green-500 focus:border-green-500 block w-full pl-10 p-2.5"
+                        className={`bg-white dark:bg-gray-700 border ${
+                          errors.clientEmail 
+                            ? 'border-red-500 dark:border-red-500' 
+                            : 'border-gray-300 dark:border-gray-600'
+                        } text-gray-900 dark:text-white rounded-lg focus:ring-green-500 focus:border-green-500 block w-full pl-10 p-2.5`}
                       />
                     </div>
+                    {errors.clientEmail && (
+                      <p className="text-red-500 text-xs mt-1">{errors.clientEmail}</p>
+                    )}
                   </motion.div>
                   
                   <motion.div 
@@ -672,15 +761,25 @@ export default function PaymentApprovalPage() {
                         <FiPhone className="text-gray-500" />
                       </div>
                       <input
-                        type="tel"
+                        type="text"
                         id="clientPhone"
                         name="clientPhone"
                         value={formData.clientPhone}
                         onChange={handleChange}
                         required
-                        className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg focus:ring-green-500 focus:border-green-500 block w-full pl-10 p-2.5"
+                        maxLength={10}
+                        pattern="[0-9]{10}"
+                        title="Phone number must be exactly 10 digits"
+                        className={`bg-white dark:bg-gray-700 border ${
+                          errors.clientPhone 
+                            ? 'border-red-500 dark:border-red-500' 
+                            : 'border-gray-300 dark:border-gray-600'
+                        } text-gray-900 dark:text-white rounded-lg focus:ring-green-500 focus:border-green-500 block w-full pl-10 p-2.5`}
                       />
                     </div>
+                    {errors.clientPhone && (
+                      <p className="text-red-500 text-xs mt-1">{errors.clientPhone}</p>
+                    )}
                   </motion.div>
                   
                   <motion.div 
@@ -695,17 +794,24 @@ export default function PaymentApprovalPage() {
                         <BiRupee className="text-gray-500" />
                       </div>
                       <input
-                        type="number"
+                        type="text"
                         id="amount"
                         name="amount"
                         value={formData.amount}
                         onChange={handleChange}
                         required
-                        min="0"
-                        step="0.01"
-                        className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg focus:ring-green-500 focus:border-green-500 block w-full pl-10 p-2.5"
+                        pattern="[0-9]+(\.[0-9]+)?"
+                        title="Please enter a valid amount (numbers only)"
+                        className={`bg-white dark:bg-gray-700 border ${
+                          errors.amount 
+                            ? 'border-red-500 dark:border-red-500' 
+                            : 'border-gray-300 dark:border-gray-600'
+                        } text-gray-900 dark:text-white rounded-lg focus:ring-green-500 focus:border-green-500 block w-full pl-10 p-2.5`}
                       />
                     </div>
+                    {errors.amount && (
+                      <p className="text-red-500 text-xs mt-1">{errors.amount}</p>
+                    )}
                   </motion.div>
                   
                   {userRole === 'advocate' && (

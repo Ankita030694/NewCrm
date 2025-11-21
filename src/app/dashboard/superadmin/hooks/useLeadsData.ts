@@ -50,8 +50,6 @@ export const useLeadsData = ({
 
     const fetchLeadsData = async () => {
       try {
-        console.log('🚀 Loading ALL leads data (no limits)...');
-        
         // Check cache first
         const cached = analyticsCache.get<{ leadsBySourceData: LeadsBySourceData; sourceTotals: SourceTotals; }>(leadsDataCacheKey);
         if (cached) {
@@ -92,12 +90,10 @@ export const useLeadsData = ({
         
         // Add salesperson filter if selected
         if (selectedLeadsSalesperson) {
-          console.log('🔍 Applying salesperson filter to leads:', selectedLeadsSalesperson);
           leadsQuery = query(leadsQuery, where('assignedTo', '==', selectedLeadsSalesperson));
         }
         
         const leadsSnapshot = await getDocs(leadsQuery);
-        console.log(`📊 Processing ${leadsSnapshot.size} leads from crm_leads...`);
         
         // Fetch billcutLeads data
         const billcutCollection = collection(db, 'billcutLeads');
@@ -128,12 +124,10 @@ export const useLeadsData = ({
         
         // Add salesperson filter to billcutLeads if selected
         if (selectedLeadsSalesperson) {
-          console.log('🔍 Applying salesperson filter to billcutLeads:', selectedLeadsSalesperson);
           billcutQuery = query(billcutQuery, where('assigned_to', '==', selectedLeadsSalesperson));
         }
         
         const billcutSnapshot = await getDocs(billcutQuery);
-        console.log(`📊 Processing ${billcutSnapshot.size} leads from billcutLeads...`);
         
         // Initialize direct counts for total leads by source
         const sourceTotalCounts = {
@@ -245,10 +239,7 @@ export const useLeadsData = ({
         
         // Call the callback using the ref to avoid dependency issues
         onLoadCompleteRef.current?.();
-        
-        console.log(`✅ Leads analytics complete: ${leadsSnapshot.size + billcutSnapshot.size} leads processed (${leadsSnapshot.size} from crm_leads, ${billcutSnapshot.size} from billcutLeads)`);
       } catch (error) {
-        console.error('Error fetching leads data:', error);
         setIsLoading(false);
         onLoadCompleteRef.current?.();
       }

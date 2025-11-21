@@ -232,7 +232,6 @@ const SuperAdminDashboard = React.memo(() => {
   // Memoized salesperson selection handlers with cache invalidation
   const handleSalespersonChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
-    console.log('🔍 Sales Analytics filter changed:', { value, selectedSalesperson: value !== "all" ? value : null });
     setSelectedSalesperson(value !== "all" ? value : null);
     // Clear cache for sales analytics when salesperson changes
     analyticsCache.delete(salesAnalyticsCacheKey);

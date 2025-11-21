@@ -100,13 +100,10 @@ const loadClientAnalyticsProgressive = async (onProgress?: (partial: ClientAnaly
   const timerId = `client-analytics-${Date.now()}`;
   perfMonitor.start(timerId);
   
-  console.log('⚡ Loading all client analytics in one go...');
-  
   // Check cache first at the global level
   const clientAnalyticsCacheKey = generateCacheKey.clientAnalytics();
   const cachedData = analyticsCache.get<ClientAnalytics>(clientAnalyticsCacheKey);
   if (cachedData) {
-    console.log('⚡ Using cached client analytics (global level)');
     onProgress?.(cachedData);
     return cachedData;
   }
@@ -135,8 +132,6 @@ const loadClientAnalyticsProgressive = async (onProgress?: (partial: ClientAnaly
   // Fetch all clients at once
   const clientsQuery = query(clientsCollection, orderBy('__name__'));
   const clientsSnapshot: QuerySnapshot<DocumentData> = await getDocs(clientsQuery);
-  
-  console.log(`📊 Fetched ${clientsSnapshot.size} clients in one go`);
   
   // Process all clients at once
   const allClients: any[] = [];
@@ -168,7 +163,6 @@ const loadClientAnalyticsProgressive = async (onProgress?: (partial: ClientAnaly
   };
   
   const duration = perfMonitor.safeEnd(timerId);
-  console.log(`🎯 COMPLETE: All ${analytics.totalClients} clients loaded in ${duration.toFixed(2)}ms`);
   
   // Cache the result using the new cache system
   analyticsCache.set(clientAnalyticsCacheKey, finalAnalytics);
@@ -235,7 +229,6 @@ export const useClientAnalytics = ({
         // Check cache first
         const cachedData = analyticsCache.get<ClientAnalytics>(clientAnalyticsCacheKey);
         if (cachedData) {
-          console.log('⚡ Using cached client analytics (hook level)');
           setClientAnalytics(cachedData);
           setIsLoading(false);
           hasLoaded.current = true;
@@ -245,7 +238,6 @@ export const useClientAnalytics = ({
 
         // Prevent multiple simultaneous loads
         if (isGloballyLoading && globalLoadPromise) {
-          console.log('🔄 Reusing existing progressive load...');
           const result = await globalLoadPromise;
           setClientAnalytics(result);
           setIsLoading(false);
@@ -264,7 +256,6 @@ export const useClientAnalytics = ({
         setClientAnalytics(result);
         
       } catch (error) {
-        console.error('❌ Error fetching client analytics:', error);
         setIsLoading(false);
         onLoadCompleteRef.current?.();
       } finally {

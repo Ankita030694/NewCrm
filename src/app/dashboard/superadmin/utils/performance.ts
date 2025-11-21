@@ -159,11 +159,6 @@ export const preloadCriticalResources = () => {
     });
   }
   */
-  
-  // Log that preloading completed
-  if (process.env.NODE_ENV === 'development') {
-    console.log('⚡ Critical resources preload completed');
-  }
 };
 
 export default PerformanceMonitor; 

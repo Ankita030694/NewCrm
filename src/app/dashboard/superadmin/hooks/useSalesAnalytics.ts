@@ -84,10 +84,7 @@ export const useSalesAnalytics = ({
         analyticsCache.set(salespeopleCacheKey, salespeople);
         setSalespeople(salespeople);
         salespeopleLoaded.current = true;
-        
-        console.log('🔍 Fetched salespeople from users collection:', salespeople);
       } catch (error) {
-        console.error('Error fetching salespeople from users collection:', error);
         
         // Fallback: try to get from targets collection
         try {
@@ -116,10 +113,7 @@ export const useSalesAnalytics = ({
           analyticsCache.set(salespeopleCacheKey, fallbackSalespeople);
           setSalespeople(fallbackSalespeople);
           salespeopleLoaded.current = true;
-          
-          console.log('🔍 Fallback: Fetched salespeople from targets collection:', fallbackSalespeople);
         } catch (fallbackError) {
-          console.error('Error fetching salespeople from targets collection:', fallbackError);
           salespeopleLoaded.current = true;
         }
       }
@@ -178,7 +172,7 @@ export const useSalesAnalytics = ({
             }
           });
         } catch (error) {
-          console.error('Error fetching payments data:', error);
+          // Error fetching payments data
         }
         
         // Fetch targets and sales data
@@ -197,7 +191,7 @@ export const useSalesAnalytics = ({
             }
           });
         } catch (error) {
-          console.error('Error fetching sales targets:', error);
+          // Error fetching sales targets
         }
         
         if (hasPaymentData) {
@@ -255,7 +249,6 @@ export const useSalesAnalytics = ({
     
     const fetchIndividualSalesData = async () => {
       try {
-        console.log('🔍 Fetching individual sales data for:', selectedSalesperson);
         const currentDate = new Date();
         const currentMonth = currentDate.getMonth();
         const currentYear = currentDate.getFullYear();
@@ -265,8 +258,6 @@ export const useSalesAnalytics = ({
         const targetYear = selectedAnalyticsYear !== null ? selectedAnalyticsYear : currentYear;
         const targetMonthName = monthNames[targetMonth];
         const monthYearName = `${targetMonthName}_${targetYear}`;
-        
-        console.log('🔍 Querying targets collection:', `targets/${monthYearName}/sales_targets`);
         
         // First, try to find the user ID that corresponds to the selected salesperson name
         const usersCollection = collection(db, 'users');
@@ -285,8 +276,6 @@ export const useSalesAnalytics = ({
           }
         });
         
-        console.log('🔍 Found target user ID:', targetUserId);
-        
         // Query by userName field instead of using selectedSalesperson as document ID
         const salesTargetsRef = collection(db, `targets/${monthYearName}/sales_targets`);
         let salesTargetsSnapshot;
@@ -297,7 +286,6 @@ export const useSalesAnalytics = ({
           const targetDoc = await getDoc(targetDocRef);
           
           if (targetDoc.exists()) {
-            console.log('🔍 Found target by user ID');
             const targetData = targetDoc.data();
             setIndividualSalesData({
               name: targetData.userName || selectedSalesperson,
@@ -316,12 +304,9 @@ export const useSalesAnalytics = ({
         const salesTargetsQuery = query(salesTargetsRef, where('userName', '==', selectedSalesperson));
         salesTargetsSnapshot = await getDocs(salesTargetsQuery);
         
-        console.log('🔍 Found target documents by userName:', salesTargetsSnapshot.size);
-        
         if (!salesTargetsSnapshot.empty) {
           const targetDoc = salesTargetsSnapshot.docs[0];
           const targetData = targetDoc.data();
-          console.log('🔍 Target data found:', targetData);
           setIndividualSalesData({
             name: targetData.userName || selectedSalesperson,
             targetAmount: targetData.amountCollectedTarget || 0,
@@ -332,11 +317,9 @@ export const useSalesAnalytics = ({
             monthlyData: [0, 0, 0, 0, 0, 0]
           });
         } else {
-          console.log('🔍 No target data found for salesperson:', selectedSalesperson);
           setIndividualSalesData(null);
         }
       } catch (error) {
-        console.error('Error fetching individual sales data:', error);
         setIndividualSalesData(null);
       }
     };

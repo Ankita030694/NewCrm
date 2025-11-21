@@ -50,8 +50,6 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
         ];
         const monthYearName = `${monthNames[targetMonth]}_${targetYear}`;
         
-        console.log('Fetching data for month:', monthYearName, 'Target month:', targetMonth, 'Target year:', targetYear);
-        
         // First, get all active salespeople from users collection
         const usersRef = collection(db, 'users');
         const usersQuery = query(
@@ -60,8 +58,6 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
           where('status', '==', 'active')
         );
         const usersSnapshot = await getDocs(usersQuery);
-        
-        console.log('Found users with sales role:', usersSnapshot.size);
         
         const salespersonData: SalespersonPerformance[] = [];
         
@@ -72,8 +68,6 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
             ? `${userData.firstName} ${userData.lastName}` 
             : userData.firstName || userData.email || 'Unknown';
           
-          console.log('Processing salesperson:', salespersonName);
-          
           // Fetch leads data for this salesperson from crm_leads (for interested leads only)
           const leadsQuery = query(
             collection(db, 'crm_leads'),
@@ -82,7 +76,6 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
             where('synced_at', '<=', Timestamp.fromDate(new Date(targetYear, targetMonth + 1, 0, 23, 59, 59)))
           );
           const leadsSnapshot = await getDocs(leadsQuery);
-          console.log(`Found ${leadsSnapshot.size} crm_leads for ${salespersonName} in target month`);
           
           // Fetch billcut leads data for this salesperson (for interested leads only)
           const billcutQuery = query(
@@ -92,7 +85,6 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
             where('synced_date', '<=', Timestamp.fromDate(new Date(targetYear, targetMonth + 1, 0, 23, 59, 59)))
           );
           const billcutSnapshot = await getDocs(billcutQuery);
-          console.log(`Found ${billcutSnapshot.size} billcutLeads for ${salespersonName} in target month`);
           
           // Count interested leads only (converted leads will come from targets collection)
           let interestedLeads = 0;
@@ -128,16 +120,9 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
               targetAmount = targetData.amountCollectedTarget || 0;
               collectedAmount = targetData.amountCollected || 0;
               convertedLeads = targetData.convertedLeads || 0; // Get converted leads from targets collection
-              console.log(`Found target for ${salespersonName}:`, { 
-                targetAmount, 
-                collectedAmount, 
-                convertedLeads 
-              });
-            } else {
-              console.log(`No target found for ${salespersonName} in ${monthYearName}`);
             }
           } catch (error) {
-            console.log(`Error fetching target for ${salespersonName}:`, error);
+            // Error fetching target
           }
           
           const pendingAmount = Math.max(0, targetAmount - collectedAmount);
@@ -160,15 +145,6 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
               conversionRate,
               targetAchievement
             });
-            
-            console.log(`Added ${salespersonName}:`, {
-              convertedLeads,
-              interestedLeads,
-              targetAmount,
-              collectedAmount,
-              conversionRate,
-              targetAchievement
-            });
           } else {
             // Add salesperson with zero data for visibility
             salespersonData.push({
@@ -181,17 +157,15 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
               conversionRate: 0,
               targetAchievement: 0
             });
-            console.log(`Added ${salespersonName} with zero data`);
           }
         }
         
         // Sort by target achievement (descending)
         salespersonData.sort((a, b) => b.targetAchievement - a.targetAchievement);
         
-        console.log('Final salesperson data:', salespersonData);
         setSalespeople(salespersonData);
       } catch (error) {
-        console.error('Error fetching salesperson data:', error);
+        // Error fetching salesperson data
       } finally {
         setLoading(false);
       }

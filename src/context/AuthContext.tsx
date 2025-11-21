@@ -75,7 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       router.push('/login')
     } catch (error) {
-      console.error('Logout error:', error)
+      // Logout error
     }
   }
 
@@ -91,7 +91,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           // Existing user: give them a fresh 6-hour session
           localStorage.setItem('loginTimestamp', Date.now().toString())
           localStorage.setItem('sessionDuration', 'existing')
-          console.log('Existing user detected - granted 6-hour session')
         }
 
         // Get role from localStorage for quick access
@@ -117,7 +116,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               localStorage.setItem('userName', `${userData.firstName} ${userData.lastName}`)
             }
           } catch (err) {
-            console.error('Error fetching user data:', err)
+            // Error fetching user data
           }
         }
       } else {

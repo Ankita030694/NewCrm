@@ -138,7 +138,7 @@ const SalesLeadsCallbackAlert = () => {
       searchCache.set(cacheKey, fetchedLeads, 3 * 60 * 1000);
       setLeads(fetchedLeads);
     } catch (error) {
-      console.error('SalesLeadsCallbackAlert: Error fetching leads:', error);
+      // Error fetching leads - silently fail
     }
   };
 

@@ -64,7 +64,6 @@ export const usePaymentAnalytics = ({
         }>(paymentAnalyticsCacheKey);
         
         if (cachedData) {
-          console.log('⚡ Using cached payment analytics');
           setPaymentAnalytics(cachedData.paymentAnalytics);
           setCurrentMonthPayments(cachedData.currentMonthPayments);
           setIsLoading(false);
@@ -73,8 +72,6 @@ export const usePaymentAnalytics = ({
           return;
         }
 
-        console.log('🚀 Loading payment analytics...');
-        
         // First, get a limited set of payment records for faster initial load
         const paymentsCollection = collection(db, 'clients_payments');
         const limitedQuery = query(paymentsCollection, limit(50)); // Limit initial load
@@ -189,7 +186,7 @@ export const usePaymentAnalytics = ({
               }
             });
           } catch (error) {
-            console.error('Error getting payment history for client:', error);
+            // Error getting payment history
           }
         }
 
@@ -222,11 +219,9 @@ export const usePaymentAnalytics = ({
         setIsLoading(false);
         hasLoaded.current = true;
         
-        console.log('✅ Payment analytics loaded successfully');
         onLoadCompleteRef.current?.();
         
       } catch (error) {
-        console.error('❌ Error fetching payment analytics:', error);
         setIsLoading(false);
         hasLoaded.current = true;
         onLoadCompleteRef.current?.();

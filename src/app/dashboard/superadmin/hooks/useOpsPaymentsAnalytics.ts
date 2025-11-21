@@ -88,7 +88,6 @@ export const useOpsPaymentsAnalytics = ({
         const cachedData = analyticsCache.get<OpsPaymentsAnalytics>(opsPaymentsCacheKey);
         
         if (cachedData) {
-          console.log('⚡ Using cached ops payments analytics with filters:', { selectedAnalyticsMonth, selectedAnalyticsYear, selectedSalesperson });
           setOpsPaymentsAnalytics(cachedData);
           setIsLoading(false);
           hasLoaded.current = true;
@@ -97,8 +96,6 @@ export const useOpsPaymentsAnalytics = ({
           return;
         }
 
-        console.log('🚀 Loading ops payments analytics with filters:', { selectedAnalyticsMonth, selectedAnalyticsYear, selectedSalesperson });
-        
         // Get current date for default values
         const currentDate = new Date();
         const currentMonth = currentDate.getMonth();
@@ -170,14 +167,9 @@ export const useOpsPaymentsAnalytics = ({
         hasLoaded.current = true;
         lastFilterParams.current = currentFilterParams;
         
-        console.log('✅ Ops payments analytics loaded successfully with filters:', {
-          filters: { selectedAnalyticsMonth, selectedAnalyticsYear, selectedSalesperson },
-          analytics
-        });
         onLoadCompleteRef.current?.();
         
       } catch (error) {
-        console.error('❌ Error fetching ops payments analytics:', error);
         setIsLoading(false);
         hasLoaded.current = true;
         lastFilterParams.current = currentFilterParams;
