@@ -24,16 +24,20 @@ ChartJS.register(
   Filler
 );
 
-import { chartOptions } from '../utils/chartConfigs';
+import { getChartOptions } from '../utils/chartConfigs';
+import { useTheme } from '../context/ThemeContext';
 
 interface LazyChartsProps {
   chartData: any;
 }
 
 const LazyCharts: React.FC<LazyChartsProps> = ({ chartData }) => {
+  const { theme } = useTheme();
+  const options = getChartOptions(theme);
+
   return (
     <div className="h-48">
-      <Line data={chartData} options={chartOptions} />
+      <Line data={chartData} options={options} />
     </div>
   );
 };

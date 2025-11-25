@@ -32,9 +32,9 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
       {/* Sales Revenue - Concise Circular Design */}
-      <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-700/50 shadow-xl">
+      <div className="bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700/50 shadow-xl transition-colors">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-blue-300">
+          <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-300">
             {selectedSalesperson ? 'Revenue Collected' : 'Sales Revenue'}
           </h3>
           <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
@@ -42,19 +42,19 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
         
         {/* Filter indicator */}
         {(selectedAnalyticsMonth !== null || selectedAnalyticsYear !== null || selectedSalesperson) && (
-          <div className="mb-3 p-2 bg-blue-900/20 rounded-lg border border-blue-700/30">
-            <div className="text-xs text-blue-300">
+          <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700/30 transition-colors">
+            <div className="text-xs text-blue-600 dark:text-blue-300">
               Filtered by: 
               {selectedAnalyticsMonth !== null && selectedAnalyticsMonth !== undefined && (
-                <span className="ml-1 text-blue-200">
+                <span className="ml-1 text-blue-700 dark:text-blue-200">
                   {new Date(0, selectedAnalyticsMonth).toLocaleString('default', { month: 'long' })}
                 </span>
               )}
               {selectedAnalyticsYear !== null && (
-                <span className="ml-1 text-blue-200">{selectedAnalyticsYear}</span>
+                <span className="ml-1 text-blue-700 dark:text-blue-200">{selectedAnalyticsYear}</span>
               )}
               {selectedSalesperson && (
-                <span className="ml-1 text-blue-200">• {selectedSalesperson}</span>
+                <span className="ml-1 text-blue-700 dark:text-blue-200">• {selectedSalesperson}</span>
               )}
             </div>
           </div>
@@ -66,7 +66,8 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
             <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 120 120">
               <circle
                 cx="60" cy="60" r="54"
-                stroke="rgba(75, 85, 99, 0.3)"
+                stroke="currentColor"
+                className="text-gray-200 dark:text-gray-700/30 transition-colors"
                 strokeWidth="8"
                 fill="none"
               />
@@ -88,16 +89,16 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
               </defs>
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-lg font-bold text-white">{analyticsStats.revenueAchievementPercentage}%</span>
+              <span className="text-lg font-bold text-gray-900 dark:text-white transition-colors">{analyticsStats.revenueAchievementPercentage}%</span>
             </div>
           </div>
           
           {/* Revenue Data */}
           <div className="flex-1">
-            <div className="text-2xl font-bold text-green-400 mb-1">
+            <div className="text-2xl font-bold text-green-500 dark:text-green-400 mb-1 transition-colors">
               ₹{analyticsStats.totalCollectedAmount.toLocaleString('en-IN')}
             </div>
-            <div className="text-sm text-gray-400">
+            <div className="text-sm text-gray-500 dark:text-gray-400 transition-colors">
               of ₹{analyticsStats.totalTargetAmount.toLocaleString('en-IN')}
             </div>
           </div>
@@ -105,27 +106,27 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
       </div>
 
       {/* Ops Revenue - With Filter Info */}
-      <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 border border-gray-700/50 shadow-xl">
+      <div className="bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:to-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700/50 shadow-xl transition-colors">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-emerald-300">Operations Revenue</h3>
+          <h3 className="text-lg font-semibold text-emerald-600 dark:text-emerald-300">Operations Revenue</h3>
           <div className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
         </div>
         
         {/* Filter indicator */}
         {(selectedAnalyticsMonth !== null || selectedAnalyticsYear !== null || selectedSalesperson) && (
-          <div className="mb-3 p-2 bg-blue-900/20 rounded-lg border border-blue-700/30">
-            <div className="text-xs text-blue-300">
+          <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700/30 transition-colors">
+            <div className="text-xs text-blue-600 dark:text-blue-300">
               Filtered by: 
               {selectedAnalyticsMonth !== null && selectedAnalyticsMonth !== undefined && (
-                <span className="ml-1 text-blue-200">
+                <span className="ml-1 text-blue-700 dark:text-blue-200">
                   {new Date(0, selectedAnalyticsMonth).toLocaleString('default', { month: 'long' })}
                 </span>
               )}
               {selectedAnalyticsYear !== null && (
-                <span className="ml-1 text-blue-200">{selectedAnalyticsYear}</span>
+                <span className="ml-1 text-blue-700 dark:text-blue-200">{selectedAnalyticsYear}</span>
               )}
               {selectedSalesperson && (
-                <span className="ml-1 text-blue-200">• {selectedSalesperson}</span>
+                <span className="ml-1 text-blue-700 dark:text-blue-200">• {selectedSalesperson}</span>
               )}
             </div>
           </div>
@@ -134,7 +135,7 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
         <div className="space-y-3">
           {/* Approved Amount */}
           <div className="flex justify-between items-center">
-            <span className="text-3xl font-semibold text-emerald-400">
+            <span className="text-3xl font-semibold text-emerald-500 dark:text-emerald-400 transition-colors">
               {opsPaymentsLoading ? '...' : `₹${opsPaymentsAnalytics?.totalApprovedAmount.toLocaleString('en-IN') || '0'}`}
             </span>
           </div>

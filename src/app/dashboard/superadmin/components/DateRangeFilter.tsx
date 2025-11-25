@@ -30,24 +30,24 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-3 p-2 bg-gray-800/70 rounded-lg border border-gray-700">
+    <div className="flex flex-wrap items-center gap-2 mb-3 p-2 bg-white dark:bg-gray-800/70 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
       <div>
-        <label htmlFor="start-date" className="block text-xs text-blue-200 mb-1">From Date</label>
+        <label htmlFor="start-date" className="block text-xs text-blue-600 dark:text-blue-200 mb-1">From Date</label>
         <input
           id="start-date"
           type="date"
-          className="bg-gray-700 text-white px-2 py-1 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 text-xs"
+          className="bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 text-xs transition-colors"
           value={startDate}
           onChange={(e) => onStartDateChange(e.target.value)}
         />
       </div>
       
       <div>
-        <label htmlFor="end-date" className="block text-xs text-blue-200 mb-1">To Date</label>
+        <label htmlFor="end-date" className="block text-xs text-blue-600 dark:text-blue-200 mb-1">To Date</label>
         <input
           id="end-date"
           type="date"
-          className="bg-gray-700 text-white px-2 py-1 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 text-xs"
+          className="bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 text-xs transition-colors"
           value={endDate}
           onChange={(e) => onEndDateChange(e.target.value)}
         />
@@ -64,7 +64,7 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
         
         <button
           onClick={onClearFilter}
-          className="px-2 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-colors text-xs"
+          className="px-2 py-1 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-white rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-400 transition-colors text-xs"
           disabled={isLoading || (!startDate && !endDate)}
         >
           Clear Filter
@@ -72,7 +72,7 @@ export const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
       </div>
       
       {isFilterApplied && startDate && endDate && (
-        <div className="ml-auto text-xs text-blue-200">
+        <div className="ml-auto text-xs text-blue-600 dark:text-blue-200">
           {(() => {
             const now = new Date();
             const start = new Date(startDate);

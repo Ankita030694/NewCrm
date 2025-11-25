@@ -176,8 +176,8 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
 
   if (isLoading || loading) {
     return (
-      <div className="flex justify-center items-center h-48 bg-gray-800/50 rounded-lg border border-gray-700">
-        <div className="text-blue-200">Loading salesperson data...</div>
+      <div className="flex justify-center items-center h-48 bg-white dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
+        <div className="text-blue-600 dark:text-blue-200">Loading salesperson data...</div>
       </div>
     );
   }
@@ -192,12 +192,12 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
   };
 
   return (
-    <div className="bg-gray-800/50 rounded-lg border border-gray-700">
-      <div className="p-3 border-b border-gray-700">
+    <div className="bg-white dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
+      <div className="p-3 border-b border-gray-200 dark:border-gray-700">
         <div className="flex justify-between items-center">
           <div>
-            <h4 className="text-blue-200 font-medium text-sm">Salesperson Performance</h4>
-            <p className="text-gray-400 text-xs mt-1">
+            <h4 className="text-blue-600 dark:text-blue-200 font-medium text-sm">Salesperson Performance</h4>
+            <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
               {(() => {
                 const now = new Date();
                 const targetMonth = selectedPerformanceMonth !== null ? selectedPerformanceMonth : 
@@ -217,7 +217,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
               <select
-                className="bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                 value={selectedPerformanceMonth !== null ? selectedPerformanceMonth : new Date().getMonth()}
                 onChange={(e) => setSelectedPerformanceMonth(parseInt(e.target.value))}
               >
@@ -236,7 +236,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
               </select>
               
               <select
-                className="bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                 value={selectedPerformanceYear !== null ? selectedPerformanceYear : new Date().getFullYear()}
                 onChange={(e) => setSelectedPerformanceYear(parseInt(e.target.value))}
               >
@@ -251,7 +251,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
                     setSelectedPerformanceMonth(null);
                     setSelectedPerformanceYear(null);
                   }}
-                  className="text-xs text-blue-400 hover:text-blue-300 bg-blue-900/30 px-1 py-1 rounded-md"
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-900/30 px-1 py-1 rounded-md transition-colors"
                 >
                   Reset
                 </button>
@@ -263,40 +263,40 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
       
       <div className="max-h-64 overflow-y-auto">
         <table className="w-full">
-          <thead className="sticky top-0 bg-gray-800/80">
-            <tr className="bg-gradient-to-r from-blue-900/80 to-purple-900/80">
-              <th className="p-2 text-left font-semibold text-blue-100 text-xs">Salesperson</th>
-              <th className="p-2 text-center font-semibold text-blue-100 text-xs">Converted (Month)</th>
-              <th className="p-2 text-center font-semibold text-blue-100 text-xs">Interested (Month)</th>
-              <th className="p-2 text-center font-semibold text-blue-100 text-xs">Target</th>
-              <th className="p-2 text-center font-semibold text-blue-100 text-xs">Collected</th>
-              <th className="p-2 text-center font-semibold text-blue-100 text-xs">Pending</th>
+          <thead className="sticky top-0 bg-gray-100 dark:bg-gray-800/80 transition-colors">
+            <tr className="bg-gray-100 dark:bg-gradient-to-r dark:from-blue-900/80 dark:to-purple-900/80">
+              <th className="p-2 text-left font-semibold text-gray-700 dark:text-blue-100 text-xs">Salesperson</th>
+              <th className="p-2 text-center font-semibold text-gray-700 dark:text-blue-100 text-xs">Converted (Month)</th>
+              <th className="p-2 text-center font-semibold text-gray-700 dark:text-blue-100 text-xs">Interested (Month)</th>
+              <th className="p-2 text-center font-semibold text-gray-700 dark:text-blue-100 text-xs">Target</th>
+              <th className="p-2 text-center font-semibold text-gray-700 dark:text-blue-100 text-xs">Collected</th>
+              <th className="p-2 text-center font-semibold text-gray-700 dark:text-blue-100 text-xs">Pending</th>
             </tr>
           </thead>
           <tbody>
             {salespeople.map((person, index) => (
               <tr 
                 key={person.name} 
-                className={`hover:bg-gray-700/40 transition-colors ${
-                  index % 2 === 0 ? 'bg-gray-800/40' : 'bg-gray-800/60'
+                className={`hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors ${
+                  index % 2 === 0 ? 'bg-white dark:bg-gray-800/40' : 'bg-gray-50 dark:bg-gray-800/60'
                 }`}
               >
-                <td className="p-2 border-t border-gray-700 font-medium text-gray-100 text-xs">
+                <td className="p-2 border-t border-gray-200 dark:border-gray-700 font-medium text-gray-800 dark:text-gray-100 text-xs">
                   {person.name}
                 </td>
-                <td className="p-2 text-center border-t border-gray-700 text-green-300 text-xs font-semibold">
+                <td className="p-2 text-center border-t border-gray-200 dark:border-gray-700 text-green-600 dark:text-green-300 text-xs font-semibold">
                   {person.convertedLeads}
                 </td>
-                <td className="p-2 text-center border-t border-gray-700 text-blue-300 text-xs">
+                <td className="p-2 text-center border-t border-gray-200 dark:border-gray-700 text-blue-600 dark:text-blue-300 text-xs">
                   {person.interestedLeads}
                 </td>
-                <td className="p-2 text-center border-t border-gray-700 text-gray-100 text-xs">
+                <td className="p-2 text-center border-t border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 text-xs">
                   {formatCurrency(person.targetAmount)}
                 </td>
-                <td className="p-2 text-center border-t border-gray-700 text-green-300 text-xs font-semibold">
+                <td className="p-2 text-center border-t border-gray-200 dark:border-gray-700 text-green-600 dark:text-green-300 text-xs font-semibold">
                   {formatCurrency(person.collectedAmount)}
                 </td>
-                <td className="p-2 text-center border-t border-gray-700 text-orange-300 text-xs">
+                <td className="p-2 text-center border-t border-gray-200 dark:border-gray-700 text-orange-600 dark:text-orange-300 text-xs">
                   {formatCurrency(person.pendingAmount)}
                 </td>
               
@@ -305,7 +305,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
             
             {salespeople.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-4 text-center text-gray-400 text-sm">
+                <td colSpan={6} className="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">
                   No salesperson data available
                 </td>
               </tr>
@@ -316,29 +316,29 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
       
       {/* Summary row */}
       {salespeople.length > 0 && (
-        <div className="p-3 border-t border-gray-700 bg-gradient-to-r from-blue-900/90 to-purple-900/90">
+        <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-200 dark:bg-gradient-to-r dark:from-blue-900/90 dark:to-purple-900/90 transition-colors">
           <div className="grid grid-cols-4 gap-4 text-xs">
             <div>
-              <span className="text-blue-200">Total Converted (Month): </span>
-              <span className="text-white font-semibold">
+              <span className="text-blue-600 dark:text-blue-200">Total Converted (Month): </span>
+              <span className="text-gray-900 dark:text-white font-semibold">
                 {salespeople.reduce((sum, p) => sum + p.convertedLeads, 0)}
               </span>
             </div>
             <div>
-              <span className="text-blue-200">Total Target: </span>
-              <span className="text-white font-semibold">
+              <span className="text-blue-600 dark:text-blue-200">Total Target: </span>
+              <span className="text-gray-900 dark:text-white font-semibold">
                 {formatCurrency(salespeople.reduce((sum, p) => sum + p.targetAmount, 0))}
               </span>
             </div>
             <div>
-              <span className="text-blue-200">Total Collected: </span>
-              <span className="text-white font-semibold">
+              <span className="text-blue-600 dark:text-blue-200">Total Collected: </span>
+              <span className="text-gray-900 dark:text-white font-semibold">
                 {formatCurrency(salespeople.reduce((sum, p) => sum + p.collectedAmount, 0))}
               </span>
             </div>
             <div>
-              <span className="text-blue-200">Total Interested (Month): </span>
-              <span className="text-white font-semibold">
+              <span className="text-blue-600 dark:text-blue-200">Total Interested (Month): </span>
+              <span className="text-gray-900 dark:text-white font-semibold">
                 {salespeople.reduce((sum, p) => sum + p.interestedLeads, 0)}
               </span>
             </div>

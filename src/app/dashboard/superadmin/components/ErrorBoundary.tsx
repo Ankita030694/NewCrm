@@ -28,16 +28,16 @@ class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         this.props.fallback || (
-          <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
-            <h3 className="text-red-300 text-sm font-semibold mb-2">
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 rounded-lg transition-colors">
+            <h3 className="text-red-700 dark:text-red-300 text-sm font-semibold mb-2">
               Unable to load component
             </h3>
-            <p className="text-red-200 text-xs">
+            <p className="text-red-600 dark:text-red-200 text-xs">
               There was an error loading this section. Please refresh the page to try again.
             </p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-2 text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded"
+              className="mt-2 text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors"
             >
               Refresh Page
             </button>

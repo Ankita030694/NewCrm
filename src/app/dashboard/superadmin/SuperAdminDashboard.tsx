@@ -29,6 +29,10 @@ import {
   TableSkeleton
 } from './components';
 
+import { ThemeToggle } from './components/ThemeToggle';
+
+import { ThemeProvider } from './context/ThemeContext';
+
 // Import performance utilities
 import { perfMonitor, preloadCriticalResources } from './utils/performance';
 import { dashboardCache, analyticsCache, generateCacheKey } from './utils/cache';
@@ -283,13 +287,15 @@ const SuperAdminDashboard = React.memo(() => {
 
   return (
     <SimpleErrorFallback>
-      <div className="p-2 min-h-screen bg-gray-900 text-white">
+      <ThemeProvider>
+        <div className="p-2 min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-200">
         <div className="flex justify-between items-center mb-3">
           <h1 className="text-xl font-bold">Super Admin Dashboard</h1>
           
           {/* Cache management controls */}
-          <div className="flex items-center gap-2">
-            <button
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <button
               onClick={clearAllCache}
               className="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded-md transition-colors"
               title="Clear cache"
@@ -312,9 +318,9 @@ const SuperAdminDashboard = React.memo(() => {
         <div className="flex flex-col gap-3">
           {/* Sales Analytics Section - Priority Loading */}
           <div className="w-full">
-            <Card className="bg-gray-800 border-gray-700 shadow-lg">
+            <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg transition-colors duration-200">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-white text-base">
+                <CardTitle className="text-gray-900 dark:text-white text-base">
                   {selectedSalesperson && individualSalesData
                     ? `${individualSalesData.name}'s Sales Performance`
                     : 'Overall Sales Analytics'
@@ -385,16 +391,16 @@ const SuperAdminDashboard = React.memo(() => {
                 {/* CRM Leads Analytics Section - Deferred loading */}
                 <div className="mt-4 flex flex-col lg:flex-row gap-3">
                   {/* Left side: Table with filters - Now full width */}
-                  <div className="w-full bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg p-3 shadow-xl">
+                  <div className="w-full bg-white dark:bg-gradient-to-br dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 shadow-xl transition-colors">
                     <div className="flex justify-between items-center mb-3">
-                      <h3 className="text-lg font-semibold text-blue-100">CRM Leads Analytics</h3>
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-blue-100">CRM Leads Analytics</h3>
                       
                       {/* Salesperson filter dropdown */}
                       <div className="flex items-center">
-                        <label htmlFor="lead-salesperson" className="mr-1 text-gray-300 text-xs">Salesperson:</label>
+                        <label htmlFor="lead-salesperson" className="mr-1 text-gray-600 dark:text-gray-300 text-xs">Salesperson:</label>
                         <select
                           id="lead-salesperson"
-                          className="bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                           value={selectedLeadsSalesperson || "all"}
                           onChange={handleLeadsSalespersonChange}
                         >
@@ -461,9 +467,9 @@ const SuperAdminDashboard = React.memo(() => {
           {/* Client Analytics Section - Lazy loaded */}
           {showClientAnalytics && (
             <div className="w-full">
-              <Card className="bg-gray-800 border-gray-700 shadow-lg">
+              <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg transition-colors">
                 <CardHeader>
-                  <CardTitle className="text-white text-base">Client & Advocate Analytics</CardTitle>
+                  <CardTitle className="text-gray-900 dark:text-white text-base">Client & Advocate Analytics</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Suspense fallback={<LoadingFallback />}>
@@ -481,6 +487,7 @@ const SuperAdminDashboard = React.memo(() => {
           )}
         </div>
       </div>
+      </ThemeProvider>
     </SimpleErrorFallback>
   );
 });

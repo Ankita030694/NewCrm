@@ -1,169 +1,208 @@
-export const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'top' as const,
-      labels: {
-        color: 'rgba(255, 255, 255, 0.8)',
+export const getChartOptions = (theme: 'dark' | 'light') => {
+  const textColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(17, 24, 39, 0.8)';
+  const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+  const tickColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(55, 65, 81, 0.7)';
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: {
+          color: textColor,
+        },
       },
     },
-  },
-  scales: {
-    x: {
-      ticks: {
-        color: 'rgba(255, 255, 255, 0.7)',
+    scales: {
+      x: {
+        ticks: {
+          color: tickColor,
+        },
+        grid: {
+          color: gridColor,
+        },
       },
-      grid: {
-        color: 'rgba(255, 255, 255, 0.1)',
+      y: {
+        ticks: {
+          color: tickColor,
+        },
+        grid: {
+          color: gridColor,
+        },
       },
     },
-    y: {
-      ticks: {
-        color: 'rgba(255, 255, 255, 0.7)',
-      },
-      grid: {
-        color: 'rgba(255, 255, 255, 0.1)',
-      },
-    },
-  },
+  };
 };
 
-export const stackedBarOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'top' as const,
-      labels: {
-        color: 'rgba(255, 255, 255, 0.8)',
+// Keep original for backward compatibility if needed, but prefer using the function
+export const chartOptions = getChartOptions('dark');
+
+export const getStackedBarOptions = (theme: 'dark' | 'light') => {
+  const textColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(17, 24, 39, 0.8)';
+  const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+  const tickColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(55, 65, 81, 0.7)';
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: {
+          color: textColor,
+        },
+      },
+      title: {
+        display: true,
+        text: 'Lead Distribution by Source and Status',
+        color: textColor,
       },
     },
-    title: {
-      display: true,
-      text: 'Lead Distribution by Source and Status',
-      color: 'rgba(255, 255, 255, 0.8)',
-    },
-  },
-  scales: {
-    x: {
-      stacked: true,
-      ticks: {
-        color: 'rgba(255, 255, 255, 0.7)',
+    scales: {
+      x: {
+        stacked: true,
+        ticks: {
+          color: tickColor,
+        },
+        grid: {
+          color: gridColor,
+        },
       },
-      grid: {
-        color: 'rgba(255, 255, 255, 0.1)',
-      },
-    },
-    y: {
-      stacked: true,
-      ticks: {
-        color: 'rgba(255, 255, 255, 0.7)',
-      },
-      grid: {
-        color: 'rgba(255, 255, 255, 0.1)',
+      y: {
+        stacked: true,
+        ticks: {
+          color: tickColor,
+        },
+        grid: {
+          color: gridColor,
+        },
       },
     },
-  },
+  };
 };
 
-export const pieOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'right' as const,
-      labels: {
-        color: 'rgba(255, 255, 255, 0.8)',
+export const stackedBarOptions = getStackedBarOptions('dark');
+
+export const getPieOptions = (theme: 'dark' | 'light') => {
+  const textColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(17, 24, 39, 0.8)';
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'right' as const,
+        labels: {
+          color: textColor,
+        },
       },
     },
-  },
+  };
 };
 
-export const sourceTotalsPieOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'bottom' as const,
-      labels: {
-        color: 'rgba(255, 255, 255, 0.8)',
-        padding: 15,
+export const pieOptions = getPieOptions('dark');
+
+export const getSourceTotalsPieOptions = (theme: 'dark' | 'light') => {
+  const textColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(17, 24, 39, 0.8)';
+  const titleColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(17, 24, 39, 0.9)';
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          color: textColor,
+          padding: 15,
+          font: {
+            size: 12
+          }
+        },
+      },
+      title: {
+        display: true,
+        text: 'Total Leads by Source',
+        color: titleColor,
         font: {
-          size: 12
+          size: 16
+        },
+        padding: {
+          top: 10,
+          bottom: 20
         }
       },
     },
-    title: {
-      display: true,
-      text: 'Total Leads by Source',
-      color: 'rgba(255, 255, 255, 0.9)',
-      font: {
-        size: 16
-      },
-      padding: {
-        top: 10,
-        bottom: 20
-      }
-    },
-  },
+  };
 };
 
-export const horizontalBarOptions = {
-  indexAxis: 'y' as const,
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      display: true,
-      position: 'top' as const,
-      labels: {
-        color: 'rgba(255, 255, 255, 0.8)',
+export const sourceTotalsPieOptions = getSourceTotalsPieOptions('dark');
+
+export const getHorizontalBarOptions = (theme: 'dark' | 'light') => {
+  const textColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.8)' : 'rgba(17, 24, 39, 0.8)';
+  const titleColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(17, 24, 39, 0.9)';
+  const gridColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+  const tickColor = theme === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(55, 65, 81, 0.7)';
+
+  return {
+    indexAxis: 'y' as const,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top' as const,
+        labels: {
+          color: textColor,
+        },
       },
-    },
-    title: {
-      display: true,
-      text: 'Conversion Performance by Source',
-      color: 'rgba(255, 255, 255, 0.9)',
-      font: {
-        size: 16
+      title: {
+        display: true,
+        text: 'Conversion Performance by Source',
+        color: titleColor,
+        font: {
+          size: 16
+        },
+        padding: {
+          top: 10,
+          bottom: 15
+        }
       },
-      padding: {
-        top: 10,
-        bottom: 15
-      }
-    },
-    tooltip: {
-      callbacks: {
-        footer: (tooltipItems: any) => {
-          const sourceIndex = tooltipItems[0].dataIndex;
-          // This will need to be passed as a prop or context
-          return `Conversion Rate: 0%`;
+      tooltip: {
+        callbacks: {
+          footer: (tooltipItems: any) => {
+            const sourceIndex = tooltipItems[0].dataIndex;
+            // This will need to be passed as a prop or context
+            return `Conversion Rate: 0%`;
+          }
         }
       }
-    }
-  },
-  scales: {
-    x: {
-      stacked: true,
-      grid: {
-        color: 'rgba(255, 255, 255, 0.1)',
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: {
+          color: gridColor,
+        },
+        ticks: {
+          color: tickColor,
+        }
       },
-      ticks: {
-        color: 'rgba(255, 255, 255, 0.7)',
+      y: {
+        stacked: true,
+        grid: {
+          display: false,
+        },
+        ticks: {
+          color: tickColor,
+        }
       }
     },
-    y: {
-      stacked: true,
-      grid: {
-        display: false,
-      },
-      ticks: {
-        color: 'rgba(255, 255, 255, 0.7)',
-      }
-    }
-  },
+  };
 };
+
+export const horizontalBarOptions = getHorizontalBarOptions('dark');
 
 export const statusColors = [
   'rgba(52, 191, 163, 0.8)',

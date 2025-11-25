@@ -33,7 +33,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   targetColor = "text-gray-400"
 }) => {
   return (
-    <div className={`bg-gradient-to-br from-gray-800 to-gray-900 rounded-lg overflow-hidden shadow-lg border border-gray-700 flex flex-col h-full ${className}`}>
+    <div className={`bg-white dark:bg-gradient-to-br dark:from-gray-800 dark:to-gray-900 rounded-lg overflow-hidden shadow-lg border border-gray-200 dark:border-gray-700 flex flex-col h-full transition-colors ${className}`}>
       <div className="p-3 flex-1 flex flex-col">
         <h3 className={`${textColor} font-medium text-xs uppercase tracking-wider mb-1`}>
           {title}
@@ -44,20 +44,20 @@ export const MetricCard: React.FC<MetricCardProps> = ({
           <div className="mb-2">
             <div className="flex items-baseline space-x-1">
               <p className={`text-xl font-bold ${collectedColor}`}>{collectedValue}</p>
-              <span className="text-gray-500 text-lg">/</span>
+              <span className="text-gray-400 dark:text-gray-500 text-lg">/</span>
             </div>
             <div className="flex items-baseline space-x-1">
               <p className={`text-lg font-semibold ${targetColor}`}>{targetValue}</p>
               {subtitle && (
-                <p className="text-xs text-gray-400">{subtitle}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
               )}
             </div>
           </div>
         ) : (
           <div className="flex items-baseline space-x-1 mb-2">
-            <p className="text-xl font-bold text-white">{value}</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white">{value}</p>
             {subtitle && (
-              <p className="text-xs text-gray-400">{subtitle}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
             )}
           </div>
         )}
@@ -65,11 +65,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
         <div className="mt-auto">
           {showProgress ? (
             <>
-              <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
                 <span>Progress</span>
                 <span>{progress}%</span>
               </div>
-              <div className="h-1.5 w-full bg-gray-700 rounded-full overflow-hidden">
+              <div className="h-1.5 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div 
                   className={`h-full ${gradient} rounded-full`}
                   style={{ width: `${progress}%` }}
@@ -78,7 +78,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
             </>
           ) : icon ? (
             <div className="flex justify-center">
-              <div className="inline-flex items-center justify-center p-1.5 bg-gray-700/50 rounded-full">
+              <div className="inline-flex items-center justify-center p-1.5 bg-gray-100 dark:bg-gray-700/50 rounded-full">
                 {icon}
               </div>
             </div>
