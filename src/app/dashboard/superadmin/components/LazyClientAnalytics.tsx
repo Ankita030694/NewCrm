@@ -53,7 +53,7 @@ const LazyClientAnalytics: React.FC<LazyClientAnalyticsProps> = ({
           <div className="bg-green-50 dark:bg-gradient-to-r dark:from-green-900/80 dark:to-green-800/60 p-3 rounded-lg border border-green-200 dark:border-green-700/50 transition-colors">
             <div className="flex justify-between items-center">
               <span className="text-green-700 dark:text-green-300 text-sm font-medium">Active</span>
-              <span className="text-green-900 dark:text-white font-bold text-lg">
+              <span className="text-black dark:text-white font-bold text-lg">
                 {clientAnalytics.statusDistribution?.Active || 0}
               </span>
             </div>
@@ -62,7 +62,7 @@ const LazyClientAnalytics: React.FC<LazyClientAnalyticsProps> = ({
           <div className="bg-red-50 dark:bg-gradient-to-r dark:from-red-900/80 dark:to-red-800/60 p-3 rounded-lg border border-red-200 dark:border-red-700/50 transition-colors">
             <div className="flex justify-between items-center">
               <span className="text-red-700 dark:text-red-300 text-sm font-medium">Dropped</span>
-              <span className="text-red-900 dark:text-white font-bold text-lg">
+              <span className="text-black dark:text-white font-bold text-lg">
                 {clientAnalytics.statusDistribution?.Dropped || 0}
               </span>
             </div>
@@ -71,7 +71,7 @@ const LazyClientAnalytics: React.FC<LazyClientAnalyticsProps> = ({
           <div className="bg-yellow-50 dark:bg-gradient-to-r dark:from-yellow-900/80 dark:to-yellow-800/60 p-3 rounded-lg border border-yellow-200 dark:border-yellow-700/50 transition-colors">
             <div className="flex justify-between items-center">
               <span className="text-yellow-700 dark:text-yellow-300 text-sm font-medium">Not Responding</span>
-              <span className="text-yellow-900 dark:text-white font-bold text-lg">
+              <span className="text-black dark:text-white font-bold text-lg">
                 {clientAnalytics.statusDistribution?.['Not Responding'] || 0}
               </span>
             </div>
@@ -80,7 +80,7 @@ const LazyClientAnalytics: React.FC<LazyClientAnalyticsProps> = ({
           <div className="bg-orange-50 dark:bg-gradient-to-r dark:from-orange-900/80 dark:to-orange-800/60 p-3 rounded-lg border border-orange-200 dark:border-orange-700/50 transition-colors">
             <div className="flex justify-between items-center">
               <span className="text-orange-700 dark:text-orange-300 text-sm font-medium">On Hold</span>
-              <span className="text-orange-900 dark:text-white font-bold text-lg">
+              <span className="text-black dark:text-white font-bold text-lg">
                 {clientAnalytics.statusDistribution?.['On Hold'] || 0}
               </span>
             </div>
@@ -89,7 +89,7 @@ const LazyClientAnalytics: React.FC<LazyClientAnalyticsProps> = ({
           <div className="bg-gray-50 dark:bg-gradient-to-r dark:from-gray-900/80 dark:to-gray-800/60 p-3 rounded-lg border border-gray-200 dark:border-gray-700/50 transition-colors">
             <div className="flex justify-between items-center">
               <span className="text-gray-700 dark:text-gray-300 text-sm font-medium">Inactive</span>
-              <span className="text-gray-900 dark:text-white font-bold text-lg">
+              <span className="text-black dark:text-white font-bold text-lg">
                 {clientAnalytics.statusDistribution?.Inactive || 0}
               </span>
             </div>
