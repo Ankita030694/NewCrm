@@ -16,9 +16,16 @@ export async function POST(request: NextRequest) {
     const topics = Array.isArray(topic) ? topic : [topic];
 
     // Verify app admin initialized
-    if (!amaAppDb) {
-       throw new Error("Firebase Admin (Ama App) Firestore not initialized");
+    if (!amaAppDb || !amaAppMessaging) {
+       console.error("Firebase Admin (Ama App) not initialized");
+       return NextResponse.json({
+        success: false,
+        message: "Service configuration error: AMA App Admin not initialized",
+      }, { status: 500 });
     }
+
+    const db = amaAppDb;
+    const messaging = amaAppMessaging;
 
     const messagePayload = {
       notification: {
@@ -71,7 +78,7 @@ export async function POST(request: NextRequest) {
       // Send notification once per topic
       const sendPromises = weekTopics.map((week: string) => {
         const msg = { ...messagePayload, topic: week };
-        return amaAppMessaging.send(msg); // only 1 send per topic
+        return messaging.send(msg); // only 1 send per topic
       });
 
       await Promise.all(sendPromises);
@@ -85,13 +92,13 @@ export async function POST(request: NextRequest) {
         week_notification: true,
       };
 
-      await amaAppDb
+      await db
         .collection("notifications")
         .doc("client")
         .collection("messages")
         .add(messageDoc);
 
-      await amaAppDb
+      await db
         .collection("notification_history")
         .doc(user_id)
         .collection("messages")
@@ -110,7 +117,7 @@ export async function POST(request: NextRequest) {
       const sendResults = await Promise.allSettled(topics.map(async (t: string) => {
         try {
           const msg = { ...messagePayload, topic: t };
-          const messageId = await amaAppMessaging.send(msg);
+          const messageId = await messaging.send(msg);
           console.log(`[Notification] Successfully sent to topic ${t}: ${messageId}`);
           return { topic: t, messageId, success: true };
         } catch (err) {
@@ -141,7 +148,7 @@ export async function POST(request: NextRequest) {
       if (topics.includes("all_users")) rolesToStore.push("user");
 
       const storePromises = rolesToStore.map((role) =>
-        amaAppDb
+        db
           .collection("notifications")
           .doc(role)
           .collection("messages")
@@ -150,7 +157,7 @@ export async function POST(request: NextRequest) {
 
       await Promise.all(storePromises);
 
-      await amaAppDb
+      await db
         .collection("notification_history")
         .doc(user_id)
         .collection("messages")
