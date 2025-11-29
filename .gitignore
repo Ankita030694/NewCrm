@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+src/firebase/ama-app-service.json
 
 # debug
 npm-debug.log*

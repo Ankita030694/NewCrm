@@ -8,3 +8,5 @@ declare module '@/firebase/ama_app' {
     export const db: Firestore;
 }
 
+
+
