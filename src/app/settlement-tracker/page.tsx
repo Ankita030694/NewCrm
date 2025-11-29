@@ -86,6 +86,7 @@ const SettlementTracker = () => {
   const [manualLoanAmount, setManualLoanAmount] = useState('')
   const [manualLoanType, setManualLoanType] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [filterStatus, setFilterStatus] = useState('All')
   
   // Add new state for remarks management
   const [settlementRemarks, setSettlementRemarks] = useState<{ [key: string]: string }>({})
@@ -226,10 +227,12 @@ const SettlementTracker = () => {
   const selectedClientData = clients.find(client => client.id === selectedClient)
   const availableBanks = selectedClientData?.banks || []
 
-  // Filter settlements based on search term
-  const filteredSettlements = settlements.filter(settlement =>
-    settlement.clientName.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Filter settlements based on search term and status
+  const filteredSettlements = settlements.filter(settlement => {
+    const matchesSearch = settlement.clientName.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = filterStatus === 'All' || settlement.status === filterStatus
+    return matchesSearch && matchesStatus
+  })
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -557,9 +560,9 @@ const SettlementTracker = () => {
           </Button>
         </div>
 
-        {/* Search Bar */}
-        <div className="mb-4">
-          <div className="relative max-w-md">
+        {/* Search Bar and Filter */}
+        <div className="mb-4 flex gap-4">
+          <div className="relative max-w-md flex-1">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -582,6 +585,22 @@ const SettlementTracker = () => {
                 </svg>
               </button>
             )}
+          </div>
+
+          <div className="w-48">
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Statuses</SelectItem>
+                {statusOptions.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
