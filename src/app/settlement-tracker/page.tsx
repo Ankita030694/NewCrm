@@ -66,6 +66,53 @@ interface Client {
   }>
 }
 
+// Separate component for the remark input to prevent re-rendering the whole list
+const RemarkInput = ({ 
+  settlementId, 
+  initialValue, 
+  isDarkMode, 
+  onSave, 
+  onHistory 
+}: { 
+  settlementId: string
+  initialValue: string
+  isDarkMode: boolean
+  onSave: (id: string, value: string) => void
+  onHistory: (id: string) => void
+}) => {
+  const [value, setValue] = useState(initialValue)
+
+  return (
+    <div className="flex flex-col space-y-1">
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Remark..."
+        className={`w-full px-2 py-1 border rounded text-xs h-20 ${
+          isDarkMode 
+            ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+            : 'bg-gray-100 border-gray-300 text-gray-800'
+        }`}
+        rows={3}
+      />
+      <div className="flex space-x-1">
+        <button
+          onClick={() => onSave(settlementId, value)}
+          className="px-1 py-0.5 text-xs rounded transition-colors duration-200 bg-green-600 hover:bg-green-500 text-white"
+        >
+          Save
+        </button>
+        <button
+          onClick={() => onHistory(settlementId)}
+          className="px-1 py-0.5 text-xs rounded transition-colors duration-200 bg-purple-600 hover:bg-purple-500 text-white"
+        >
+          Hist
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const SettlementTracker = () => {
   const { user, userRole, userName, loading: authLoading, logout } = useAuth()
   const router = useRouter()
@@ -111,6 +158,9 @@ const SettlementTracker = () => {
   const [newClientName, setNewClientName] = useState('')
   const [newClientMobile, setNewClientMobile] = useState('')
   const [newClientEmail, setNewClientEmail] = useState('')
+
+  // Add dark mode state
+  const [isDarkMode, setIsDarkMode] = useState(false)
 
   // Check if user has access to settlement tracker
   useEffect(() => {
@@ -381,25 +431,32 @@ const SettlementTracker = () => {
     return colors[status] || 'bg-gray-100 text-gray-800'
   }
 
-  // Add function to handle remark changes
+  // Get status display text
+  const getStatusDisplay = (status: string) => {
+    if (status === 'On Hold') return 'Letter Pending'
+    if (status === 'Payment Pending') return 'Fees Pending'
+    return status
+  }
+
+  // Add function to handle remark changes (not needed with isolated component, but keeping for potential future use if needed)
   const handleRemarkChange = (settlementId: string, value: string) => {
     setSettlementRemarks((prev) => ({ ...prev, [settlementId]: value }))
   }
 
   // Add function to handle saving remarks
-  const handleSaveRemark = async (settlementId: string) => {
+  const handleSaveRemark = async (settlementId: string, remarkText: string) => {
     try {
       const advocateName = localStorage.getItem("userName") || "Unknown User"
-      const remarkText = settlementRemarks[settlementId]?.trim()
+      const trimmedRemark = remarkText?.trim()
 
-      if (!remarkText) {
+      if (!trimmedRemark) {
         alert("Please enter a remark before saving")
         return
       }
 
       const historyRef = collection(db, "settlements", settlementId, "history")
       await addDoc(historyRef, {
-        remark: remarkText,
+        remark: trimmedRemark,
         timestamp: serverTimestamp(),
         advocateName,
       })
@@ -411,7 +468,7 @@ const SettlementTracker = () => {
             ? {
                 ...settlement,
                 latestRemark: {
-                  remark: remarkText,
+                  remark: trimmedRemark,
                   advocateName,
                   timestamp: new Date(),
                 },
@@ -419,6 +476,9 @@ const SettlementTracker = () => {
             : settlement,
         ),
       )
+      
+      // Update local remarks state
+      setSettlementRemarks((prev) => ({ ...prev, [settlementId]: trimmedRemark }))
 
       alert("Remark saved successfully")
     } catch (error) {
@@ -544,27 +604,36 @@ const SettlementTracker = () => {
 
   // Render the main settlement tracker content
   const renderSettlementContent = () => (
-    <div className="p-6 bg-gray-50">
+    <div className={`p-6 transition-colors duration-200 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Settlement Tracker</h1>
-            <p className="text-gray-600 mt-1">Track settlement negotiations with recovery agents</p>
+            <h1 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Settlement Tracker</h1>
+            <p className={`mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Track settlement negotiations with recovery agents</p>
           </div>
-          <Button 
-            onClick={() => setIsDialogOpen(true)}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            Add New Settlement
-          </Button>
+          <div className="flex items-center gap-4">
+            <Button 
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              variant="outline"
+              className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-50'}`}
+            >
+              {isDarkMode ? '☀️' : '🌙'}
+            </Button>
+            <Button 
+              onClick={() => setIsDialogOpen(true)}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              Add New Settlement
+            </Button>
+          </div>
         </div>
 
         {/* Search Bar and Filter */}
         <div className="mb-4 flex gap-4">
           <div className="relative max-w-md flex-1">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className={`h-4 w-4 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
@@ -573,12 +642,16 @@ const SettlementTracker = () => {
               placeholder="Search by client name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full text-sm border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500"
+              className={`pl-10 pr-4 py-2 w-full text-sm rounded-md focus:ring-green-500 focus:border-green-500 ${
+                isDarkMode 
+                  ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+              }`}
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                className={`absolute inset-y-0 right-0 pr-3 flex items-center hover:text-gray-600 ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -589,14 +662,14 @@ const SettlementTracker = () => {
 
           <div className="w-48">
             <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger>
+              <SelectTrigger className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-300'}`}>
                 <SelectValue placeholder="Filter by Status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Statuses</SelectItem>
+              <SelectContent className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-200'}`}>
+                <SelectItem value="All" className={`cursor-pointer hover:bg-gray-100 ${isDarkMode ? 'focus:bg-gray-700 focus:text-white' : ''}`}>All Statuses</SelectItem>
                 {statusOptions.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
+                  <SelectItem key={status} value={status} className={`cursor-pointer hover:bg-gray-100 ${isDarkMode ? 'focus:bg-gray-700 focus:text-white' : ''}`}>
+                    {getStatusDisplay(status)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -605,12 +678,12 @@ const SettlementTracker = () => {
         </div>
 
         {/* Settlements Table */}
-        <Card>
+        <Card className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle className="text-xl">Settlement Records</CardTitle>
+              <CardTitle className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Settlement Records</CardTitle>
               {searchTerm && (
-                <span className="text-sm text-gray-500">
+                <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   {filteredSettlements.length} of {settlements.length} settlements
                 </span>
               )}
@@ -619,46 +692,46 @@ const SettlementTracker = () => {
           <CardContent>
             {filteredSettlements.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                  <thead className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
                     <tr>
-                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                    <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Date
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-24 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Client
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-32 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Bank
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-36 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Account
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Amount
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Type
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-28 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Status
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-28 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Created By
                       </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-64 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Remarks
                       </th>
                      
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-16 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                         Actions
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className={`${isDarkMode ? 'bg-gray-800 divide-y divide-gray-700' : 'bg-white divide-y divide-gray-200'}`}>
                     {filteredSettlements.map((settlement) => (
-                      <tr key={settlement.id} className="hover:bg-gray-50">
-                        <td className="px-2 py-2 whitespace-nowrap text-xs font-medium text-gray-900">
+                      <tr key={settlement.id} className={`${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
+                        <td className={`px-2 py-2 whitespace-nowrap text-xs font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
                           <div className="truncate max-w-24" title={settlement.createdAt?.toDate ? settlement.createdAt.toDate().toLocaleDateString() : 'N/A'}>
                             {settlement.createdAt?.toDate ? 
                               settlement.createdAt.toDate().toLocaleDateString() : 
@@ -666,79 +739,63 @@ const SettlementTracker = () => {
                             }
                           </div>
                         </td>
-                        <td className="px-2 py-2 whitespace-nowrap text-xs font-medium text-gray-900">
+                        <td className={`px-2 py-2 whitespace-nowrap text-xs font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
                           <div className="truncate max-w-24" title={settlement.clientName}>
                             {settlement.clientName}
                           </div>
                         </td>
-                        <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500">
-                          <div className="truncate max-w-20" title={settlement.bankName}>
+                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          <div className="truncate max-w-32" title={settlement.bankName}>
                             {settlement.bankName}
                           </div>
                         </td>
-                        <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500">
-                          <div className="truncate max-w-24" title={settlement.accountNumber}>
+                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          <div className="truncate max-w-36" title={settlement.accountNumber}>
                             {settlement.accountNumber}
                           </div>
                         </td>
-                        <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500">
+                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           <div className="truncate max-w-20" title={`₹${parseInt(settlement.loanAmount).toLocaleString()}`}>
                             ₹{parseInt(settlement.loanAmount).toLocaleString()}
                           </div>
                         </td>
-                        <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500">
+                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           <div className="truncate max-w-20" title={settlement.loanType}>
                             {settlement.loanType}
                           </div>
                         </td>
                         <td className="px-2 py-2 whitespace-nowrap">
                           <Select value={settlement.status} onValueChange={(value) => handleStatusUpdate(settlement.id, value)}>
-                            <SelectTrigger className="w-28 h-7 text-xs">
+                            <SelectTrigger className={`w-32 h-7 text-xs ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : ''}`}>
                               <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}>
                               {statusOptions.map((status) => (
-                                <SelectItem key={status} value={status} className="text-xs">
+                                <SelectItem key={status} value={status} className={`text-xs ${isDarkMode ? 'focus:bg-gray-700 focus:text-white' : ''}`}>
                                   <span className={`inline-flex px-1 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(status)}`}>
-                                    {status}
+                                    {getStatusDisplay(status)}
                                   </span>
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500">
+                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           <div className="truncate max-w-28" title={settlement.createdBy}>
                             {settlement.createdBy}
                           </div>
                         </td>
-                        <td className="px-2 py-2 text-xs text-gray-500">
-                          <div className="flex flex-col space-y-1">
-                            <textarea
-                              value={settlementRemarks[settlement.id] || ""}
-                              onChange={(e) => handleRemarkChange(settlement.id, e.target.value)}
-                              placeholder="Remark..."
-                              className="w-full px-1 py-0.5 bg-gray-100 border border-gray-300 text-gray-800 border rounded text-xs resize-none h-8"
-                              rows={1}
-                            />
-                            <div className="flex space-x-1">
-                              <button
-                                onClick={() => handleSaveRemark(settlement.id)}
-                                className="px-1 py-0.5 text-xs rounded transition-colors duration-200 bg-green-600 hover:bg-green-500 text-white"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={() => handleViewHistory(settlement.id)}
-                                className="px-1 py-0.5 text-xs rounded transition-colors duration-200 bg-purple-600 hover:bg-purple-500 text-white"
-                              >
-                                Hist
-                              </button>
-                            </div>
-                          </div>
+                        <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          <RemarkInput
+                            settlementId={settlement.id}
+                            initialValue={settlementRemarks[settlement.id] || ""}
+                            isDarkMode={isDarkMode}
+                            onSave={handleSaveRemark}
+                            onHistory={handleViewHistory}
+                          />
                         </td>
                         
-                        <td className="px-2 py-2 whitespace-nowrap text-xs text-gray-500">
+                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           <div className="flex flex-col space-y-1">
                           
                             <button
@@ -755,7 +812,7 @@ const SettlementTracker = () => {
                 </table>
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500">
+              <div className={`text-center py-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                 {searchTerm ? (
                   <div>
                     <p>No settlements found matching "{searchTerm}".</p>
@@ -773,6 +830,7 @@ const SettlementTracker = () => {
             )}
           </CardContent>
         </Card>
+
 
         {/* Add Settlement Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -969,7 +1027,7 @@ const SettlementTracker = () => {
                   <SelectContent>
                     {statusOptions.map((status) => (
                       <SelectItem key={status} value={status}>
-                        {status}
+                        {getStatusDisplay(status)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1128,22 +1186,47 @@ const SettlementTracker = () => {
 
   // For overlord users, the sidebar already includes the content
   if (userRole === 'overlord') {
-    return renderSidebar()
+    return (
+      <OverlordSidebar>
+        <div className={`min-h-screen flex flex-col ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
+          {/* Header */}
+          <header className={`${isDarkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white shadow'}`}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+              <h1 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>AMA Workspace</h1>
+              <div className="flex items-center gap-4">
+                <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Welcome, {userName}</span>
+                <button 
+                  onClick={() => logout()}
+                  className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Settlement Tracker Content */}
+          <main className="flex-1 pb-32">
+            {renderSettlementContent()}
+          </main>
+        </div>
+      </OverlordSidebar>
+    )
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className={`flex min-h-screen ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
       {/* Role-specific Sidebar */}
       {renderSidebar()}
       
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="bg-white shadow">
+        <header className={`${isDarkMode ? 'bg-gray-800 border-b border-gray-700' : 'bg-white shadow'}`}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <h1 className="text-xl font-bold text-gray-900">AMA Workspace</h1>
+            <h1 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>AMA Workspace</h1>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">Welcome, {userName}</span>
+              <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>Welcome, {userName}</span>
               <button 
                 onClick={() => logout()}
                 className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
@@ -1155,7 +1238,7 @@ const SettlementTracker = () => {
         </header>
 
         {/* Settlement Tracker Content */}
-        <main className="flex-1 bg-gray-100 pb-32">
+        <main className={`flex-1 pb-32 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
           {renderSettlementContent()}
         </main>
       </div>
