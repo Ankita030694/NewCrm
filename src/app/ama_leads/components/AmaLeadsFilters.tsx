@@ -361,16 +361,12 @@ const AmaLeadsFilters = ({
 
         const users = querySnapshot.docs.map((doc) => {
           const data = doc.data() as any
-          const fullName =
-            data.firstName && data.lastName
-              ? `${data.firstName} ${data.lastName}`
-              : data.firstName || data.lastName || "Unknown"
-
           return {
             id: doc.id,
-            name: fullName,
+            name: data.firstName && data.lastName ? `${data.firstName} ${data.lastName}` : data.firstName || data.lastName || "Unknown",
+            status: data.status
           }
-        })
+        }).filter(user => user.status?.toLowerCase() === 'active')
 
         setSalesUsers(users)
       } catch (error) {

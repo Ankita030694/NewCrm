@@ -39,7 +39,9 @@ export type User = {
   lastName: string;
   email: string;
   role: string;
+  status?: string;
   name: string; // Required for compatibility
+};
 };
 
 export type EditingLeadsState = {

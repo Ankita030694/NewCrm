@@ -46,10 +46,10 @@ export const adminUsersCache = new SimpleCache(15 * 60 * 1000); // 15 m
 
 // Helper functions to keep cache-key generation consistent
 export const generateCacheKey = {
-  users: () => `admin-users-${new Date().toDateString()}`,
-  targets: (month: string, year: number) => `admin-targets-${month}-${year}`,
-  leads: () => `admin-leads-${new Date().toDateString()}`,
-  pendingLetters: () => `admin-pending-letters-${new Date().toDateString()}`,
-  stats: () => `admin-stats-${new Date().toDateString()}`,
-  salesUsers: () => `admin-sales-users-${new Date().toDateString()}`,
+  users: () => `admin-users-v2-${new Date().toDateString()}`,
+  targets: (month: string, year: number) => `admin-targets-v2-${month}-${year}`,
+  leads: () => `admin-leads-v2-${new Date().toDateString()}`,
+  pendingLetters: () => `admin-pending-letters-v2-${new Date().toDateString()}`,
+  stats: () => `admin-stats-v2-${new Date().toDateString()}`,
+  salesUsers: () => `admin-sales-users-v2-${new Date().toDateString()}`,
 }; 

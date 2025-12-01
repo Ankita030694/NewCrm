@@ -305,8 +305,9 @@ const BillcutLeadsFiltersOptimized = ({
         return {
           id: doc.id,
           name: fullName,
+          status: data.status
         }
-      })
+      }).filter(user => user.status?.toLowerCase() === 'active')
       setSalesUsers(users)
     } catch (error) {
       console.error("Error fetching sales users:", error)

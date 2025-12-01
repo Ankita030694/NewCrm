@@ -235,7 +235,8 @@ const AmaLeadsPage = () => {
           })
           .filter(
             (user: any) =>
-              user.role === "salesperson" || user.role === "sales" || user.role === "admin" || user.role === "overlord",
+              (user.role === "salesperson" || user.role === "sales" || user.role === "admin" || user.role === "overlord") &&
+              user.status?.toLowerCase() === "active",
           ) as User[]
         // Sort by name
         ;(usersData as any).sort((a: any, b: any) => (a.name || "").localeCompare(b.name || ""))

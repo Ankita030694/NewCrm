@@ -887,10 +887,11 @@ const BillCutLeadsPage = () => {
               lastName: data.lastName || "",
               email: data.email || "",
               role: data.role || "",
+              status: data.status || "",
               name: `${data.firstName || ""} ${data.lastName || ""}`.trim(),
             } as User
           })
-          .filter((user) => user.role === "sales" || user.role === "admin" || user.role === "overlord")
+          .filter((user) => (user.role === "sales" || user.role === "admin" || user.role === "overlord") && user.status?.toLowerCase() === "active")
 
         setTeamMembers(usersData)
 

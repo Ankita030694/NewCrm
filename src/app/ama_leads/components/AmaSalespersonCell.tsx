@@ -72,8 +72,9 @@ const AmaSalespersonCell = ({
             email: data.email,
             phoneNumber: data.phoneNumber,
             role: data.role,
+            status: data.status
           };
-        });
+        }).filter(user => user.status?.toLowerCase() === 'active');
         const mergedMap = new Map<string, any>();
         [...(propMembers || []), ...fetched].forEach((m) => {
           const key = m.id || m.uid || m.email || m.name;

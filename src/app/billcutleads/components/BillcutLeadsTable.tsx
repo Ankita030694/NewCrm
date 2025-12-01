@@ -122,7 +122,8 @@ const BillcutLeadsTableOptimized = React.memo(
           name: doc.data().firstName + " " + doc.data().lastName,
           email: doc.data().email,
           role: doc.data().role,
-        }))
+          status: doc.data().status,
+        })).filter(user => user.status?.toLowerCase() === 'active')
 
         // Filter based on user role
         if (userRole === "sales") {

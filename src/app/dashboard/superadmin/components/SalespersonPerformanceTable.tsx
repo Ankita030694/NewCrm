@@ -54,8 +54,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
         const usersRef = collection(db, 'users');
         const usersQuery = query(
           usersRef, 
-          where('role', '==', 'sales'),
-          where('status', '==', 'active')
+          where('role', '==', 'sales')
         );
         const usersSnapshot = await getDocs(usersQuery);
         
@@ -64,6 +63,11 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
         // Process each user
         for (const userDoc of usersSnapshot.docs) {
           const userData = userDoc.data();
+          
+          // Filter out inactive users (case insensitive)
+          const status = userData.status?.toLowerCase() || '';
+          if (status !== 'active') continue;
+          
           const salespersonName = userData.firstName && userData.lastName 
             ? `${userData.firstName} ${userData.lastName}` 
             : userData.firstName || userData.email || 'Unknown';

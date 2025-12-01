@@ -176,7 +176,9 @@ const AdminDashboard = () => {
           
           usersSnap.forEach((doc) => {
             const userData = doc.data()
-            if (userData.role === 'sales' && userData.status === 'active') {
+            // robust check for active status
+            const status = userData.status?.toLowerCase() || '';
+            if (userData.role === 'sales' && status === 'active') {
               sales++
               
               // Store all possible identifiers to improve matching
