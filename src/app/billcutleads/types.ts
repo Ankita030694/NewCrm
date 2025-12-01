@@ -42,7 +42,6 @@ export type User = {
   status?: string;
   name: string; // Required for compatibility
 };
-};
 
 export type EditingLeadsState = {
   [key: string]: Partial<Lead>;
