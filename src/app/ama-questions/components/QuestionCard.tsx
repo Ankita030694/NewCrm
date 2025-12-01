@@ -1,12 +1,13 @@
 'use client';
 
 import { AmaQuestion } from '../types';
-import { FaUser, FaUserShield, FaComment, FaPen } from 'react-icons/fa';
+import { FaUser, FaUserShield, FaComment, FaPen, FaTrash } from 'react-icons/fa';
 
 interface QuestionCardProps {
   question: AmaQuestion;
   onViewComments: (q: AmaQuestion) => void;
   onAnswer: (q: AmaQuestion) => void;
+  onDelete: (id: string) => void;
 }
 
 function formatDate(timestamp: number) {
@@ -14,11 +15,23 @@ function formatDate(timestamp: number) {
   return new Date(timestamp).toLocaleString();
 }
 
-export default function QuestionCard({ question, onViewComments, onAnswer }: QuestionCardProps) {
+export default function QuestionCard({ question, onViewComments, onAnswer, onDelete }: QuestionCardProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-all flex flex-col h-full">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-all flex flex-col h-full relative group">
+       {/* Delete Button */}
+       <button
+         onClick={(e) => {
+           e.stopPropagation();
+           onDelete(question.id);
+         }}
+         className="absolute top-4 right-4 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all duration-200"
+         title="Delete Question"
+       >
+         <FaTrash size={14} />
+       </button>
+
        {/* Header: User Info */}
-       <div className="flex justify-between items-start mb-4">
+       <div className="flex justify-between items-start mb-4 pr-6">
           <div className="flex items-center gap-2">
              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
                 <FaUser size={14} />

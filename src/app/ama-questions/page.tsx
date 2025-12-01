@@ -81,6 +81,28 @@ export default function AmaQuestionsPage() {
     fetchQuestions(true);
   };
 
+  const handleDelete = async (questionId: string) => {
+    if (!confirm('Are you sure you want to delete this question? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/ama-questions/${questionId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete question');
+      }
+
+      setQuestions(prev => prev.filter(q => q.id !== questionId));
+      setTotal(prev => prev - 1);
+    } catch (err) {
+      console.error('Error deleting question:', err);
+      alert('Failed to delete question. Please try again.');
+    }
+  };
+
   return (
     <OverlordSidebar>
       <div className="flex flex-col h-full">
@@ -107,6 +129,7 @@ export default function AmaQuestionsPage() {
                 loadMore={handleLoadMore}
                 onViewComments={setSelectedQuestion}
                 onAnswer={setAnsweringQuestion}
+                onDelete={handleDelete}
              />
           </div>
         </main>
