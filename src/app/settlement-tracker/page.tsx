@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { db } from '@/firebase/firebase'
-import { collection, getDocs, addDoc, query, orderBy, where, limit, serverTimestamp, updateDoc, deleteDoc, doc } from 'firebase/firestore'
+import { collection, getDocs, addDoc, query, orderBy, where, limit, serverTimestamp, updateDoc, deleteDoc, doc, startAfter } from 'firebase/firestore'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -159,6 +159,20 @@ const SettlementTracker = () => {
   const [newClientMobile, setNewClientMobile] = useState('')
   const [newClientEmail, setNewClientEmail] = useState('')
 
+  // Pagination state
+  const [lastVisible, setLastVisible] = useState<any>(null)
+  const [hasMore, setHasMore] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const observerTarget = React.useRef<HTMLDivElement>(null)
+
+  // Edit Modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null)
+  const [editDate, setEditDate] = useState('')
+  const [editAmount, setEditAmount] = useState('')
+  const [editAccount, setEditAccount] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
+
   // Add dark mode state
   const [isDarkMode, setIsDarkMode] = useState(false)
 
@@ -186,11 +200,33 @@ const SettlementTracker = () => {
   ]
 
   // Fetch settlements data
-  const fetchSettlements = async () => {
+  const fetchSettlements = async (isNextPage = false) => {
     try {
+      if (isNextPage && (!lastVisible || !hasMore)) return
+
+      if (!isNextPage) {
+        setLoading(true)
+      } else {
+        setIsLoadingMore(true)
+      }
+
       const settlementsRef = collection(db, 'settlements')
-      const q = query(settlementsRef, orderBy('createdAt', 'desc'))
+      let q = query(settlementsRef, orderBy('createdAt', 'desc'), limit(20))
+
+      if (filterStatus !== 'All') {
+        q = query(q, where('status', '==', filterStatus))
+      }
+
+      if (isNextPage && lastVisible) {
+        q = query(q, startAfter(lastVisible))
+      }
+
       const snapshot = await getDocs(q)
+      
+      // Update lastVisible and hasMore
+      const lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1]
+      setLastVisible(lastVisibleDoc)
+      setHasMore(snapshot.docs.length === 20)
       
       const settlementsData: Settlement[] = []
       
@@ -226,7 +262,11 @@ const SettlementTracker = () => {
         settlementsData.push(settlementData)
       }
       
-      setSettlements(settlementsData)
+      if (isNextPage) {
+        setSettlements(prev => [...prev, ...settlementsData])
+      } else {
+        setSettlements(settlementsData)
+      }
       
       // Initialize remarks with latest remarks from settlements
       const initialRemarks: { [key: string]: string } = {}
@@ -235,9 +275,12 @@ const SettlementTracker = () => {
           initialRemarks[settlement.id] = settlement.latestRemark.remark
         }
       })
-      setSettlementRemarks(initialRemarks)
+      setSettlementRemarks(prev => ({ ...prev, ...initialRemarks }))
     } catch (error) {
       console.error('Error fetching settlements:', error)
+    } finally {
+      setLoading(false)
+      setIsLoadingMore(false)
     }
   }
 
@@ -265,23 +308,51 @@ const SettlementTracker = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      setLoading(true)
-      await Promise.all([fetchSettlements(), fetchClients()])
-      setLoading(false)
+      // Initial load
+      await Promise.all([fetchSettlements(false), fetchClients()])
     }
     
     loadData()
   }, [])
 
+  // Refetch when filter status changes
+  useEffect(() => {
+    setLastVisible(null)
+    setHasMore(true)
+    fetchSettlements(false)
+  }, [filterStatus])
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore && !loading) {
+          fetchSettlements(true)
+        }
+      },
+      { threshold: 1.0 }
+    )
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => {
+      if (observerTarget.current) {
+        observer.unobserve(observerTarget.current)
+      }
+    }
+  }, [hasMore, isLoadingMore, loading, lastVisible])
+
   // Get selected client's banks
   const selectedClientData = clients.find(client => client.id === selectedClient)
   const availableBanks = selectedClientData?.banks || []
 
-  // Filter settlements based on search term and status
+  // Filter settlements based on search term (client-side only for now as Firestore search is limited)
+  // Note: Status filtering is now handled server-side in fetchSettlements
   const filteredSettlements = settlements.filter(settlement => {
     const matchesSearch = settlement.clientName.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = filterStatus === 'All' || settlement.status === filterStatus
-    return matchesSearch && matchesStatus
+    return matchesSearch
   })
 
   // Handle form submission
@@ -405,7 +476,9 @@ const SettlementTracker = () => {
       setIsDialogOpen(false)
       
       // Refresh settlements list
-      await fetchSettlements()
+      setLastVisible(null)
+      setHasMore(true)
+      await fetchSettlements(false)
       
     } catch (error) {
       console.error('Error adding settlement:', error)
@@ -565,6 +638,66 @@ const SettlementTracker = () => {
     }
   }
 
+  // Handle Edit Click
+  const handleEditClick = (settlement: Settlement) => {
+    setEditingSettlement(settlement)
+    // Format date for input type="date"
+    let dateStr = ''
+    if (settlement.createdAt?.toDate) {
+      const date = settlement.createdAt.toDate()
+      // Adjust for local timezone to ensure correct date is shown
+      const offset = date.getTimezoneOffset()
+      const localDate = new Date(date.getTime() - (offset * 60 * 1000))
+      dateStr = localDate.toISOString().split('T')[0]
+    }
+    setEditDate(dateStr)
+    setEditAmount(settlement.loanAmount)
+    setEditAccount(settlement.accountNumber)
+    setIsEditModalOpen(true)
+  }
+
+  // Handle Edit Submit
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingSettlement) return
+
+    setIsEditing(true)
+    try {
+      const settlementRef = doc(db, 'settlements', editingSettlement.id)
+      const updates: any = {
+        loanAmount: editAmount,
+        accountNumber: editAccount,
+        lastModified: serverTimestamp()
+      }
+      
+      // Only update date if changed and valid
+      if (editDate) {
+         updates.createdAt = new Date(editDate)
+      }
+
+      await updateDoc(settlementRef, updates)
+
+      // Update local state
+      setSettlements(prev => prev.map(s => 
+        s.id === editingSettlement.id 
+          ? { 
+              ...s, 
+              ...updates, 
+              createdAt: updates.createdAt ? { toDate: () => updates.createdAt } : s.createdAt 
+            } 
+          : s
+      ))
+
+      setIsEditModalOpen(false)
+      alert("Settlement updated successfully")
+    } catch (error) {
+      console.error("Error updating settlement:", error)
+      alert("Failed to update settlement")
+    } finally {
+      setIsEditing(false)
+    }
+  }
+
   // Determine which sidebar to render based on user role
   const renderSidebar = () => {
     switch (userRole) {
@@ -691,126 +824,146 @@ const SettlementTracker = () => {
           </CardHeader>
           <CardContent>
             {filteredSettlements.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
-                  <thead className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-                    <tr>
-                    <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Date
-                      </th>
-                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-24 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Client
-                      </th>
-                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-32 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Bank
-                      </th>
-                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-36 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Account
-                      </th>
+              <>
+                <div className="overflow-x-auto">
+                  <table className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                    <thead className={`${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
+                      <tr>
                       <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Amount
-                      </th>
-                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Type
-                      </th>
-                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-28 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Status
-                      </th>
-                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-28 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Created By
-                      </th>
-                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-64 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Remarks
-                      </th>
-                     
-                      <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-16 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className={`${isDarkMode ? 'bg-gray-800 divide-y divide-gray-700' : 'bg-white divide-y divide-gray-200'}`}>
-                    {filteredSettlements.map((settlement) => (
-                      <tr key={settlement.id} className={`${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
-                        <td className={`px-2 py-2 whitespace-nowrap text-xs font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                          <div className="truncate max-w-24" title={settlement.createdAt?.toDate ? settlement.createdAt.toDate().toLocaleDateString() : 'N/A'}>
-                            {settlement.createdAt?.toDate ? 
-                              settlement.createdAt.toDate().toLocaleDateString() : 
-                              'N/A'
-                            }
-                          </div>
-                        </td>
-                        <td className={`px-2 py-2 whitespace-nowrap text-xs font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
-                          <div className="truncate max-w-24" title={settlement.clientName}>
-                            {settlement.clientName}
-                          </div>
-                        </td>
-                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <div className="truncate max-w-32" title={settlement.bankName}>
-                            {settlement.bankName}
-                          </div>
-                        </td>
-                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <div className="truncate max-w-36" title={settlement.accountNumber}>
-                            {settlement.accountNumber}
-                          </div>
-                        </td>
-                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <div className="truncate max-w-20" title={`₹${parseInt(settlement.loanAmount).toLocaleString()}`}>
-                            ₹{parseInt(settlement.loanAmount).toLocaleString()}
-                          </div>
-                        </td>
-                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <div className="truncate max-w-20" title={settlement.loanType}>
-                            {settlement.loanType}
-                          </div>
-                        </td>
-                        <td className="px-2 py-2 whitespace-nowrap">
-                          <Select value={settlement.status} onValueChange={(value) => handleStatusUpdate(settlement.id, value)}>
-                            <SelectTrigger className={`w-32 h-7 text-xs ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : ''}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}>
-                              {statusOptions.map((status) => (
-                                <SelectItem key={status} value={status} className={`text-xs ${isDarkMode ? 'focus:bg-gray-700 focus:text-white' : ''}`}>
-                                  <span className={`inline-flex px-1 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(status)}`}>
-                                    {getStatusDisplay(status)}
-                                  </span>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <div className="truncate max-w-28" title={settlement.createdBy}>
-                            {settlement.createdBy}
-                          </div>
-                        </td>
-                        <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <RemarkInput
-                            settlementId={settlement.id}
-                            initialValue={settlementRemarks[settlement.id] || ""}
-                            isDarkMode={isDarkMode}
-                            onSave={handleSaveRemark}
-                            onHistory={handleViewHistory}
-                          />
-                        </td>
-                        
-                        <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                          <div className="flex flex-col space-y-1">
-                          
-                            <button
-                              onClick={() => handleDeleteSettlement(settlement)}
-                              className="px-1 py-0.5 text-xs rounded transition-colors duration-200 bg-red-600 hover:bg-red-500 text-white w-full"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
+                          Date
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-24 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Client
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-32 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Bank
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-36 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Account
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Amount
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Type
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-28 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Status
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-28 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Created By
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-64 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Remarks
+                        </th>
+                       
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-16 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Actions
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className={`${isDarkMode ? 'bg-gray-800 divide-y divide-gray-700' : 'bg-white divide-y divide-gray-200'}`}>
+                      {filteredSettlements.map((settlement) => (
+                        <tr key={settlement.id} className={`${isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}`}>
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                            <div className="truncate max-w-24" title={settlement.createdAt?.toDate ? settlement.createdAt.toDate().toLocaleDateString() : 'N/A'}>
+                              {settlement.createdAt?.toDate ? 
+                                settlement.createdAt.toDate().toLocaleDateString() : 
+                                'N/A'
+                              }
+                            </div>
+                          </td>
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>
+                            <div className="truncate max-w-24" title={settlement.clientName}>
+                              {settlement.clientName}
+                            </div>
+                          </td>
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="truncate max-w-32" title={settlement.bankName}>
+                              {settlement.bankName}
+                            </div>
+                          </td>
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="truncate max-w-36" title={settlement.accountNumber}>
+                              {settlement.accountNumber}
+                            </div>
+                          </td>
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="truncate max-w-20" title={`₹${parseInt(settlement.loanAmount).toLocaleString()}`}>
+                              ₹{parseInt(settlement.loanAmount).toLocaleString()}
+                            </div>
+                          </td>
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="truncate max-w-20" title={settlement.loanType}>
+                              {settlement.loanType}
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 whitespace-nowrap">
+                            <Select value={settlement.status} onValueChange={(value) => handleStatusUpdate(settlement.id, value)}>
+                              <SelectTrigger className={`w-32 h-7 text-xs ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : ''}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}>
+                                {statusOptions.map((status) => (
+                                  <SelectItem key={status} value={status} className={`text-xs ${isDarkMode ? 'focus:bg-gray-700 focus:text-white' : ''}`}>
+                                    <span className={`inline-flex px-1 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(status)}`}>
+                                      {getStatusDisplay(status)}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="truncate max-w-28" title={settlement.createdBy}>
+                              {settlement.createdBy}
+                            </div>
+                          </td>
+                          <td className={`px-2 py-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <RemarkInput
+                              settlementId={settlement.id}
+                              initialValue={settlementRemarks[settlement.id] || ""}
+                              isDarkMode={isDarkMode}
+                              onSave={handleSaveRemark}
+                              onHistory={handleViewHistory}
+                            />
+                          </td>
+                          
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleEditClick(settlement)}
+                                className="px-1 py-0.5 text-xs rounded transition-colors duration-200 bg-blue-600 hover:bg-blue-500 text-white w-full"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSettlement(settlement)}
+                                className="px-1 py-0.5 text-xs rounded transition-colors duration-200 bg-red-600 hover:bg-red-500 text-white w-full"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Loading indicator for infinite scroll */}
+                <div ref={observerTarget} className="py-4 text-center">
+                  {isLoadingMore && (
+                    <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Loading more settlements...
+                    </span>
+                  )}
+                  {!hasMore && settlements.length > 0 && (
+                    <span className={`text-sm ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                      No more settlements to load
+                    </span>
+                  )}
+                </div>
+              </>
             ) : (
               <div className={`text-center py-8 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                 {searchTerm ? (
@@ -1051,6 +1204,63 @@ const SettlementTracker = () => {
                   className="bg-green-600 hover:bg-green-700"
                 >
                   {submitting ? 'Adding...' : 'Add Settlement'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Settlement Modal */}
+        <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Settlement Details</DialogTitle>
+              <DialogDescription>
+                Update the settlement date, amount, or account number.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="editDate">Date</Label>
+                <Input
+                  id="editDate"
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editAmount">Loan Amount</Label>
+                <Input
+                  id="editAmount"
+                  type="number"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editAccount">Account Number</Label>
+                <Input
+                  id="editAccount"
+                  value={editAccount}
+                  onChange={(e) => setEditAccount(e.target.value)}
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditModalOpen(false)}
+                  disabled={isEditing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isEditing}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isEditing ? 'Saving...' : 'Save Changes'}
                 </Button>
               </DialogFooter>
             </form>
