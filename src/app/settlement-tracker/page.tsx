@@ -351,8 +351,45 @@ const SettlementTracker = () => {
   // Filter settlements based on search term (client-side only for now as Firestore search is limited)
   // Note: Status filtering is now handled server-side in fetchSettlements
   const filteredSettlements = settlements.filter(settlement => {
-    const matchesSearch = settlement.clientName.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
+    if (!searchTerm.trim()) return true
+    
+    const searchLower = searchTerm.toLowerCase()
+    
+    // Search in client name
+    const matchesClientName = settlement.clientName.toLowerCase().includes(searchLower)
+    
+    // Search in bank name
+    const matchesBankName = settlement.bankName?.toLowerCase().includes(searchLower) || false
+    
+    // Search in account number
+    const matchesAccountNumber = settlement.accountNumber?.toLowerCase().includes(searchLower) || false
+    
+    // Search in loan type
+    const matchesLoanType = settlement.loanType?.toLowerCase().includes(searchLower) || false
+    
+    // Search in latest remark (from history)
+    const latestRemark = settlement.latestRemark?.remark?.toLowerCase() || ''
+    const matchesLatestRemark = latestRemark.includes(searchLower)
+    
+    // Search in current remark (from input field, may be unsaved)
+    const currentRemark = settlementRemarks[settlement.id]?.toLowerCase() || ''
+    const matchesCurrentRemark = currentRemark.includes(searchLower)
+    
+    // Search in original remarks field
+    const originalRemarks = settlement.remarks?.toLowerCase() || ''
+    const matchesOriginalRemarks = originalRemarks.includes(searchLower)
+    
+    // Search in created by
+    const matchesCreatedBy = settlement.createdBy?.toLowerCase().includes(searchLower) || false
+    
+    return matchesClientName || 
+           matchesBankName || 
+           matchesAccountNumber || 
+           matchesLoanType || 
+           matchesLatestRemark || 
+           matchesCurrentRemark || 
+           matchesOriginalRemarks ||
+           matchesCreatedBy
   })
 
   // Handle form submission
@@ -509,6 +546,21 @@ const SettlementTracker = () => {
     if (status === 'On Hold') return 'Letter Pending'
     if (status === 'Payment Pending') return 'Fees Pending'
     return status
+  }
+
+  // Format loan amount - handles comma-separated values and empty strings
+  const formatLoanAmount = (amount: string): string => {
+    if (!amount || amount.trim() === '') return 'N/A'
+    
+    // Remove all commas and whitespace, then parse
+    const cleanedAmount = amount.replace(/,/g, '').trim()
+    const numAmount = parseFloat(cleanedAmount)
+    
+    // Check if it's a valid number
+    if (isNaN(numAmount)) return amount // Return original if invalid
+    
+    // Format with Indian number system (lakhs, crores)
+    return numAmount.toLocaleString('en-IN')
   }
 
   // Add function to handle remark changes (not needed with isolated component, but keeping for potential future use if needed)
@@ -772,7 +824,7 @@ const SettlementTracker = () => {
             </div>
             <Input
               type="text"
-              placeholder="Search by client name..."
+              placeholder="Search by client, bank, account, remarks, or any field..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className={`pl-10 pr-4 py-2 w-full text-sm rounded-md focus:ring-green-500 focus:border-green-500 ${
@@ -889,8 +941,8 @@ const SettlementTracker = () => {
                             </div>
                           </td>
                           <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                            <div className="truncate max-w-20" title={`₹${parseInt(settlement.loanAmount).toLocaleString()}`}>
-                              ₹{parseInt(settlement.loanAmount).toLocaleString()}
+                            <div className="truncate max-w-20" title={`₹${formatLoanAmount(settlement.loanAmount)}`}>
+                              ₹{formatLoanAmount(settlement.loanAmount)}
                             </div>
                           </td>
                           <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
