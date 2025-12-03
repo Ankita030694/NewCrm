@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { db } from '@/firebase/firebase'
-import { collection, getDocs, addDoc, query, orderBy, where, limit, serverTimestamp, updateDoc, deleteDoc, doc, startAfter } from 'firebase/firestore'
+import { collection, getDocs, addDoc, query, orderBy, where, limit, serverTimestamp, updateDoc, deleteDoc, doc, startAfter, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -133,6 +133,7 @@ const SettlementTracker = () => {
   const [manualLoanAmount, setManualLoanAmount] = useState('')
   const [manualLoanType, setManualLoanType] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
   
   // Add new state for remarks management
@@ -164,6 +165,43 @@ const SettlementTracker = () => {
   const [hasMore, setHasMore] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const observerTarget = React.useRef<HTMLDivElement>(null)
+  const latestSearchTerm = React.useRef<string>("")
+
+  // Helper function to process settlement documents
+  const processSettlementDocs = async (docs: QueryDocumentSnapshot<DocumentData>[]): Promise<Settlement[]> => {
+    const settlementsPromises = docs.map(async (doc) => {
+      const settlementData = {
+        id: doc.id,
+        ...doc.data()
+      } as Settlement
+      
+      // Fetch latest remark from history subcollection
+      try {
+        const historyQuery = query(
+          collection(db, "settlements", doc.id, "history"),
+          orderBy("timestamp", "desc"),
+          limit(1)
+        )
+        const historySnapshot = await getDocs(historyQuery)
+        
+        if (!historySnapshot.empty) {
+          const latestHistoryDoc = historySnapshot.docs[0]
+          const historyData = latestHistoryDoc.data()
+          settlementData.latestRemark = {
+            remark: historyData.remark || "",
+            advocateName: historyData.advocateName || "",
+            timestamp: historyData.timestamp,
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching history for settlement ${doc.id}:`, error)
+      }
+      
+      return settlementData
+    })
+
+    return Promise.all(settlementsPromises)
+  }
 
   // Edit Modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -228,39 +266,10 @@ const SettlementTracker = () => {
       setLastVisible(lastVisibleDoc)
       setHasMore(snapshot.docs.length === 20)
       
-      const settlementsData: Settlement[] = []
+
       
       // Process each settlement and fetch latest remark
-      for (const doc of snapshot.docs) {
-        const settlementData = {
-          id: doc.id,
-          ...doc.data()
-        } as Settlement
-        
-        // Fetch latest remark from history subcollection
-        try {
-          const historyQuery = query(
-            collection(db, "settlements", doc.id, "history"),
-            orderBy("timestamp", "desc"),
-            limit(1)
-          )
-          const historySnapshot = await getDocs(historyQuery)
-          
-          if (!historySnapshot.empty) {
-            const latestHistoryDoc = historySnapshot.docs[0]
-            const historyData = latestHistoryDoc.data()
-            settlementData.latestRemark = {
-              remark: historyData.remark || "",
-              advocateName: historyData.advocateName || "",
-              timestamp: historyData.timestamp,
-            }
-          }
-        } catch (error) {
-          console.error(`Error fetching history for settlement ${doc.id}:`, error)
-        }
-        
-        settlementsData.push(settlementData)
-      }
+      const settlementsData = await processSettlementDocs(snapshot.docs)
       
       if (isNextPage) {
         setSettlements(prev => [...prev, ...settlementsData])
@@ -344,58 +353,136 @@ const SettlementTracker = () => {
     }
   }, [hasMore, isLoadingMore, loading, lastVisible])
 
+  // Debounce search term to improve performance when typing fast
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 500) // Wait 500ms after user stops typing
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [searchTerm])
+
+  // Perform server-side search
+  const performSearch = async (term: string) => {
+    if (!term.trim()) return
+
+    latestSearchTerm.current = term
+    setLoading(true)
+    
+    try {
+      const settlementsRef = collection(db, 'settlements')
+      
+      // Generate case variations for case-insensitive search
+      const termLower = term.toLowerCase()
+      const termUpper = term.toUpperCase()
+      const termCapitalized = term.charAt(0).toUpperCase() + term.slice(1).toLowerCase()
+      
+      // Create array of unique variations to search
+      const variations = Array.from(new Set([term, termLower, termUpper, termCapitalized]))
+      
+      // Create queries for each field × each case variation
+      const queries: Promise<any>[] = []
+      
+      for (const variant of variations) {
+        // Client Name queries
+        queries.push(
+          getDocs(query(
+            settlementsRef, 
+            where('clientName', '>=', variant), 
+            where('clientName', '<=', variant + '\uf8ff'),
+            limit(20)
+          ))
+        )
+        
+        // Bank Name queries
+        queries.push(
+          getDocs(query(
+            settlementsRef, 
+            where('bankName', '>=', variant), 
+            where('bankName', '<=', variant + '\uf8ff'),
+            limit(20)
+          ))
+        )
+        
+        // Account Number queries
+        queries.push(
+          getDocs(query(
+            settlementsRef, 
+            where('accountNumber', '>=', variant), 
+            where('accountNumber', '<=', variant + '\uf8ff'),
+            limit(20)
+          ))
+        )
+      }
+
+      // Execute all queries in parallel
+      const snapshots = await Promise.all(queries)
+
+      // Check if this is still the latest search
+      if (term !== latestSearchTerm.current) return
+
+      // Merge all results by ID to avoid duplicates
+      const uniqueDocsMap = new Map()
+      
+      snapshots.forEach(snapshot => {
+        snapshot.docs.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
+          if (!uniqueDocsMap.has(doc.id)) {
+            uniqueDocsMap.set(doc.id, doc)
+          }
+        })
+      })
+
+      const uniqueDocs = Array.from(uniqueDocsMap.values())
+      
+      // Process documents
+      const results = await processSettlementDocs(uniqueDocs)
+      
+      setSettlements(results)
+      setHasMore(false) // Disable infinite scroll for search results
+      
+      // Initialize remarks
+      const initialRemarks: { [key: string]: string } = {}
+      results.forEach((settlement) => {
+        if (settlement.latestRemark?.remark) {
+          initialRemarks[settlement.id] = settlement.latestRemark.remark
+        }
+      })
+      setSettlementRemarks(prev => ({ ...prev, ...initialRemarks }))
+
+    } catch (error) {
+      console.error('Error performing search:', error)
+    } finally {
+      if (term === latestSearchTerm.current) {
+        setLoading(false)
+      }
+    }
+  }
+
+  // Effect to trigger search or reset
+  useEffect(() => {
+    if (debouncedSearchTerm) {
+      performSearch(debouncedSearchTerm)
+    } else {
+      // If search is cleared, reset to initial state
+      if (latestSearchTerm.current !== "") {
+        latestSearchTerm.current = ""
+        setLastVisible(null)
+        setHasMore(true)
+        fetchSettlements(false)
+      }
+    }
+  }, [debouncedSearchTerm])
+
   // Get selected client's banks
   const selectedClientData = clients.find(client => client.id === selectedClient)
   const availableBanks = selectedClientData?.banks || []
 
   // Filter settlements based on search term (client-side only for now as Firestore search is limited)
   // Note: Status filtering is now handled server-side in fetchSettlements
-  const filteredSettlements = settlements.filter(settlement => {
-    if (!searchTerm.trim()) return true
-    
-    const searchLower = searchTerm.toLowerCase().trim()
-    
-    // Search in client name (case-insensitive with null safety)
-    const clientName = (settlement.clientName || '').toString().toLowerCase()
-    const matchesClientName = clientName.includes(searchLower)
-    
-    // Search in bank name (case-insensitive with null safety)
-    const bankName = (settlement.bankName || '').toString().toLowerCase()
-    const matchesBankName = bankName.includes(searchLower)
-    
-    // Search in account number (case-insensitive with null safety)
-    const accountNumber = (settlement.accountNumber || '').toString().toLowerCase()
-    const matchesAccountNumber = accountNumber.includes(searchLower)
-    
-    // Search in loan type (case-insensitive with null safety)
-    const loanType = (settlement.loanType || '').toString().toLowerCase()
-    const matchesLoanType = loanType.includes(searchLower)
-    
-    // Search in latest remark (from history) - case-insensitive
-    const latestRemark = (settlement.latestRemark?.remark || '').toString().toLowerCase()
-    const matchesLatestRemark = latestRemark.includes(searchLower)
-    
-    // Search in current remark (from input field, may be unsaved) - case-insensitive
-    const currentRemark = (settlementRemarks[settlement.id] || '').toString().toLowerCase()
-    const matchesCurrentRemark = currentRemark.includes(searchLower)
-    
-    // Search in original remarks field - case-insensitive
-    const originalRemarks = (settlement.remarks || '').toString().toLowerCase()
-    const matchesOriginalRemarks = originalRemarks.includes(searchLower)
-    
-    // Search in created by - case-insensitive
-    const createdBy = (settlement.createdBy || '').toString().toLowerCase()
-    const matchesCreatedBy = createdBy.includes(searchLower)
-    
-    return matchesClientName || 
-           matchesBankName || 
-           matchesAccountNumber || 
-           matchesLoanType || 
-           matchesLatestRemark || 
-           matchesCurrentRemark || 
-           matchesOriginalRemarks ||
-           matchesCreatedBy
-  })
+  // Using debouncedSearchTerm to improve performance when typing fast
+  const filteredSettlements = settlements
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
