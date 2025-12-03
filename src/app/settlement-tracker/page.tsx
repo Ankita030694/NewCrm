@@ -353,34 +353,39 @@ const SettlementTracker = () => {
   const filteredSettlements = settlements.filter(settlement => {
     if (!searchTerm.trim()) return true
     
-    const searchLower = searchTerm.toLowerCase()
+    const searchLower = searchTerm.toLowerCase().trim()
     
-    // Search in client name
-    const matchesClientName = settlement.clientName.toLowerCase().includes(searchLower)
+    // Search in client name (case-insensitive with null safety)
+    const clientName = (settlement.clientName || '').toString().toLowerCase()
+    const matchesClientName = clientName.includes(searchLower)
     
-    // Search in bank name
-    const matchesBankName = settlement.bankName?.toLowerCase().includes(searchLower) || false
+    // Search in bank name (case-insensitive with null safety)
+    const bankName = (settlement.bankName || '').toString().toLowerCase()
+    const matchesBankName = bankName.includes(searchLower)
     
-    // Search in account number
-    const matchesAccountNumber = settlement.accountNumber?.toLowerCase().includes(searchLower) || false
+    // Search in account number (case-insensitive with null safety)
+    const accountNumber = (settlement.accountNumber || '').toString().toLowerCase()
+    const matchesAccountNumber = accountNumber.includes(searchLower)
     
-    // Search in loan type
-    const matchesLoanType = settlement.loanType?.toLowerCase().includes(searchLower) || false
+    // Search in loan type (case-insensitive with null safety)
+    const loanType = (settlement.loanType || '').toString().toLowerCase()
+    const matchesLoanType = loanType.includes(searchLower)
     
-    // Search in latest remark (from history)
-    const latestRemark = settlement.latestRemark?.remark?.toLowerCase() || ''
+    // Search in latest remark (from history) - case-insensitive
+    const latestRemark = (settlement.latestRemark?.remark || '').toString().toLowerCase()
     const matchesLatestRemark = latestRemark.includes(searchLower)
     
-    // Search in current remark (from input field, may be unsaved)
-    const currentRemark = settlementRemarks[settlement.id]?.toLowerCase() || ''
+    // Search in current remark (from input field, may be unsaved) - case-insensitive
+    const currentRemark = (settlementRemarks[settlement.id] || '').toString().toLowerCase()
     const matchesCurrentRemark = currentRemark.includes(searchLower)
     
-    // Search in original remarks field
-    const originalRemarks = settlement.remarks?.toLowerCase() || ''
+    // Search in original remarks field - case-insensitive
+    const originalRemarks = (settlement.remarks || '').toString().toLowerCase()
     const matchesOriginalRemarks = originalRemarks.includes(searchLower)
     
-    // Search in created by
-    const matchesCreatedBy = settlement.createdBy?.toLowerCase().includes(searchLower) || false
+    // Search in created by - case-insensitive
+    const createdBy = (settlement.createdBy || '').toString().toLowerCase()
+    const matchesCreatedBy = createdBy.includes(searchLower)
     
     return matchesClientName || 
            matchesBankName || 
