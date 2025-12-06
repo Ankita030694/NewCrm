@@ -9,6 +9,7 @@ import DemandNoticeForm from "./demandnotice";
 import CFHABForm from "./cfhab";
 import ReplyToNoticeForm from "./replytonotice";
 import Sec138Form from "./sec138";
+import Sec21Form from "./sec21";
 import OverlordSidebar from "@/components/navigation/OverlordSidebar";
 
 interface Bank {
@@ -17,6 +18,7 @@ interface Bank {
   accountNumber: string;
   loanType: string;
   loanAmount: string;
+
 }
 
 interface Client {
@@ -170,6 +172,22 @@ const DocumentsPage = () => {
               {activeForm === 'sec138' ? "Hide Form" : "Create Section 138"}
             </button>
           </div>
+
+          <div className="bg-gray-800/50 p-5 rounded-lg border border-gray-700 shadow-sm">
+            <h2 className="text-lg font-semibold text-white mb-4 flex items-center">
+              <svg className="w-5 h-5 mr-2 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Section 21
+            </h2>
+            <p className="text-gray-300 mb-4">Generate Section 21 notices.</p>
+            <button
+              onClick={() => handleFormToggle('sec21')}
+              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-md transition-colors duration-200"
+            >
+              {activeForm === 'sec21' ? "Hide Form" : "Create Section 21"}
+            </button>
+          </div>
         </div>
         
         {activeForm === 'requestLetter' && (
@@ -206,6 +224,13 @@ const DocumentsPage = () => {
           </div>
         )}
         
+        {activeForm === 'sec21' && (
+          <div className="mt-6 bg-gray-800/50 p-6 rounded-lg border border-gray-700 shadow-sm animate-fadeIn">
+            <h2 className="text-xl font-semibold text-white mb-6">Generate Section 21 Notice</h2>
+            <Sec21Form onClose={() => setActiveForm(null)} />
+          </div>
+        )}
+        
         
         <Toaster 
           position="top-right"
@@ -234,3 +259,9 @@ const DocumentsPage = () => {
 };
 
 export default DocumentsPage;
+
+
+
+
+
+
