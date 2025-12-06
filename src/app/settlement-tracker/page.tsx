@@ -51,6 +51,8 @@ interface Settlement {
     advocateName: string
     timestamp: any
   }
+  successFeeStatus?: 'Paid' | 'Not Paid' | 'Partially Paid'
+  successFeeAmount?: string
 }
 
 // Interface for client data
@@ -160,6 +162,11 @@ const SettlementTracker = () => {
   const [newClientMobile, setNewClientMobile] = useState('')
   const [newClientEmail, setNewClientEmail] = useState('')
 
+  // Success Fee State
+  const [isPartialPaymentModalOpen, setIsPartialPaymentModalOpen] = useState(false)
+  const [partialPaymentAmount, setPartialPaymentAmount] = useState('')
+  const [selectedSettlementForFee, setSelectedSettlementForFee] = useState<string | null>(null)
+
   // Pagination state
   const [lastVisible, setLastVisible] = useState<any>(null)
   const [hasMore, setHasMore] = useState(true)
@@ -226,6 +233,7 @@ const SettlementTracker = () => {
 
   // Status options for settlement
   const statusOptions = [
+    'New',
     'Initial Contact',
     'Negotiation Started',
     'Offer Made',
@@ -620,6 +628,7 @@ const SettlementTracker = () => {
   // Get status color for display
   const getStatusColor = (status: string) => {
     const colors: { [key: string]: string } = {
+      'New': 'bg-blue-50 text-blue-600',
       'Initial Contact': 'bg-blue-100 text-blue-800',
       'Negotiation Started': 'bg-yellow-100 text-yellow-800',
       'Offer Made': 'bg-purple-100 text-purple-800',
@@ -631,6 +640,16 @@ const SettlementTracker = () => {
       'On Hold': 'bg-gray-100 text-gray-800'
     }
     return colors[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  // Get success fee status color
+  const getSuccessFeeColor = (status: string) => {
+    switch (status) {
+      case 'Paid': return 'bg-green-100 text-green-800 border-green-200'
+      case 'Not Paid': return 'bg-red-100 text-red-800 border-red-200'
+      case 'Partially Paid': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      default: return 'bg-gray-100 text-gray-800 border-gray-200'
+    }
   }
 
   // Get status display text
@@ -842,6 +861,60 @@ const SettlementTracker = () => {
     }
   }
 
+  // Handle Success Fee Status Change
+  const handleSuccessFeeStatusChange = async (settlementId: string, newStatus: string) => {
+    if (newStatus === 'Partially Paid') {
+      setSelectedSettlementForFee(settlementId)
+      const settlement = settlements.find(s => s.id === settlementId)
+      setPartialPaymentAmount(settlement?.successFeeAmount || '')
+      setIsPartialPaymentModalOpen(true)
+    } else {
+      await updateSuccessFee(settlementId, newStatus, null)
+    }
+  }
+
+  // Update Success Fee in Firestore
+  const updateSuccessFee = async (settlementId: string, status: string, amount: string | null) => {
+    try {
+      const settlementRef = doc(db, "settlements", settlementId)
+      const updates: any = {
+        successFeeStatus: status,
+        lastModified: serverTimestamp(),
+      }
+      
+      if (amount !== null) {
+        updates.successFeeAmount = amount
+      } else if (status !== 'Partially Paid') {
+        updates.successFeeAmount = null
+      }
+
+      await updateDoc(settlementRef, updates)
+
+      // Update local state
+      setSettlements(prev => prev.map(s => 
+        s.id === settlementId 
+          ? { ...s, successFeeStatus: status as any, successFeeAmount: amount || undefined } 
+          : s
+      ))
+      
+      if (status !== 'Partially Paid') {
+          // Optional: show success toast
+      }
+    } catch (error) {
+      console.error("Error updating success fee:", error)
+      alert("Failed to update success fee")
+    }
+  }
+
+  // Submit Partial Payment
+  const handleSubmitPartialPayment = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedSettlementForFee) return
+    
+    await updateSuccessFee(selectedSettlementForFee, 'Partially Paid', partialPaymentAmount)
+    setIsPartialPaymentModalOpen(false)
+  }
+
   // Determine which sidebar to render based on user role
   const renderSidebar = () => {
     switch (userRole) {
@@ -854,7 +927,7 @@ const SettlementTracker = () => {
           <OverlordSidebar>
             {/* Header */}
             <header className="bg-white shadow">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+              <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-900">AMA Workspace</h1>
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-gray-600">Welcome, {userName}</span>
@@ -882,7 +955,7 @@ const SettlementTracker = () => {
   // Render the main settlement tracker content
   const renderSettlementContent = () => (
     <div className={`p-6 transition-colors duration-200 ${isDarkMode ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-full mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -1000,6 +1073,9 @@ const SettlementTracker = () => {
                         <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-64 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           Remarks
                         </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-32 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Success Fee
+                        </th>
                        
                         <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-16 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           Actions
@@ -1071,6 +1147,28 @@ const SettlementTracker = () => {
                               onSave={handleSaveRemark}
                               onHistory={handleViewHistory}
                             />
+                          </td>
+                          <td className="px-2 py-2 whitespace-nowrap">
+                            <div className="flex flex-col gap-1">
+                              <Select 
+                                value={settlement.successFeeStatus || 'Not Paid'} 
+                                onValueChange={(value) => handleSuccessFeeStatusChange(settlement.id, value)}
+                              >
+                                <SelectTrigger className={`w-28 h-7 text-xs border ${getSuccessFeeColor(settlement.successFeeStatus || 'Not Paid')}`}>
+                                  <SelectValue placeholder="Status" />
+                                </SelectTrigger>
+                                <SelectContent className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}>
+                                  <SelectItem value="Paid" className="text-xs">Paid</SelectItem>
+                                  <SelectItem value="Not Paid" className="text-xs">Not Paid</SelectItem>
+                                  <SelectItem value="Partially Paid" className="text-xs">Partially Paid</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {settlement.successFeeStatus === 'Partially Paid' && settlement.successFeeAmount && (
+                                <span className={`text-xs px-1 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                                  ₹{formatLoanAmount(settlement.successFeeAmount)}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           
                           <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -1515,6 +1613,46 @@ const SettlementTracker = () => {
             </div>
           </div>
         )}
+
+        {/* Partial Payment Modal */}
+        <Dialog open={isPartialPaymentModalOpen} onOpenChange={setIsPartialPaymentModalOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Enter Partial Payment Amount</DialogTitle>
+              <DialogDescription>
+                Please specify the amount that has been paid.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmitPartialPayment} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="partialAmount">Amount</Label>
+                <Input
+                  id="partialAmount"
+                  type="number"
+                  value={partialPaymentAmount}
+                  onChange={(e) => setPartialPaymentAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  autoFocus
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsPartialPaymentModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  Save
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
