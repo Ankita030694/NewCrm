@@ -23,7 +23,19 @@ import {
 } from "firebase/firestore"
 import { db } from "@/firebase/firebase"
 import { Button } from "@/components/ui/button"
-import { Download } from "lucide-react"
+import { 
+  Download, 
+  Filter, 
+  Search, 
+  X, 
+  ChevronDown, 
+  ChevronUp, 
+  Users, 
+  MessageSquare, 
+  MoreHorizontal 
+} from "lucide-react"
+import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import OverlordSidebar from "@/components/navigation/OverlordSidebar"
 import AdminSidebar from "@/components/navigation/AdminSidebar"
 import BillcutSidebar from "@/components/navigation/BillcutSidebar"
@@ -305,6 +317,8 @@ function ClientsPageWithParams() {
   const [remarks, setRemarks] = useState<{ [key: string]: string }>({})
   const [totalClientCount, setTotalClientCount] = useState<number>(0)
   const [filteredTotalCount, setFilteredTotalCount] = useState<number>(0)
+  const [showFilters, setShowFilters] = useState(false)
+
 
   // Add URL parameter handling
   const searchParams = useSearchParams()
@@ -406,8 +420,9 @@ function ClientsPageWithParams() {
       const normalizedLowerTerm = normalizedTerm.toLowerCase()
       const collectionRef = collection(db, "clients")
       const queries: Array<ReturnType<typeof query>> = []
-      const limitClause = limit(200)
+      const limitClause = limit(50)
 
+      // Name Search (Prefix)
       searchVariants.forEach((variant) => {
         try {
           queries.push(
@@ -421,31 +436,16 @@ function ClientsPageWithParams() {
             ),
           )
         } catch (error) {
-          console.warn("Skipping name search query due to missing index or field:", error)
+          console.warn("Skipping name search query:", error)
         }
       })
 
+      // Phone Search (Exact)
       try {
         queries.push(query(collectionRef, ...baseConstraints, where("phone", "==", normalizedTerm), limitClause))
       } catch (error) {
-        console.warn("Skipping phone search query due to missing index or field:", error)
+        console.warn("Skipping phone search query:", error)
       }
-
-      searchVariants.forEach((variant) => {
-        try {
-          queries.push(query(collectionRef, ...baseConstraints, where("email", "==", variant), limitClause))
-        } catch (error) {
-          console.warn("Skipping email search query due to missing index or field:", error)
-        }
-      })
-
-      searchVariants.forEach((variant) => {
-        try {
-          queries.push(query(collectionRef, ...baseConstraints, where("aadharNumber", "==", variant), limitClause))
-        } catch (error) {
-          console.warn("Skipping aadhar search query due to missing index or field:", error)
-        }
-      })
 
       if (queries.length === 0) {
         return []
@@ -486,11 +486,8 @@ function ClientsPageWithParams() {
       const caseInsensitiveFiltered = enhanced.filter((client) => {
         const valuesToCheck = [
           client.name,
-          client.email,
           client.phone,
           client.altPhone,
-          client.aadharNumber,
-          client.panNumber,
         ]
 
         return valuesToCheck.some(
@@ -1743,28 +1740,7 @@ function ClientsPageWithParams() {
   const baseTotalCount = filteredTotalCount || totalClientCount || filteredClients.length
   const displayedTotalCount = requiresClientSideRefinement ? filteredClients.length : baseTotalCount
 
-  if (loading)
-    return (
-      <div className="flex min-h-screen bg-white">
-        {renderSidebar()}
-        <div className="flex-1 flex justify-center items-center h-screen bg-white text-gray-800">
-          <div className="flex flex-col items-center">
-            <div className="h-12 w-12 border-4 border-t-blue-500 border-b-blue-500 border-l-transparent border-r-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 text-gray-600">Loading clients...</p>
-          </div>
-        </div>
-      </div>
-    )
 
-  if (error)
-    return (
-      <div className="flex min-h-screen bg-white">
-        {renderSidebar()}
-        <div className="flex-1 flex justify-center items-center h-screen bg-white">
-          <div className="text-red-500 text-center">{error}</div>
-        </div>
-      </div>
-    )
 
   return (
     <div className={`flex min-h-screen ${theme === "dark" ? "bg-gray-900" : "bg-white"}`}>
@@ -1772,313 +1748,326 @@ function ClientsPageWithParams() {
 
       <div className={`flex-1 p-3 ${theme === "dark" ? "bg-gray-900 text-gray-200" : "bg-white text-gray-800"}`}>
         {/* Header Section */}
-        <div className="flex justify-between items-center mb-2">
-          <div className="flex items-center gap-1.5">
-            <h1 className={`text-base font-bold ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}>
-              Clients Management
-            </h1>
-            {selectedClients.size > 0 && userRole !== "billcut" && userRole !== "assistant" && (
-              <div className="flex gap-1">
-                <Button
-                  onClick={() => setIsBulkAssignModalOpen(true)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white text-[10px] py-0.5 px-1.5 h-5"
-                >
-                  Assign Primary ({selectedClients.size} selected)
-                </Button>
-                <Button
-                  onClick={() => setIsBulkSecondaryAssignModalOpen(true)}
-                  className="bg-green-500 hover:bg-green-600 text-white text-[10px] py-0.5 px-1.5 h-5"
-                >
-                  Assign Secondary ({selectedClients.size} selected)
-                </Button>
-                <Button
-                  onClick={() => setIsBulkWhatsAppModalOpen(true)}
-                  className="bg-purple-500 hover:bg-purple-600 text-white text-[10px] py-0.5 px-1.5 h-5"
-                >
-                  Bulk WhatsApp ({selectedClients.size} selected)
-                </Button>
-              </div>
-            )}
+        <div className="flex flex-col gap-4 mb-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className={`text-2xl font-bold tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
+                Clients Management
+              </h1>
+              <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+                Manage your clients, track status, and assign advocates.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+               {userRole !== "billcut" && userRole !== "assistant" && (
+                  <Button
+                    onClick={downloadCSV}
+                    variant="outline"
+                    className={`${
+                      theme === "dark" 
+                        ? "bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700" 
+                        : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                    } h-9 text-xs font-medium`}
+                  >
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    Export CSV
+                  </Button>
+               )}
+            </div>
           </div>
-          <div className="flex gap-1.5">
-            {/* Bulk Select by Number - Only show for authorized roles */}
-            {userRole !== "billcut" && userRole !== "assistant" && (
-              <div className="flex gap-1 items-center">
-                <div className="flex flex-col">
-                  <Input
-                    placeholder="Select top N"
-                    value={bulkSelectNumber}
-                    onChange={(e) => setBulkSelectNumber(e.target.value)}
-                    onKeyPress={handleBulkSelectKeyPress}
-                    className={`w-20 ${
-                      theme === "dark"
-                        ? "bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400"
-                        : "bg-white border-gray-300 text-gray-800 placeholder-gray-500"
-                    } text-[10px] h-5`}
-                    type="number"
-                    min="1"
-                    max={filteredClients.length}
-                  />
-                  <span className={`text-[8px] ${theme === "dark" ? "text-gray-400" : "text-gray-500"} text-center mt-0.5`}>
-                    of {filteredClients.length}
-                  </span>
-                </div>
-                <Button
-                  onClick={handleBulkSelectByNumber}
-                  disabled={!bulkSelectNumber.trim()}
-                  className={`${
-                    theme === "dark"
-                      ? "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-gray-700"
-                      : "bg-blue-500 hover:bg-blue-600 text-white disabled:bg-gray-300"
-                  } text-[10px] h-5 px-2 disabled:opacity-50`}
-                  title="Select top N clients from current filter"
-                >
-                  Select
-                </Button>
-              </div>
-            )}
-            {userRole !== "billcut" && userRole !== "assistant" && (
+
+          {/* Bulk Actions Bar - Only visible when selection > 0 */}
+          {selectedClients.size > 0 && (
+            <div className={`p-2 rounded-lg border ${
+              theme === "dark" 
+                ? "bg-blue-900/20 border-blue-800" 
+                : "bg-blue-50 border-blue-100"
+            } flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-top-2`}>
+              <Badge variant="secondary" className={`px-2 py-1 ${theme === "dark" ? "bg-blue-900 text-blue-200" : "bg-blue-100 text-blue-700"}`}>
+                {selectedClients.size} selected
+              </Badge>
+              <div className="h-4 w-px bg-blue-200 dark:bg-blue-800 mx-1" />
+              
+              {userRole !== "billcut" && userRole !== "assistant" && (
+                <>
+                  <Button
+                    onClick={() => setIsBulkAssignModalOpen(true)}
+                    size="sm"
+                    className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white border-0"
+                  >
+                    <Users className="mr-1.5 h-3.5 w-3.5" />
+                    Assign Primary
+                  </Button>
+                  <Button
+                    onClick={() => setIsBulkSecondaryAssignModalOpen(true)}
+                    size="sm"
+                    className="h-8 text-xs bg-indigo-600 hover:bg-indigo-700 text-white border-0"
+                  >
+                    <Users className="mr-1.5 h-3.5 w-3.5" />
+                    Assign Secondary
+                  </Button>
+                  <Button
+                    onClick={() => setIsBulkWhatsAppModalOpen(true)}
+                    size="sm"
+                    className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white border-0"
+                  >
+                    <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                    WhatsApp
+                  </Button>
+                </>
+              )}
+              
+              <div className="flex-1" />
               <Button
-                onClick={downloadCSV}
-                className={`${
-                  theme === "dark"
-                    ? "bg-green-600 hover:bg-green-700 text-white"
-                    : "bg-green-500 hover:bg-green-600 text-white"
-                } text-[10px] h-5 px-2 flex items-center gap-1`}
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedClients(new Set())}
+                className="h-8 text-xs hover:bg-blue-100 dark:hover:bg-blue-900/40"
               >
-                <Download className="h-2.5 w-2.5" />
-                Export CSV
+                <X className="mr-1.5 h-3.5 w-3.5" />
+                Clear Selection
               </Button>
-            )}
-            <Input
-              placeholder="Search clients..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-40 ${
-                theme === "dark"
-                  ? "bg-gray-800 border-gray-700 text-gray-200 placeholder-gray-400"
-                  : "bg-white border-gray-300 text-gray-800 placeholder-gray-500"
-              } text-[10px] h-5`}
-            />
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger
-                className={`w-[100px] ${
-                  theme === "dark"
-                    ? "bg-gray-800 border-gray-700 text-gray-200"
-                    : "bg-white border-gray-300 text-gray-800"
-                } text-[10px] h-5`}
-              >
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent
-                className={`${
-                  theme === "dark"
-                    ? "bg-gray-800 text-gray-200 border-gray-700"
-                    : "bg-white text-gray-800 border-gray-300"
-                } text-[10px]`}
-              >
-                <SelectItem value="all">All Statuses</SelectItem>
-                {allStatuses.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={primaryAdvocateFilter} onValueChange={setPrimaryAdvocateFilter}>
-              <SelectTrigger
-                className={`w-[120px] ${
-                  theme === "dark"
-                    ? "bg-gray-800 border-gray-700 text-gray-200"
-                    : "bg-white border-gray-300 text-gray-800"
-                } text-[10px] h-5`}
-              >
-                <SelectValue placeholder="Primary advocate" />
-              </SelectTrigger>
-              <SelectContent
-                className={`${
-                  theme === "dark"
-                    ? "bg-gray-800 text-gray-200 border-gray-700"
-                    : "bg-white text-gray-800 border-gray-300"
-                } text-[10px]`}
-              >
-                <SelectItem value="all">All Primary Advocates</SelectItem>
-                {allAdvocates.map((advocate) => (
-                  <SelectItem key={advocate} value={advocate}>
-                    {advocate}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={secondaryAdvocateFilter} onValueChange={setSecondaryAdvocateFilter}>
-              <SelectTrigger
-                className={`w-[120px] ${
-                  theme === "dark"
-                    ? "bg-gray-800 border-gray-700 text-gray-200"
-                    : "bg-white border-gray-300 text-gray-800"
-                } text-[10px] h-5`}
-              >
-                <SelectValue placeholder="Secondary advocate" />
-              </SelectTrigger>
-              <SelectContent
-                className={`${
-                  theme === "dark"
-                    ? "bg-gray-800 text-gray-200 border-gray-700"
-                    : "bg-white text-gray-800 border-gray-300"
-                } text-[10px]`}
-              >
-                <SelectItem value="all">All Secondary Advocates</SelectItem>
-                {allAdvocates.map((advocate) => (
-                  <SelectItem key={advocate} value={advocate}>
-                    {advocate}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={sourceFilter} onValueChange={setSourceFilter} disabled={userRole === "billcut"}>
-              <SelectTrigger
-                className={`w-[100px] ${
-                  theme === "dark"
-                    ? "bg-gray-800 border-gray-700 text-gray-200"
-                    : "bg-white border-gray-300 text-gray-800"
-                } text-[10px] h-5 ${userRole === "billcut" ? "opacity-50 cursor-not-allowed" : ""}`}
-              >
-                <SelectValue placeholder="Filter by source" />
-              </SelectTrigger>
-              <SelectContent
-                className={`${
-                  theme === "dark"
-                    ? "bg-gray-800 text-gray-200 border-gray-700"
-                    : "bg-white text-gray-800 border-gray-300"
-                } text-[10px]`}
-              >
-                <SelectItem value="all">All Sources</SelectItem>
-                {allSources.map((source) => (
-                  <SelectItem key={source} value={source}>
-                    {formatSourceName(source)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={documentFilter} onValueChange={setDocumentFilter}>
-              <SelectTrigger
-                className={`w-[100px] ${
-                  theme === "dark"
-                    ? "bg-gray-800 border-gray-700 text-gray-200"
-                    : "bg-white border-gray-300 text-gray-800"
-                } text-[10px] h-5`}
-              >
-                <SelectValue placeholder="Filter by document" />
-              </SelectTrigger>
-              <SelectContent
-                className={`${
-                  theme === "dark"
-                    ? "bg-gray-800 text-gray-200 border-gray-700"
-                    : "bg-white text-gray-800 border-gray-300"
-                } text-[10px]`}
-              >
-                <SelectItem value="all">All Documents</SelectItem>
-                <SelectItem value="with_document">With Document</SelectItem>
-                <SelectItem value="no_document">No Document</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={bankNameFilter} onValueChange={setBankNameFilter}>
-              <SelectTrigger
-                className={`w-[100px] ${
-                  theme === "dark"
-                    ? "bg-gray-800 border-gray-700 text-gray-200"
-                    : "bg-white border-gray-300 text-gray-800"
-                } text-[10px] h-5`}
-              >
-                <SelectValue placeholder="Filter by bank" />
-              </SelectTrigger>
-              <SelectContent
-                className={`${
-                  theme === "dark"
-                    ? "bg-gray-800 text-gray-200 border-gray-700"
-                    : "bg-white text-gray-800 border-gray-300"
-                } text-[10px]`}
-              >
-                <SelectItem value="all">All Banks</SelectItem>
-                {allBankNames.map((bankName) => (
-                  <SelectItem key={bankName} value={bankName}>
-                    {bankName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={agreementFilter} onValueChange={setAgreementFilter}>
-              <SelectTrigger
-                className={`w-[100px] ${
-                  theme === "dark"
-                    ? "bg-gray-800 border-gray-700 text-gray-200"
-                    : "bg-white border-gray-300 text-gray-800"
-                } text-[10px] h-5`}
-              >
-                <SelectValue placeholder="Filter by agreement" />
-              </SelectTrigger>
-              <SelectContent
-                className={`${
-                  theme === "dark"
-                    ? "bg-gray-800 text-gray-200 border-gray-700"
-                    : "bg-white text-gray-800 border-gray-300"
-                } text-[10px]`}
-              >
-                <SelectItem value="all">All Agreements</SelectItem>
-                <SelectItem value="sent">Agreement Sent</SelectItem>
-                <SelectItem value="not_sent">Agreement Not Sent</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={resetFilters}
-              variant="outline"
-              className={`${
-                theme === "dark"
-                  ? "border-gray-700 text-gray-300 hover:bg-gray-800"
-                  : "border-gray-300 text-gray-700 hover:bg-gray-100"
-              } text-[10px] h-5 px-1.5`}
-            >
-              Reset Filters
-            </Button>
-          </div>
+            </div>
+          )}
+
+          {/* Filters Card */}
+          <Card className={`border shadow-sm ${
+            theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
+          }`}>
+            <div className="p-4 space-y-4">
+              {/* Top Row: Search + Primary Filters */}
+              <div className="flex flex-col lg:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className={`absolute left-3 top-2.5 h-4 w-4 ${
+                    theme === "dark" ? "text-gray-400" : "text-gray-500"
+                  }`} />
+                  <Input
+                    placeholder="Search by name, email, phone, PAN..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className={`pl-9 h-9 text-sm ${
+                      theme === "dark" 
+                        ? "bg-gray-900 border-gray-700 text-gray-200 placeholder:text-gray-500" 
+                        : "bg-white border-gray-200 text-gray-900"
+                    }`}
+                  />
+                </div>
+                
+                <div className="flex flex-wrap gap-2 items-center">
+                   {/* Status Filter - Always Visible */}
+                   <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className={`w-[140px] h-9 text-sm ${
+                      theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"
+                    }`}>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      {allStatuses.map((status) => (
+                        <SelectItem key={status} value={status}>{status}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Primary Advocate - Always Visible */}
+                  <Select value={primaryAdvocateFilter} onValueChange={setPrimaryAdvocateFilter}>
+                    <SelectTrigger className={`w-[160px] h-9 text-sm ${
+                      theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"
+                    }`}>
+                      <SelectValue placeholder="Primary Advocate" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Primary Adv.</SelectItem>
+                      {allAdvocates.map((adv) => (
+                        <SelectItem key={adv} value={adv}>{adv}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`h-9 px-3 text-sm ${
+                      showFilters 
+                        ? "bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300" 
+                        : theme === "dark" ? "bg-gray-800 border-gray-700 text-gray-300" : "bg-white border-gray-200 text-gray-700"
+                    }`}
+                  >
+                    <Filter className="mr-2 h-3.5 w-3.5" />
+                    Filters
+                    {showFilters ? <ChevronUp className="ml-2 h-3.5 w-3.5" /> : <ChevronDown className="ml-2 h-3.5 w-3.5" />}
+                  </Button>
+
+                  {(statusFilter !== "all" || primaryAdvocateFilter !== "all" || secondaryAdvocateFilter !== "all" || sourceFilter !== "all" || documentFilter !== "all" || bankNameFilter !== "all" || agreementFilter !== "all" || searchTerm) && (
+                    <Button
+                      variant="ghost"
+                      onClick={resetFilters}
+                      className="h-9 px-2 text-gray-500 hover:text-red-500"
+                      title="Reset all filters"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded Filters */}
+              {showFilters && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700 animate-in fade-in slide-in-from-top-1">
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Secondary Advocate</label>
+                    <Select value={secondaryAdvocateFilter} onValueChange={setSecondaryAdvocateFilter}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}>
+                        <SelectValue placeholder="Select Advocate" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Secondary Adv.</SelectItem>
+                        {allAdvocates.map((adv) => (
+                          <SelectItem key={adv} value={adv}>{adv}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Source</label>
+                    <Select value={sourceFilter} onValueChange={setSourceFilter} disabled={userRole === "billcut"}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"} ${userRole === "billcut" ? "opacity-50" : ""}`}>
+                        <SelectValue placeholder="Select Source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sources</SelectItem>
+                        {allSources.map((source) => (
+                          <SelectItem key={source} value={source}>{formatSourceName(source)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Document Status</label>
+                    <Select value={documentFilter} onValueChange={setDocumentFilter}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}>
+                        <SelectValue placeholder="Select Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Documents</SelectItem>
+                        <SelectItem value="with_document">With Document</SelectItem>
+                        <SelectItem value="no_document">No Document</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Bank Name</label>
+                    <Select value={bankNameFilter} onValueChange={setBankNameFilter}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}>
+                        <SelectValue placeholder="Select Bank" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Banks</SelectItem>
+                        {allBankNames.map((bank) => (
+                          <SelectItem key={bank} value={bank}>{bank}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Agreement Status</label>
+                    <Select value={agreementFilter} onValueChange={setAgreementFilter}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}>
+                        <SelectValue placeholder="Select Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Agreements</SelectItem>
+                        <SelectItem value="sent">Agreement Sent</SelectItem>
+                        <SelectItem value="not_sent">Agreement Not Sent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Bulk Select by Number Input */}
+                  {userRole !== "billcut" && userRole !== "assistant" && (
+                    <div className="space-y-1.5">
+                       <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Bulk Select Top N</label>
+                       <div className="flex gap-2">
+                         <Input
+                           placeholder="Count"
+                           value={bulkSelectNumber}
+                           onChange={(e) => setBulkSelectNumber(e.target.value)}
+                           onKeyPress={handleBulkSelectKeyPress}
+                           className={`h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}
+                           type="number"
+                           min="1"
+                         />
+                         <Button 
+                           onClick={handleBulkSelectByNumber}
+                           disabled={!bulkSelectNumber.trim()}
+                           className="h-9 bg-blue-600 hover:bg-blue-700 text-white"
+                         >
+                           Select
+                         </Button>
+                       </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </Card>
         </div>
 
-        {/* Clients Table */}
-        <ClientsTable
-          clients={filteredClients}
-          totalCount={displayedTotalCount}
-          onViewDetails={handleViewDetails}
-          onEditClient={handleEditClient}
-          onDeleteClient={handleDeleteInitiate}
-          onAdvocateStatusChange={handleAdvocateStatusChange}
-          selectedClients={selectedClients}
-          onSelectAll={handleSelectAll}
-          onSelectClient={handleSelectClient}
-          theme={theme}
-          onThemeChange={setTheme}
-          openDocumentViewer={openDocumentViewer}
-          onViewHistory={handleViewHistory}
-          remarks={remarks}
-          onRemarkChange={handleRemarkChange}
-          onSaveRemark={handleSaveRemark}
-          onAgreementToggle={handleAgreementToggle}
-          userRole={userRole}
-        />
-        <div ref={loadMoreRef} className="flex h-8 items-center justify-center">
-          {loading ? null : isFetchingMore ? (
-            <span className={`text-[10px] ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
-              Loading more clients...
-            </span>
-          ) : hasMore ? (
-            <span className={`text-[10px] ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
-              Scroll to load more clients
-            </span>
-          ) : (
-            <span className={`text-[10px] ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}>
-              All clients loaded
-            </span>
-          )}
-        </div>
+        {/* Content Area */}
+        {loading ? (
+             <div className="flex-1 flex justify-center items-center h-[50vh]">
+               <div className="flex flex-col items-center">
+                 <div className="h-12 w-12 border-4 border-t-blue-500 border-b-blue-500 border-l-transparent border-r-transparent rounded-full animate-spin"></div>
+                 <p className={`mt-4 ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>Loading clients...</p>
+               </div>
+             </div>
+        ) : error ? (
+             <div className="flex-1 flex justify-center items-center h-[50vh]">
+               <div className="text-red-500 text-center">{error}</div>
+             </div>
+        ) : (
+          <>
+            <ClientsTable
+              clients={filteredClients}
+              totalCount={displayedTotalCount}
+              onViewDetails={handleViewDetails}
+              onEditClient={handleEditClient}
+              onDeleteClient={handleDeleteInitiate}
+              onAdvocateStatusChange={handleAdvocateStatusChange}
+              selectedClients={selectedClients}
+              onSelectAll={handleSelectAll}
+              onSelectClient={handleSelectClient}
+              theme={theme}
+              onThemeChange={setTheme}
+              openDocumentViewer={openDocumentViewer}
+              onViewHistory={handleViewHistory}
+              remarks={remarks}
+              onRemarkChange={handleRemarkChange}
+              onSaveRemark={handleSaveRemark}
+              onAgreementToggle={handleAgreementToggle}
+              userRole={userRole}
+            />
+            <div ref={loadMoreRef} className="flex h-8 items-center justify-center">
+              {isFetchingMore ? (
+                <span className={`text-[10px] ${theme === "dark" ? "text-gray-300" : "text-gray-600"}`}>
+                  Loading more clients...
+                </span>
+              ) : hasMore ? (
+                <span className={`text-[10px] ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+                  Scroll to load more clients
+                </span>
+              ) : (
+                <span className={`text-[10px] ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}>
+                  All clients loaded
+                </span>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Modals */}
         {selectedClient && (
