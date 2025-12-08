@@ -71,6 +71,12 @@ interface Client {
     lastEdited?: string;
     htmlUrl?: string;
   }[];
+  client_app_status?: {
+    index: string;
+    remarks: string;
+    createdAt: number;
+    createdBy: string;
+  }[];
 }
 
 interface ClientTableRowProps {
@@ -80,7 +86,9 @@ interface ClientTableRowProps {
   onStatusChange: (clientId: string, newStatus: string) => void
   onRequestLetterChange: (clientId: string, checked: boolean) => void
   onRemarkSave: (clientId: string, remark: string) => void
+  onAppStatusSave: (clientId: string, status: string, currentStatus: any[]) => void
   onViewHistory: (clientId: string) => void
+  onViewAppStatusHistory: (client: Client) => void
   onViewDetails: (client: Client) => void
   onEditClient: (client: Client) => void
   onTemplateSelect: (templateName: string, client: Client) => void
@@ -94,13 +102,22 @@ export default function ClientTableRow({
   onStatusChange,
   onRequestLetterChange,
   onRemarkSave,
+  onAppStatusSave,
   onViewHistory,
+  onViewAppStatusHistory,
   onViewDetails,
   onEditClient,
   onTemplateSelect,
   isSendingWhatsApp,
 }: ClientTableRowProps) {
   const [remarkText, setRemarkText] = useState(latestRemark || "")
+  
+  // App Status state
+  const latestAppStatus = client.client_app_status && client.client_app_status.length > 0 
+    ? client.client_app_status[client.client_app_status.length - 1].remarks 
+    : ""
+  const [appStatusText, setAppStatusText] = useState(latestAppStatus)
+
   const [showWhatsAppMenu, setShowWhatsAppMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -128,6 +145,10 @@ export default function ClientTableRow({
 
   const handleRemarkSave = () => {
     onRemarkSave(client.id, remarkText)
+  }
+
+  const handleAppStatusSave = () => {
+    onAppStatusSave(client.id, appStatusText, client.client_app_status || [])
   }
 
   const handleTemplateSelect = (templateName: string) => {
@@ -328,6 +349,32 @@ export default function ClientTableRow({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      </td>
+
+      <td className="px-3 py-2">
+        <div className="flex flex-col space-y-1.5">
+          <textarea
+            value={appStatusText}
+            onChange={(e) => setAppStatusText(e.target.value)}
+            placeholder="App Status..."
+            className="w-full px-1.5 py-1 bg-gray-900 border border-blue-900/50 rounded text-white text-xs resize-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+            rows={2}
+          />
+          <div className="flex space-x-1.5">
+            <button
+              onClick={handleAppStatusSave}
+              className="px-2 py-0.5 bg-blue-700 hover:bg-blue-600 text-white text-xs rounded transition-colors duration-200"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => onViewAppStatusHistory(client)}
+              className="px-2 py-0.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded transition-colors duration-200"
+            >
+              History
+            </button>
           </div>
         </div>
       </td>

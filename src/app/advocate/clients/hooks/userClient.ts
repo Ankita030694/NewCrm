@@ -77,6 +77,12 @@ interface Client {
     lastEdited?: string;
     htmlUrl?: string;
   }[];
+  client_app_status?: {
+    index: string;
+    remarks: string;
+    createdAt: number;
+    createdBy: string;
+  }[];
 }
 
 export function useClients(advocateName: string) {
@@ -241,6 +247,86 @@ export function useClients(advocateName: string) {
     }
   }
 
+
+  const saveAppStatus = async (clientId: string, statusText: string, currentStatusArray: any[]) => {
+    try {
+      const advocateName = localStorage.getItem("userName") || "Unknown Advocate"
+
+      if (!statusText.trim()) {
+        toast.error("Please enter a status before saving")
+        return
+      }
+
+      const newStatus = {
+        index: (currentStatusArray?.length || 0).toString(),
+        remarks: statusText,
+        createdAt: Math.floor(Date.now() / 1000), // Unix timestamp in seconds as per example
+        createdBy: advocateName,
+      }
+
+      const clientRef = doc(db, "clients", clientId)
+      // We use updateDoc to append to the array. 
+      // Note: arrayUnion checks for uniqueness. Since we have a timestamp/index, it should be unique.
+      // However, to be safe and simple, we can just read the current array and append, 
+      // but arrayUnion is better for concurrency if we construct the object correctly.
+      // Since we need the index, we rely on the passed currentStatusArray. 
+      // This might have race conditions but for this app it seems acceptable.
+
+      // Better approach: just use arrayUnion with the new object.
+      // But we need to import arrayUnion.
+      const { arrayUnion } = await import("firebase/firestore")
+
+      await updateDoc(clientRef, {
+        client_app_status: arrayUnion(newStatus)
+      })
+
+      // Update local state
+      setClients((prevClients) =>
+        prevClients.map((client) => {
+          if (client.id === clientId) {
+            const updatedStatus = [...(client.client_app_status || []), newStatus]
+            return { ...client, client_app_status: updatedStatus }
+          }
+          return client
+        })
+      )
+
+      toast.success("App Status saved successfully")
+    } catch (error) {
+      console.error("Error saving app status:", error)
+      toast.error("Failed to save app status")
+    }
+  }
+
+  const deleteAppStatus = async (clientId: string, statusItem: any) => {
+    try {
+      const clientRef = doc(db, "clients", clientId)
+      const { arrayRemove } = await import("firebase/firestore")
+
+      await updateDoc(clientRef, {
+        client_app_status: arrayRemove(statusItem)
+      })
+
+      // Update local state
+      setClients((prevClients) =>
+        prevClients.map((client) => {
+          if (client.id === clientId) {
+            const updatedStatus = (client.client_app_status || []).filter(
+              (item) => item.index !== statusItem.index || item.createdAt !== statusItem.createdAt
+            )
+            return { ...client, client_app_status: updatedStatus }
+          }
+          return client
+        })
+      )
+
+      toast.success("Status deleted successfully")
+    } catch (error) {
+      console.error("Error deleting app status:", error)
+      toast.error("Failed to delete status")
+    }
+  }
+
   const fetchClientHistory = async (clientId: string): Promise<RemarkHistory[]> => {
     try {
       const historyRef = collection(db, "clients", clientId, "history")
@@ -263,6 +349,8 @@ export function useClients(advocateName: string) {
     updateClientStatus,
     updateRequestLetterStatus,
     saveRemark,
+    saveAppStatus,
+    deleteAppStatus,
     fetchClientHistory,
     setClients,
   }

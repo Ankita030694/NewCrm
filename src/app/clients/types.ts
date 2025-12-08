@@ -57,4 +57,10 @@ export interface Client {
     advocateName: string;
     timestamp: any;
   }
+  client_app_status?: {
+    index: string;
+    remarks: string;
+    createdAt: number;
+    createdBy: string;
+  }[];
 } 

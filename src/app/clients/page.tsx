@@ -20,6 +20,8 @@ import {
   type QueryDocumentSnapshot,
   type DocumentData,
   type QueryConstraint,
+  arrayUnion,
+  arrayRemove,
 } from "firebase/firestore"
 import { db } from "@/firebase/firebase"
 import { Button } from "@/components/ui/button"
@@ -32,7 +34,8 @@ import {
   ChevronUp, 
   Users, 
   MessageSquare, 
-  MoreHorizontal 
+  MoreHorizontal,
+  Trash2
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -318,6 +321,18 @@ function ClientsPageWithParams() {
   const [totalClientCount, setTotalClientCount] = useState<number>(0)
   const [filteredTotalCount, setFilteredTotalCount] = useState<number>(0)
   const [showFilters, setShowFilters] = useState(false)
+
+  // App Status states
+  const [appStatuses, setAppStatuses] = useState<{ [key: string]: string }>({})
+  const [isAppStatusHistoryModalOpen, setIsAppStatusHistoryModalOpen] = useState(false)
+  const [selectedAppStatusHistory, setSelectedAppStatusHistory] = useState<
+    Array<{
+      index: string
+      remarks: string
+      createdAt: number
+      createdBy: string
+    }>
+  >([])
 
 
   // Add URL parameter handling
@@ -678,6 +693,14 @@ function ClientsPageWithParams() {
       }
     })
     setRemarks(initialRemarks)
+
+    const initialAppStatuses: { [key: string]: string } = {}
+    clients.forEach((client) => {
+      if (client.client_app_status && client.client_app_status.length > 0) {
+        initialAppStatuses[client.id] = client.client_app_status[client.client_app_status.length - 1].remarks
+      }
+    })
+    setAppStatuses(initialAppStatuses)
   }, [clients])
 
   useEffect(() => {
@@ -1735,6 +1758,98 @@ function ClientsPageWithParams() {
     }
   }
 
+  // App Status Handlers
+  const handleAppStatusChange = (clientId: string, value: string) => {
+    setAppStatuses((prev) => ({ ...prev, [clientId]: value }))
+  }
+
+  const handleSaveAppStatus = async (clientId: string) => {
+    try {
+      const advocateName = localStorage.getItem("userName") || "Unknown User"
+      const statusText = appStatuses[clientId]?.trim()
+
+      if (!statusText) {
+        showToast("Error", "Please enter a status before saving", "error")
+        return
+      }
+
+      const client = clients.find((c) => c.id === clientId)
+      const currentStatusArray = client?.client_app_status || []
+
+      const newStatus = {
+        index: (currentStatusArray.length || 0).toString(),
+        remarks: statusText,
+        createdAt: Math.floor(Date.now() / 1000),
+        createdBy: advocateName,
+      }
+
+      const clientRef = doc(db, "clients", clientId)
+      await updateDoc(clientRef, {
+        client_app_status: arrayUnion(newStatus),
+        lastModified: new Date(),
+      })
+
+      // Update local state
+      setClients(
+        clients.map((c) => {
+          if (c.id === clientId) {
+            const updatedStatus = [...(c.client_app_status || []), newStatus]
+            return { ...c, client_app_status: updatedStatus, lastModified: new Date() }
+          }
+          return c
+        })
+      )
+
+      showToast("Success", "App Status saved successfully", "success")
+    } catch (error) {
+      console.error("Error saving app status:", error)
+      showToast("Error", "Failed to save app status", "error")
+    }
+  }
+
+  const handleViewAppStatusHistory = (client: Client) => {
+    setSelectedAppStatusHistory(client.client_app_status || [])
+    setSelectedClientId(client.id)
+    setIsAppStatusHistoryModalOpen(true)
+  }
+
+  const handleDeleteAppStatus = async (statusItem: any) => {
+    if (!selectedClientId) return
+
+    if (confirm("Are you sure you want to delete this status?")) {
+      try {
+        const clientRef = doc(db, "clients", selectedClientId)
+        await updateDoc(clientRef, {
+          client_app_status: arrayRemove(statusItem),
+          lastModified: new Date(),
+        })
+
+        // Update local state
+        setClients(
+          clients.map((c) => {
+            if (c.id === selectedClientId) {
+              const updatedStatus = (c.client_app_status || []).filter(
+                (item) => item.index !== statusItem.index || item.createdAt !== statusItem.createdAt
+              )
+              return { ...c, client_app_status: updatedStatus, lastModified: new Date() }
+            }
+            return c
+          })
+        )
+
+        // Update modal state
+        setSelectedAppStatusHistory((prev) =>
+          prev.filter((item) => item.index !== statusItem.index || item.createdAt !== statusItem.createdAt)
+        )
+
+        showToast("Success", "Status deleted successfully", "success")
+      } catch (error) {
+        console.error("Error deleting app status:", error)
+        showToast("Error", "Failed to delete status", "error")
+      }
+    }
+  }
+
   const requiresClientSideRefinement = documentFilter !== "all" || bankNameFilter !== "all"
 
   const baseTotalCount = filteredTotalCount || totalClientCount || filteredClients.length
@@ -2050,6 +2165,10 @@ function ClientsPageWithParams() {
               onSaveRemark={handleSaveRemark}
               onAgreementToggle={handleAgreementToggle}
               userRole={userRole}
+              appStatuses={appStatuses}
+              onAppStatusChange={handleAppStatusChange}
+              onSaveAppStatus={handleSaveAppStatus}
+              onViewAppStatusHistory={handleViewAppStatusHistory}
             />
             <div ref={loadMoreRef} className="flex h-8 items-center justify-center">
               {isFetchingMore ? (
@@ -2318,8 +2437,61 @@ function ClientsPageWithParams() {
                   </div>
                 ))}
                 {selectedClientHistory.length === 0 && (
-                  <div className={`text-center py-8 ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>
+                  <div className={`text-center py-8 ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}>
                     No remarks history available
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* App Status History Modal */}
+        {isAppStatusHistoryModalOpen && (
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-3">
+            <div
+              className={`${theme === "dark" ? "bg-gray-900" : "bg-white"} rounded-lg border ${theme === "dark" ? "border-gray-700" : "border-gray-300"} p-4 w-full max-w-2xl animate-fade-in shadow-xl`}
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className={`text-lg font-bold ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}>
+                  App Status History
+                </h2>
+                <button
+                  onClick={() => setIsAppStatusHistoryModalOpen(false)}
+                  className={`rounded-full h-8 w-8 flex items-center justify-center ${theme === "dark" ? "bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white" : "bg-gray-200 hover:bg-gray-300 text-gray-600 hover:text-gray-800"} transition-colors`}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                {[...selectedAppStatusHistory].reverse().map((history, index) => (
+                  <div
+                    key={index}
+                    className={`${theme === "dark" ? "bg-gray-800" : "bg-gray-50"} rounded p-3 relative group`}
+                  >
+                    <div className="flex justify-between items-start mb-1 pr-8">
+                      <span className={`font-medium text-xs ${theme === "dark" ? "text-blue-400" : "text-blue-600"}`}>
+                        {history.createdBy}
+                      </span>
+                      <span className={`text-[10px] ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}>
+                        {new Date(history.createdAt * 1000).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                    <p className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
+                      {history.remarks}
+                    </p>
+                    <button
+                      onClick={() => handleDeleteAppStatus(history)}
+                      className="absolute top-3 right-3 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                      title="Delete Status"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                {selectedAppStatusHistory.length === 0 && (
+                  <div className={`text-center py-8 ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}>
+                    No app status history available
                   </div>
                 )}
               </div>

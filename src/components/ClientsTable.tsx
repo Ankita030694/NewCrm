@@ -50,6 +50,10 @@ interface ClientsTableProps {
   onSaveRemark: (clientId: string) => void
   onAgreementToggle: (clientId: string, currentStatus: boolean) => void
   userRole?: string
+  appStatuses: { [key: string]: string }
+  onAppStatusChange: (clientId: string, value: string) => void
+  onSaveAppStatus: (clientId: string) => void
+  onViewAppStatusHistory: (client: Client) => void
 }
 
 export default function ClientsTable({
@@ -70,7 +74,11 @@ export default function ClientsTable({
   onRemarkChange,
   onSaveRemark,
   onAgreementToggle,
-  userRole
+  userRole,
+  appStatuses,
+  onAppStatusChange,
+  onSaveAppStatus,
+  onViewAppStatusHistory
 }: ClientsTableProps) {
   const isDark = theme === 'dark'
   const overallCount = totalCount ?? clients.length
@@ -153,6 +161,7 @@ export default function ClientsTable({
               <TableHead className={`${isDark ? 'text-gray-400' : 'text-gray-600'} p-1`}>Status</TableHead>
               <TableHead className={`${isDark ? 'text-gray-400' : 'text-gray-600'} p-1`}>Agreement</TableHead>
               <TableHead className={`${isDark ? 'text-gray-400' : 'text-gray-600'} p-1`}>Remarks</TableHead>
+              <TableHead className={`${isDark ? 'text-gray-400' : 'text-gray-600'} p-1`}>App Status</TableHead>
               <TableHead className={`${isDark ? 'text-gray-400' : 'text-gray-600'} p-1`}>Sales By</TableHead>
               <TableHead className={`${isDark ? 'text-gray-400' : 'text-gray-600'} text-right p-1`}>Actions</TableHead>
             </TableRow>
@@ -293,6 +302,42 @@ export default function ClientsTable({
                             isDark 
                               ? 'bg-purple-700 hover:bg-purple-600 text-white' 
                               : 'bg-purple-600 hover:bg-purple-500 text-white'
+                          }`}
+                        >
+                          History
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="p-1">
+                  <div className="flex flex-col space-y-1.5">
+                    <textarea
+                      value={appStatuses[client.id] || ""}
+                      onChange={(e) => onAppStatusChange(client.id, e.target.value)}
+                      placeholder="App Status..."
+                      disabled={userRole === 'billcut'}
+                      className={`w-full px-1.5 py-1 ${isDark ? 'bg-gray-900 border-blue-900/50 text-gray-200 focus:border-blue-500' : 'bg-white border-blue-200 text-gray-800 focus:border-blue-500'} border rounded text-xs resize-none ${userRole === 'billcut' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      rows={2}
+                    />
+                    {userRole !== 'billcut' && (
+                      <div className="flex space-x-1.5">
+                        <button
+                          onClick={() => onSaveAppStatus(client.id)}
+                          className={`px-2 py-0.5 text-xs rounded transition-colors duration-200 ${
+                            isDark 
+                              ? 'bg-blue-700 hover:bg-blue-600 text-white' 
+                              : 'bg-blue-600 hover:bg-blue-500 text-white'
+                          }`}
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => onViewAppStatusHistory(client)}
+                          className={`px-2 py-0.5 text-xs rounded transition-colors duration-200 ${
+                            isDark 
+                              ? 'bg-gray-700 hover:bg-gray-600 text-white' 
+                              : 'bg-gray-600 hover:bg-gray-500 text-white'
                           }`}
                         >
                           History

@@ -77,6 +77,12 @@ interface Client {
     lastEdited?: string;
     htmlUrl?: string;
   }[];
+  client_app_status?: {
+    index: string;
+    remarks: string;
+    createdAt: number;
+    createdBy: string;
+  }[];
 }
 
 export default function ClientsList() {
@@ -111,6 +117,15 @@ export default function ClientsList() {
   const [selectedClientHistory, setSelectedClientHistory] = useState<RemarkHistory[]>([])
   const [selectedClientId, setSelectedClientId] = useState<string>("")
 
+  // App Status History modal
+  const [isAppStatusHistoryModalOpen, setIsAppStatusHistoryModalOpen] = useState(false)
+  const [selectedAppStatusHistory, setSelectedAppStatusHistory] = useState<{
+    index: string;
+    remarks: string;
+    createdAt: number;
+    createdBy: string;
+  }[]>([])
+
   // Document editor
   const [editingDocument, setEditingDocument] = useState<{
     url: string
@@ -135,6 +150,8 @@ export default function ClientsList() {
     updateClientStatus,
     updateRequestLetterStatus,
     saveRemark,
+    saveAppStatus,
+    deleteAppStatus,
     fetchClientHistory,
     setClients,
   } = useClients(advocateName)
@@ -303,6 +320,25 @@ export default function ClientsList() {
     setIsHistoryModalOpen(true)
   }
 
+  const handleViewAppStatusHistory = (client: Client) => {
+    setSelectedAppStatusHistory(client.client_app_status || [])
+    // We need to store the client ID to know which client to update
+    setSelectedClientId(client.id) 
+    setIsAppStatusHistoryModalOpen(true)
+  }
+
+  const handleDeleteAppStatus = async (statusItem: any) => {
+    if (!selectedClientId) return
+    
+    if (confirm("Are you sure you want to delete this status?")) {
+      await deleteAppStatus(selectedClientId, statusItem)
+      // Update the modal's local state to reflect deletion immediately
+      setSelectedAppStatusHistory((prev) => 
+        prev.filter((item) => item.index !== statusItem.index || item.createdAt !== statusItem.createdAt)
+      )
+    }
+  }
+
   // WATI Functions
   const handleTemplateSelect = (templateName: string, client: Client) => {
     setSelectedTemplate(templateName)
@@ -408,7 +444,9 @@ export default function ClientsList() {
             onStatusChange={updateClientStatus}
             onRequestLetterChange={updateRequestLetterStatus}
             onRemarkSave={saveRemark}
+            onAppStatusSave={saveAppStatus}
             onViewHistory={handleViewHistory}
+            onViewAppStatusHistory={handleViewAppStatusHistory}
             onViewDetails={handleViewDetails}
             onEditClient={handleEditClient}
             onTemplateSelect={handleTemplateSelect}
@@ -587,6 +625,48 @@ export default function ClientsList() {
               ))}
               {selectedClientHistory.length === 0 && (
                 <div className="text-center text-gray-400 py-8">No remarks history available</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* App Status History Modal */}
+      {isAppStatusHistoryModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 w-full max-w-2xl animate-fadeIn shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-white">App Status History</h2>
+              <button
+                onClick={() => setIsAppStatusHistoryModalOpen(false)}
+                className="rounded-full h-8 w-8 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              {[...selectedAppStatusHistory].reverse().map((history, index) => (
+                <div key={index} className="bg-gray-800 rounded-lg p-4 border border-gray-700 relative group">
+                  <div className="flex justify-between items-start mb-2 pr-8">
+                    <span className="text-blue-400 font-medium">{history.createdBy}</span>
+                    <span className="text-gray-400 text-sm">
+                      {new Date(history.createdAt * 1000).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <p className="text-white">{history.remarks}</p>
+                  <button
+                    onClick={() => handleDeleteAppStatus(history)}
+                    className="absolute top-4 right-4 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                    title="Delete Status"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              {selectedAppStatusHistory.length === 0 && (
+                <div className="text-center text-gray-400 py-8">No app status history available</div>
               )}
             </div>
           </div>

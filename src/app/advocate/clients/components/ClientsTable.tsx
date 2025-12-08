@@ -58,6 +58,12 @@ interface Client {
     lastEdited?: string;
     htmlUrl?: string;
   }[];
+  client_app_status?: {
+    index: string;
+    remarks: string;
+    createdAt: number;
+    createdBy: string;
+  }[];
 }
 
 import ClientTableRow from "./ClientTableRow"
@@ -69,7 +75,9 @@ interface ClientsTableProps {
   onStatusChange: (clientId: string, newStatus: string) => void
   onRequestLetterChange: (clientId: string, checked: boolean) => void
   onRemarkSave: (clientId: string, remark: string) => void
+  onAppStatusSave: (clientId: string, status: string, currentStatus: any[]) => void
   onViewHistory: (clientId: string) => void
+  onViewAppStatusHistory: (client: Client) => void
   onViewDetails: (client: Client) => void
   onEditClient: (client: Client) => void
   onTemplateSelect: (templateName: string, client: Client) => void
@@ -83,7 +91,9 @@ export default function ClientsTable({
   onStatusChange,
   onRequestLetterChange,
   onRemarkSave,
+  onAppStatusSave,
   onViewHistory,
+  onViewAppStatusHistory,
   onViewDetails,
   onEditClient,
   onTemplateSelect,
@@ -120,6 +130,7 @@ export default function ClientsTable({
               Request Letter
             </th>
             <th className="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider whitespace-nowrap">Remarks</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider whitespace-nowrap">App Status</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-gray-300 uppercase tracking-wider whitespace-nowrap">Actions</th>
           </tr>
         </thead>
@@ -133,7 +144,9 @@ export default function ClientsTable({
               onStatusChange={onStatusChange}
               onRequestLetterChange={onRequestLetterChange}
               onRemarkSave={onRemarkSave}
+              onAppStatusSave={onAppStatusSave}
               onViewHistory={onViewHistory}
+              onViewAppStatusHistory={onViewAppStatusHistory}
               onViewDetails={onViewDetails}
               onEditClient={onEditClient}
               onTemplateSelect={onTemplateSelect}
