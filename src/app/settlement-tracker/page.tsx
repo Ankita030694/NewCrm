@@ -51,7 +51,7 @@ interface Settlement {
     advocateName: string
     timestamp: any
   }
-  successFeeStatus?: 'Paid' | 'Not Paid' | 'Partially Paid'
+  successFeeStatus?: 'Paid' | 'Not Paid' | 'Partially Paid' | 'Not Required'
   successFeeAmount?: string
 }
 
@@ -372,7 +372,7 @@ const SettlementTracker = () => {
     }
   }, [searchTerm])
 
-  // Perform server-side search
+  // Perform search with client-side filtering to support "contains" queries
   const performSearch = async (term: string) => {
     if (!term.trim()) return
 
@@ -381,71 +381,34 @@ const SettlementTracker = () => {
     
     try {
       const settlementsRef = collection(db, 'settlements')
+      // Fetch a batch of latest settlements
+      // We process them first to get the latest remarks from subcollections, then filter
+      const q = query(settlementsRef, orderBy('createdAt', 'desc'), limit(200))
       
-      // Generate case variations for case-insensitive search
-      const termLower = term.toLowerCase()
-      const termUpper = term.toUpperCase()
-      const termCapitalized = term.charAt(0).toUpperCase() + term.slice(1).toLowerCase()
-      
-      // Create array of unique variations to search
-      const variations = Array.from(new Set([term, termLower, termUpper, termCapitalized]))
-      
-      // Create queries for each field × each case variation
-      const queries: Promise<any>[] = []
-      
-      for (const variant of variations) {
-        // Client Name queries
-        queries.push(
-          getDocs(query(
-            settlementsRef, 
-            where('clientName', '>=', variant), 
-            where('clientName', '<=', variant + '\uf8ff'),
-            limit(20)
-          ))
-        )
-        
-        // Bank Name queries
-        queries.push(
-          getDocs(query(
-            settlementsRef, 
-            where('bankName', '>=', variant), 
-            where('bankName', '<=', variant + '\uf8ff'),
-            limit(20)
-          ))
-        )
-        
-        // Account Number queries
-        queries.push(
-          getDocs(query(
-            settlementsRef, 
-            where('accountNumber', '>=', variant), 
-            where('accountNumber', '<=', variant + '\uf8ff'),
-            limit(20)
-          ))
-        )
-      }
-
-      // Execute all queries in parallel
-      const snapshots = await Promise.all(queries)
+      const snapshot = await getDocs(q)
 
       // Check if this is still the latest search
       if (term !== latestSearchTerm.current) return
 
-      // Merge all results by ID to avoid duplicates
-      const uniqueDocsMap = new Map()
-      
-      snapshots.forEach(snapshot => {
-        snapshot.docs.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
-          if (!uniqueDocsMap.has(doc.id)) {
-            uniqueDocsMap.set(doc.id, doc)
-          }
-        })
-      })
+      // Process ALL documents first to ensure we have the latest remarks (which might be in subcollections)
+      // This is more expensive but necessary for accurate search on legacy data
+      const allSettlements = await processSettlementDocs(snapshot.docs)
 
-      const uniqueDocs = Array.from(uniqueDocsMap.values())
-      
-      // Process documents
-      const results = await processSettlementDocs(uniqueDocs)
+      const searchLower = term.toLowerCase()
+
+      // Filter the processed settlements
+      const results = allSettlements.filter(settlement => {
+        // Check fields for substring match
+        const clientNameMatch = settlement.clientName?.toLowerCase().includes(searchLower)
+        const bankNameMatch = settlement.bankName?.toLowerCase().includes(searchLower)
+        const accountMatch = settlement.accountNumber?.toLowerCase().includes(searchLower)
+        // Check both the parent remarks field and the latest remark from history
+        const parentRemarksMatch = settlement.remarks?.toLowerCase().includes(searchLower)
+        const latestRemarkMatch = settlement.latestRemark?.remark?.toLowerCase().includes(searchLower)
+        const statusMatch = settlement.status?.toLowerCase().includes(searchLower)
+        
+        return clientNameMatch || bankNameMatch || accountMatch || parentRemarksMatch || latestRemarkMatch || statusMatch
+      })
       
       setSettlements(results)
       setHasMore(false) // Disable infinite scroll for search results
@@ -648,6 +611,7 @@ const SettlementTracker = () => {
       case 'Paid': return 'bg-green-100 text-green-800 border-green-200'
       case 'Not Paid': return 'bg-red-100 text-red-800 border-red-200'
       case 'Partially Paid': return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      case 'Not Required': return 'bg-gray-100 text-gray-500 border-gray-200'
       default: return 'bg-gray-100 text-gray-800 border-gray-200'
     }
   }
@@ -695,6 +659,13 @@ const SettlementTracker = () => {
         remark: trimmedRemark,
         timestamp: serverTimestamp(),
         advocateName,
+      })
+
+      // Update the parent settlement document with the latest remark so it's searchable
+      const settlementRef = doc(db, "settlements", settlementId)
+      await updateDoc(settlementRef, {
+        remarks: trimmedRemark,
+        lastModified: serverTimestamp(),
       })
 
       // Update the settlement's latest remark in local state
@@ -1040,7 +1011,12 @@ const SettlementTracker = () => {
             </div>
           </CardHeader>
           <CardContent>
-            {filteredSettlements.length > 0 ? (
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className={`animate-spin rounded-full h-12 w-12 border-b-2 ${isDarkMode ? 'border-white' : 'border-gray-900'}`}></div>
+                <p className={`mt-4 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading settlements...</p>
+              </div>
+            ) : filteredSettlements.length > 0 ? (
               <>
                 <div className="overflow-x-auto">
                   <table className={`min-w-full divide-y ${isDarkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
@@ -1161,6 +1137,7 @@ const SettlementTracker = () => {
                                   <SelectItem value="Paid" className="text-xs">Paid</SelectItem>
                                   <SelectItem value="Not Paid" className="text-xs">Not Paid</SelectItem>
                                   <SelectItem value="Partially Paid" className="text-xs">Partially Paid</SelectItem>
+                                  <SelectItem value="Not Required" className="text-xs">Not Required</SelectItem>
                                 </SelectContent>
                               </Select>
                               {settlement.successFeeStatus === 'Partially Paid' && settlement.successFeeAmount && (
@@ -1658,7 +1635,7 @@ const SettlementTracker = () => {
   )
 
   // Show loading state
-  if (authLoading || loading) {
+  if (authLoading) {
     return (
       <div className="p-6">
         <div className="text-center">Loading settlement data...</div>
