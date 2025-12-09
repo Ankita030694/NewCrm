@@ -2263,7 +2263,7 @@ const AmaLeadsPage = () => {
       }
       const historyData = historySnapshot.docs.map((docSnap) => {
         const data = docSnap.data() as any
-        let timestamp = data.timestamp
+        let timestamp = data.createdAt || data.timestamp
         if (timestamp && typeof (timestamp as any).toDate === "function") timestamp = timestamp.toDate()
         else if (timestamp) timestamp = new Date(timestamp)
         else timestamp = new Date()

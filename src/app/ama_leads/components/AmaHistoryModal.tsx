@@ -70,10 +70,6 @@ const AmaHistoryModal = ({ showHistoryModal, setShowHistoryModal, currentHistory
                       }
                     };
 
-                    if (a.displayDate && b.displayDate) {
-                      return new Date(b.displayDate).getTime() - new Date(a.displayDate).getTime();
-                    }
-
                     const timeA = parseDate(a.createdAt);
                     const timeB = parseDate(b.createdAt);
                     return timeB - timeA;

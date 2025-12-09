@@ -350,7 +350,7 @@ const MyClientsPage = () => {
             id: doc.id,
             name: data.name || data.Name || 'Unknown',
             email: data.email || data.Email || 'No email',
-            phone: data.mobile || data.phone || data.number || data['Mobile Number'] || 'No phone',
+            phone: String(data.mobile || data.phone || data.number || data['Mobile Number'] || 'No phone'),
             source: data.source || 'ama',
             status: data.status || 'Converted', // Use actual status from AMA data
             assignedTo: data.assignedTo || data.assigned_to || '',
