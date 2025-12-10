@@ -11,7 +11,9 @@ import {
   where,
   doc,
   updateDoc,
-  getDoc
+  getDoc,
+  addDoc,
+  setDoc
 } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
@@ -201,6 +203,52 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: true, updatedFields: dataToUpdate });
   } catch (error) {
     console.error('Error updating user:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+
+    // Basic validation
+    if (!body.email || !body.name || !body.phone) {
+      return NextResponse.json({ error: 'Missing required fields (email, name, phone)' }, { status: 400 });
+    }
+
+    // Calculate week_topic
+    const startDate = new Date(body.start_date || new Date());
+    const day = startDate.getDate();
+    let week_topic = 'fourth_week';
+
+    if (day >= 1 && day <= 7) {
+      week_topic = 'first_week';
+    } else if (day >= 8 && day <= 14) {
+      week_topic = 'second_week';
+    } else if (day >= 15 && day <= 22) {
+      week_topic = 'third_week';
+    }
+
+    const docId = `91${body.phone}`;
+
+    const newUser = {
+      ...body,
+      id: docId,
+      week_topic,
+      created_at: Math.floor(Date.now() / 1000),
+      updated_at: Math.floor(Date.now() / 1000),
+      // Ensure defaults if not provided
+      role: body.role || 'user',
+      status: body.status || 'active',
+      start_date: body.start_date || new Date().toISOString().split('T')[0]
+    };
+
+    // Use setDoc with the custom ID
+    await setDoc(doc(db, 'login_users', docId), newUser);
+
+    return NextResponse.json({ success: true, id: docId, user: newUser });
+  } catch (error) {
+    console.error('Error creating user:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

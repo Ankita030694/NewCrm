@@ -10,6 +10,7 @@ export interface AppUser {
   status: string;
   topic: string;
   updated_at: number;
+  week_topic?: string;
 }
 
 export interface AppUsersResponse {

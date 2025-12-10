@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { AppUser } from './types';
 import AppUsersTable from './components/AppUsersTable';
 import EditUserModal from './components/EditUserModal';
+import AddUserModal from './components/AddUserModal';
 import OverlordSidebar from "@/components/navigation/OverlordSidebar";
 import { FiSearch } from 'react-icons/fi';
 
@@ -22,6 +23,7 @@ export default function AppUsersPage() {
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const fetchUsers = useCallback(async (isLoadMore = false, query = '', role = 'all', status = 'all', loggedIn = 'all') => {
     try {
@@ -176,14 +178,49 @@ export default function AppUsersPage() {
     }
   };
 
+  const handleAddUser = async (data: Omit<AppUser, 'id' | 'created_at' | 'updated_at'>) => {
+    try {
+        const response = await fetch('/api/app-users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) throw new Error('Failed to add user');
+        
+        const result = await response.json();
+        
+        // Optimistic update or refetch
+        // For simplicity, let's prepend the new user to the list if it matches current filters
+        // But since filters might hide it, maybe just refetching or prepending is fine.
+        // Let's prepend it to the current list.
+        if (result.user) {
+            setUsers(prev => [result.user, ...prev]);
+            setTotal(prev => prev + 1);
+        }
+    } catch (error) {
+        console.error('Error adding user:', error);
+        setError('Failed to add new user');
+        throw error;
+    }
+  };
+
   return (
     <OverlordSidebar>
       <div className="flex flex-col h-full">
         <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm space-y-4">
             <div className="flex justify-between items-center">
                 <h1 className="text-2xl font-bold text-gray-900">App Users</h1>
-                <div className="bg-[#D2A02A] text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
-                Total Users: {total.toLocaleString()}
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="bg-[#D2A02A] text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-[#B8911E] transition-colors"
+                    >
+                        Add User
+                    </button>
+                    <div className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
+                        Total: {total.toLocaleString()}
+                    </div>
                 </div>
             </div>
             
@@ -269,6 +306,12 @@ export default function AppUsersPage() {
                 onSave={handleSaveUser}
             />
         )}
+
+        <AddUserModal
+            isOpen={isAddModalOpen}
+            onClose={() => setIsAddModalOpen(false)}
+            onAdd={handleAddUser}
+        />
       </div>
     </OverlordSidebar>
   );
