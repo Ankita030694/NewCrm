@@ -45,6 +45,12 @@ export default function AddUserModal({ isOpen, onClose, onAdd }: AddUserModalPro
     try {
       // Filter out empty strings for optional fields so they are stored as undefined/null (or not stored)
       const dataToSend = { ...formData };
+
+      // Ensure phone number starts with 91
+      if (dataToSend.phone && !dataToSend.phone.startsWith('91')) {
+        dataToSend.phone = `91${dataToSend.phone}`;
+      }
+
       // We want otp to be stored as an empty string, so we don't delete it
       if (dataToSend.topic === '') delete dataToSend.topic;
 
