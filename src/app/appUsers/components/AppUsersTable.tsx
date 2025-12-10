@@ -13,9 +13,20 @@ interface AppUsersTableProps {
   onEditUser: (user: AppUser) => void;
 }
 
-function formatDateParts(timestamp: number) {
+function formatDateParts(timestamp: any) {
   if (!timestamp) return { date: '-', time: '' };
-  const dateObj = new Date(timestamp * 1000);
+  
+  // Handle Firestore Timestamp object
+  let dateObj: Date;
+  if (typeof timestamp === 'object' && timestamp.seconds) {
+    dateObj = new Date(timestamp.seconds * 1000);
+  } else if (typeof timestamp === 'number') {
+    // Handle Unix timestamp in seconds
+    dateObj = new Date(timestamp * 1000);
+  } else {
+    return { date: '-', time: '' };
+  }
+  
   const day = String(dateObj.getDate()).padStart(2, '0');
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
   const year = dateObj.getFullYear();
@@ -96,6 +107,7 @@ export default function AppUsersTable({ users, hasMore, loading, loadMore, onSta
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Contact</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Role</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Logged In?</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Start Date</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Actions</th>
             </tr>
@@ -103,7 +115,7 @@ export default function AppUsersTable({ users, hasMore, loading, loadMore, onSta
           <tbody className="bg-white divide-y divide-gray-200">
             {users.length === 0 && !loading ? (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
                   No users found.
                 </td>
               </tr>
@@ -125,11 +137,11 @@ export default function AppUsersTable({ users, hasMore, loading, loadMore, onSta
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <select
-                        value={user.status}
+                        value={user.status?.toLowerCase()}
                         onChange={(e) => handleStatusChange(user.id, e)}
                         disabled={updatingId === user.id}
                         className={`block w-full pl-3 pr-10 py-1 text-xs border-gray-300 focus:outline-none focus:ring-[#D2A02A] focus:border-[#D2A02A] sm:text-xs rounded-md ${
-                            user.status === 'active' 
+                            (user.status?.toLowerCase() === 'active')
                                 ? 'bg-green-50 text-green-800 border-green-200' 
                                 : 'bg-red-50 text-red-800 border-red-200'
                         } ${updatingId === user.id ? 'opacity-50 cursor-wait' : ''}`}
@@ -137,6 +149,17 @@ export default function AppUsersTable({ users, hasMore, loading, loadMore, onSta
                         <option value="active">active</option>
                         <option value="inactive">inactive</option>
                       </select>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.otp !== undefined ? (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 border border-green-200">
+                          Yes
+                        </span>
+                      ) : (
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800 border border-red-200">
+                          No
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatStartDateDDMMYYYY(user.start_date)}

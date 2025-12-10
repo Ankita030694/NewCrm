@@ -18,11 +18,12 @@ export default function AppUsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [loggedInFilter, setLoggedInFilter] = useState('all');
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const fetchUsers = useCallback(async (isLoadMore = false, query = '', role = 'all', status = 'all') => {
+  const fetchUsers = useCallback(async (isLoadMore = false, query = '', role = 'all', status = 'all', loggedIn = 'all') => {
     try {
       setLoading(true);
       setError(null);
@@ -31,15 +32,25 @@ export default function AppUsersPage() {
       if (query) params.append('search', query);
       if (role && role !== 'all') params.append('role', role);
       if (status && status !== 'all') params.append('status', status);
+      if (loggedIn && loggedIn !== 'all') params.append('loggedIn', loggedIn);
 
-      const hasComplexFilters = (role !== 'all' || status !== 'all');
+      const hasComplexFilters = (role !== 'all' || status !== 'all' || loggedIn !== 'all');
 
       if (isLoadMore && lastCreatedAt && lastId && !hasComplexFilters) {
         params.append('lastCreatedAt', lastCreatedAt.toString());
         params.append('lastId', lastId);
       }
 
-      const response = await fetch(`/api/app-users?${params.toString()}`);
+      // Add cache busting
+      params.append('_t', Date.now().toString());
+
+      const response = await fetch(`/api/app-users?${params.toString()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       
       if (!response.ok) {
         throw new Error(`Error: ${response.statusText}`);
@@ -54,10 +65,14 @@ export default function AppUsersPage() {
       setTotal(data.total);
       
       if (isLoadMore) {
-        setUsers(prev => [...prev, ...data.users]);
+        setUsers(prev => {
+          const existingIds = new Set(prev.map(u => u.id));
+          const newUsers = data.users.filter((u: AppUser) => !existingIds.has(u.id));
+          return [...prev, ...newUsers];
+        });
       } else {
         setUsers(data.users);
-        if (role === 'all' && status === 'all' && !query) {
+        if (role === 'all' && status === 'all' && loggedIn === 'all' && !query) {
              const uniqueRoles = Array.from(new Set(data.users.map((u: AppUser) => u.role).filter(Boolean))) as string[];
              if (uniqueRoles.length > 0) setAvailableRoles(uniqueRoles);
         }
@@ -67,7 +82,13 @@ export default function AppUsersPage() {
 
       if (data.users.length > 0) {
         const lastUser = data.users[data.users.length - 1];
-        setLastCreatedAt(lastUser.created_at);
+        // Handle Firestore Timestamp or number
+        const createdAt = lastUser.created_at;
+        const timestamp = typeof createdAt === 'object' && createdAt !== null && 'seconds' in createdAt
+          ? (createdAt as any).seconds 
+          : createdAt;
+          
+        setLastCreatedAt(timestamp);
         setLastId(lastUser.id);
       }
     } catch (err) {
@@ -80,31 +101,34 @@ export default function AppUsersPage() {
 
   useEffect(() => {
     // Initial load
-    fetchUsers(false, searchQuery, roleFilter, statusFilter);
+    fetchUsers(false, searchQuery, roleFilter, statusFilter, loggedInFilter);
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setLastCreatedAt(null);
     setLastId(null);
-    fetchUsers(false, searchQuery, roleFilter, statusFilter);
+    fetchUsers(false, searchQuery, roleFilter, statusFilter, loggedInFilter);
   };
 
-  const handleFilterChange = (type: 'role' | 'status', value: string) => {
+  const handleFilterChange = (type: 'role' | 'status' | 'loggedIn', value: string) => {
       setLastCreatedAt(null);
       setLastId(null);
       if (type === 'role') {
           setRoleFilter(value);
-          fetchUsers(false, searchQuery, value, statusFilter);
-      } else {
+          fetchUsers(false, searchQuery, value, statusFilter, loggedInFilter);
+      } else if (type === 'status') {
           setStatusFilter(value);
-          fetchUsers(false, searchQuery, roleFilter, value);
+          fetchUsers(false, searchQuery, roleFilter, value, loggedInFilter);
+      } else {
+          setLoggedInFilter(value);
+          fetchUsers(false, searchQuery, roleFilter, statusFilter, value);
       }
   };
 
   const handleLoadMore = () => {
-    if (roleFilter !== 'all' || statusFilter !== 'all') return; 
-    fetchUsers(true, searchQuery, roleFilter, statusFilter);
+    if (roleFilter !== 'all' || statusFilter !== 'all' || loggedInFilter !== 'all') return; 
+    fetchUsers(true, searchQuery, roleFilter, statusFilter, loggedInFilter);
   };
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
@@ -202,6 +226,16 @@ export default function AppUsersPage() {
                         <option value="all">All Status</option>
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
+                     </select>
+
+                     <select 
+                        value={loggedInFilter}
+                        onChange={(e) => handleFilterChange('loggedIn', e.target.value)}
+                        className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[#D2A02A] focus:border-[#D2A02A] sm:text-sm rounded-md"
+                     >
+                        <option value="all">All Users</option>
+                        <option value="yes">Logged In</option>
+                        <option value="no">Not Logged In</option>
                      </select>
                 </div>
             </div>

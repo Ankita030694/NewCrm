@@ -10,10 +10,12 @@ import {
   getCountFromServer,
   where,
   doc,
-  updateDoc
+  updateDoc,
+  getDoc
 } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,53 +26,18 @@ export async function GET(request: NextRequest) {
     const searchQuery = searchParams.get('search');
     const roleFilter = searchParams.get('role');
     const statusFilter = searchParams.get('status');
+    const loggedInFilter = searchParams.get('loggedIn');
 
     const collectionRef = collection(db, 'login_users');
     let q;
     let total = 0;
 
-    if (searchQuery) {
-      const trimmedQuery = searchQuery.trim();
+    const isFiltered = searchQuery || (roleFilter && roleFilter !== 'all') || (statusFilter && statusFilter !== 'all') || (loggedInFilter && loggedInFilter !== 'all');
 
-      if (/^\d+$/.test(trimmedQuery)) {
-        q = query(
-           collectionRef,
-           where('phone', '>=', trimmedQuery),
-           where('phone', '<=', trimmedQuery + '\uf8ff'),
-           limit(limitParam)
-        );
-      } else if (trimmedQuery.includes('@')) {
-          q = query(
-           collectionRef,
-           where('email', '>=', trimmedQuery),
-           where('email', '<=', trimmedQuery + '\uf8ff'),
-           limit(limitParam)
-        );
-      } else {
-         q = query(
-           collectionRef,
-           where('name', '>=', trimmedQuery),
-           where('name', '<=', trimmedQuery + '\uf8ff'),
-           limit(limitParam)
-        );
-      }
-    } else if (roleFilter && roleFilter !== 'all') {
-        q = query(
-            collectionRef,
-            where('role', '==', roleFilter),
-            limit(limitParam)
-         );
-         // Pagination disabled for filter due to index requirement
-    } else if (statusFilter && statusFilter !== 'all') {
-        q = query(
-            collectionRef,
-            where('status', '==', statusFilter),
-            limit(limitParam)
-         );
-         // Pagination disabled for filter due to index requirement
-    } else {
-       const countSnapshot = await getCountFromServer(collectionRef);
-       total = countSnapshot.data().count;
+    if (!isFiltered) {
+      // Optimized path for no filters
+      const countSnapshot = await getCountFromServer(collectionRef);
+      total = countSnapshot.data().count;
 
       q = query(
         collectionRef,
@@ -79,44 +46,124 @@ export async function GET(request: NextRequest) {
         limit(limitParam)
       );
 
-      if (lastCreatedAtParam && lastIdParam) {
-        const lastCreatedAt = parseInt(lastCreatedAtParam);
-        if (!isNaN(lastCreatedAt)) {
+      if (lastIdParam) {
+        const docRef = doc(db, 'login_users', lastIdParam);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
           q = query(
             collectionRef,
             orderBy('created_at', 'desc'),
             orderBy('__name__', 'desc'),
-            startAfter(lastCreatedAt, lastIdParam),
+            startAfter(docSnap),
             limit(limitParam)
           );
         }
       }
-    }
 
-    const snapshot = await getDocs(q);
-
-    const users = snapshot.docs.map(doc => {
+      const snapshot = await getDocs(q);
+      const users = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
-            id: doc.id,
-            created_at: data.created_at,
-            email: data.email,
-            name: data.name,
-            otp: data.otp,
-            phone: data.phone,
-            role: data.role,
-            start_date: data.start_date,
-            status: data.status,
-            topic: data.topic,
-            updated_at: data.updated_at
+          id: doc.id,
+          created_at: data.created_at,
+          email: data.email,
+          name: data.name,
+          otp: data.otp,
+          phone: data.phone,
+          role: data.role,
+          start_date: data.start_date,
+          status: data.status,
+          topic: data.topic,
+          updated_at: data.updated_at
         };
-    });
+      });
 
-    return NextResponse.json({
-      users,
-      total: searchQuery || (roleFilter && roleFilter !== 'all') || (statusFilter && statusFilter !== 'all') ? users.length : total,
-      hasMore: users.length === limitParam
-    });
+      return NextResponse.json({
+        users,
+        total,
+        hasMore: users.length === limitParam
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+
+    } else {
+      // Filtered path: Fetch all, filter in memory, paginate in memory
+      const allDocsQuery = query(collectionRef, orderBy('created_at', 'desc'));
+      const snapshot = await getDocs(allDocsQuery);
+
+      let allUsers = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          created_at: data.created_at,
+          email: data.email,
+          name: data.name,
+          otp: data.otp,
+          phone: data.phone,
+          role: data.role,
+          start_date: data.start_date,
+          status: data.status,
+          topic: data.topic,
+          updated_at: data.updated_at
+        };
+      });
+
+      // Apply Filters
+      if (searchQuery) {
+        const queryLower = searchQuery.toLowerCase().trim();
+        allUsers = allUsers.filter(user =>
+          (user.name && user.name.toLowerCase().includes(queryLower)) ||
+          (user.email && user.email.toLowerCase().includes(queryLower)) ||
+          (user.phone && user.phone.includes(queryLower))
+        );
+      }
+
+      if (roleFilter && roleFilter !== 'all') {
+        allUsers = allUsers.filter(user => user.role === roleFilter);
+      }
+
+      if (statusFilter && statusFilter !== 'all') {
+        allUsers = allUsers.filter(user => user.status === statusFilter);
+      }
+
+      if (loggedInFilter && loggedInFilter !== 'all') {
+        if (loggedInFilter === 'yes') {
+          allUsers = allUsers.filter(user => user.otp !== undefined && user.otp !== null);
+        } else if (loggedInFilter === 'no') {
+          allUsers = allUsers.filter(user => user.otp === undefined || user.otp === null);
+        }
+      }
+
+      total = allUsers.length;
+
+      // Apply Pagination
+      let startIndex = 0;
+      if (lastIdParam) {
+        const lastIndex = allUsers.findIndex(u => u.id === lastIdParam);
+        if (lastIndex !== -1) {
+          startIndex = lastIndex + 1;
+        }
+      }
+
+      const paginatedUsers = allUsers.slice(startIndex, startIndex + limitParam);
+
+      return NextResponse.json({
+        users: paginatedUsers,
+        total,
+        hasMore: startIndex + limitParam < total
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+    }
   } catch (error) {
     console.error('Error fetching app users:', error);
     return NextResponse.json({ error: 'Internal Server Error', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
@@ -124,36 +171,36 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-    try {
-        const body = await request.json();
-        const { id, ...updateData } = body;
+  try {
+    const body = await request.json();
+    const { id, ...updateData } = body;
 
-        if (!id) {
-            return NextResponse.json({ error: 'Missing id' }, { status: 400 });
-        }
-
-        // Fields that are allowed to be updated
-        const allowedFields = ['email', 'name', 'otp', 'phone', 'role', 'start_date', 'status', 'topic'];
-        const dataToUpdate: any = {};
-
-        for (const field of allowedFields) {
-            if (updateData[field] !== undefined) {
-                dataToUpdate[field] = updateData[field];
-            }
-        }
-
-        if (Object.keys(dataToUpdate).length === 0) {
-            return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
-        }
-
-        dataToUpdate.updated_at = Math.floor(Date.now() / 1000);
-
-        const userRef = doc(db, 'login_users', id);
-        await updateDoc(userRef, dataToUpdate);
-
-        return NextResponse.json({ success: true, updatedFields: dataToUpdate });
-    } catch (error) {
-        console.error('Error updating user:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    if (!id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     }
+
+    // Fields that are allowed to be updated
+    const allowedFields = ['email', 'name', 'otp', 'phone', 'role', 'start_date', 'status', 'topic'];
+    const dataToUpdate: any = {};
+
+    for (const field of allowedFields) {
+      if (updateData[field] !== undefined) {
+        dataToUpdate[field] = updateData[field];
+      }
+    }
+
+    if (Object.keys(dataToUpdate).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+    }
+
+    dataToUpdate.updated_at = Math.floor(Date.now() / 1000);
+
+    const userRef = doc(db, 'login_users', id);
+    await updateDoc(userRef, dataToUpdate);
+
+    return NextResponse.json({ success: true, updatedFields: dataToUpdate });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }
