@@ -1,17 +1,29 @@
 'use client';
 
+import { useState } from 'react';
 import NotificationForm from './components/NotificationForm';
 import OverlordSidebar from "@/components/navigation/OverlordSidebar";
+import NotificationHistoryModal from './components/NotificationHistoryModal';
+import { FaHistory } from 'react-icons/fa';
 
 export default function NotificationsPage() {
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
   return (
     <OverlordSidebar>
       <div className="flex flex-col h-full">
-        <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm">
+        <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900">App Notifications</h1>
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
+            >
+              <FaHistory />
+              View History
+            </button>
         </header>
         
-        <main className="flex-1 p-6 bg-gray-50">
+        <main className="flex-1 p-6 bg-gray-50 overflow-y-auto">
            <div className="max-w-4xl mx-auto w-full">
               <NotificationForm />
               
@@ -28,6 +40,11 @@ export default function NotificationsPage() {
               </div>
            </div>
         </main>
+
+        <NotificationHistoryModal 
+          isOpen={isHistoryOpen} 
+          onClose={() => setIsHistoryOpen(false)} 
+        />
       </div>
     </OverlordSidebar>
   );
