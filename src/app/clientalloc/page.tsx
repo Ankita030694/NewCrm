@@ -128,7 +128,7 @@ export default function ClientAllocationPage() {
       
       // Fetch advocates
       const usersCollection = collection(db, 'users');
-      const advocatesQuery = query(usersCollection, where("role", "==", "advocate"));
+      const advocatesQuery = query(usersCollection, where("role", "==", "advocate"), where("status", "==", "active"));
       const advocatesSnapshot = await getDocs(advocatesQuery);
       
       const advocatesList = advocatesSnapshot.docs.map(doc => ({
