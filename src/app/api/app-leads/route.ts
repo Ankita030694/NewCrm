@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+
 import { db } from '@/firebase/ama_app';
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  limit, 
-  startAfter, 
-  getDocs, 
+import {
+  collection,
+  query,
+  orderBy,
+  limit,
+  startAfter,
+  getDocs,
   getCountFromServer,
   where
 } from 'firebase/firestore';
@@ -27,49 +30,49 @@ export async function GET(request: NextRequest) {
     // Note: Firestore doesn't support full-text search natively. 
     // We'll implement a basic prefix search for phone and exact match for name/email if needed
     // For a production app with large dataset, consider Algolia or ElasticSearch
-    
+
     if (searchQuery) {
       const trimmedQuery = searchQuery.trim();
-      
+
       // Try searching by phone first
       // This is a simple implementation. A more robust one would use a dedicated search service.
       // We can't easily combine multiple OR conditions with different fields in Firestore in a single query 
       // without complex index setup or multiple queries.
       // Prioritizing Phone Number search as it's most unique
-      
+
       if (/^\d+$/.test(trimmedQuery)) {
         // It's a number, search by phone
         q = query(
-           collectionRef,
-           where('phone', '>=', trimmedQuery),
-           where('phone', '<=', trimmedQuery + '\uf8ff'),
-           limit(limitParam)
+          collectionRef,
+          where('phone', '>=', trimmedQuery),
+          where('phone', '<=', trimmedQuery + '\uf8ff'),
+          limit(limitParam)
         );
       } else {
         // Search by name (case-sensitive unfortunately in standard Firestore)
         // We'll try to match name
         q = query(
-           collectionRef,
-           where('name', '>=', trimmedQuery),
-           where('name', '<=', trimmedQuery + '\uf8ff'),
-           limit(limitParam)
+          collectionRef,
+          where('name', '>=', trimmedQuery),
+          where('name', '<=', trimmedQuery + '\uf8ff'),
+          limit(limitParam)
         );
       }
 
       // Count for search results is harder to get efficiently without reading all, 
       // so we might skip total count for search or do a separate count query if critical.
       // For now, we'll just get the docs.
-      
+
     } else {
       // Default pagination logic
-       // Get total count only for default view
+      // Get total count only for default view
       const countSnapshot = await getCountFromServer(collectionRef);
       total = countSnapshot.data().count;
 
       q = query(
-        collectionRef, 
+        collectionRef,
         orderBy('created_at', 'desc'),
-        orderBy('__name__', 'desc'), 
+        orderBy('__name__', 'desc'),
         limit(limitParam)
       );
 
@@ -77,7 +80,7 @@ export async function GET(request: NextRequest) {
         const lastCreatedAt = parseInt(lastCreatedAtParam);
         if (!isNaN(lastCreatedAt)) {
           q = query(
-            collectionRef, 
+            collectionRef,
             orderBy('created_at', 'desc'),
             orderBy('__name__', 'desc'),
             startAfter(lastCreatedAt, lastIdParam),
@@ -88,19 +91,19 @@ export async function GET(request: NextRequest) {
     }
 
     const snapshot = await getDocs(q);
-    
+
     const leads = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-            id: doc.id,
-            created_at: data.created_at,
-            email: data.email,
-            name: data.name,
-            phone: data.phone,
-            query: data.query,
-            source: data.source,
-            state: data.state
-        };
+      const data = doc.data();
+      return {
+        id: doc.id,
+        created_at: data.created_at,
+        email: data.email,
+        name: data.name,
+        phone: data.phone,
+        query: data.query,
+        source: data.source,
+        state: data.state
+      };
     });
 
     return NextResponse.json({

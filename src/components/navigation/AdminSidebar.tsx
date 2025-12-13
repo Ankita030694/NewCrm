@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { FaUsers, FaChartPie, FaCog, FaFileAlt, FaHistory, FaMoneyBillWave, FaSignOutAlt, FaBriefcase, FaUserPlus, FaUniversity, FaChartBar, FaHandshake } from 'react-icons/fa'
+import { FaUsers, FaChartPie, FaCog, FaFileAlt, FaHistory, FaMoneyBillWave, FaSignOutAlt, FaBriefcase, FaUserPlus, FaUniversity, FaChartBar, FaHandshake, FaMobileAlt } from 'react-icons/fa'
 import { getAuth, signOut } from 'firebase/auth'
 import { toast } from 'react-hot-toast'
 import { app } from '@/firebase/firebase'
@@ -50,6 +50,12 @@ const AdminSidebar = () => {
             <Link href="/ama_leads" className={`flex items-center px-6 py-3 ${isActive('/ama_leads')} transition-all duration-200 hover:bg-gray-800/70 hover:text-indigo-400 group`}>
               <FaUsers className="mr-3 text-gray-500 group-hover:text-indigo-400 transition-colors duration-200" />
               <span>Leads</span>
+            </Link>
+          </li>
+          <li>
+            <Link href="/appLeads" className={`flex items-center px-6 py-3 ${isActive('/appLeads')} transition-all duration-200 hover:bg-gray-800/70 hover:text-indigo-400 group`}>
+              <FaMobileAlt className="mr-3 text-gray-500 group-hover:text-indigo-400 transition-colors duration-200" />
+              <span>App Leads</span>
             </Link>
           </li>
           <li>

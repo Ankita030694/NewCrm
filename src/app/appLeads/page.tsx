@@ -1,12 +1,17 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { AppLead } from './types';
 import AppLeadsTable from './components/AppLeadsTable';
 import OverlordSidebar from "@/components/navigation/OverlordSidebar";
+import AdminSidebar from "@/components/navigation/AdminSidebar";
 import { FiSearch } from 'react-icons/fi';
 
 export default function AppLeadsPage() {
+  const { userRole, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [leads, setLeads] = useState<AppLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
@@ -29,7 +34,7 @@ export default function AppLeadsPage() {
         params.append('lastId', lastId);
       }
 
-      const response = await fetch(`/api/app-leads?${params.toString()}`);
+      const response = await fetch(`/api/app-leads?${params.toString()}`, { cache: 'no-store' });
       
       if (!response.ok) {
         throw new Error(`Error: ${response.statusText}`);
@@ -65,6 +70,12 @@ export default function AppLeadsPage() {
   }, [lastCreatedAt, lastId]);
 
   useEffect(() => {
+    if (!authLoading && userRole !== 'admin' && userRole !== 'overlord') {
+      router.push('/login');
+    }
+  }, [userRole, authLoading, router]);
+
+  useEffect(() => {
     // Initial load
     fetchLeads(false, searchQuery);
   }, []);
@@ -81,8 +92,11 @@ export default function AppLeadsPage() {
     fetchLeads(true, searchQuery);
   };
 
-  return (
-    <OverlordSidebar>
+  if (authLoading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+
+  const content = (
       <div className="flex flex-col h-full">
         <header className="bg-white border-b border-gray-200 px-6 py-4 shadow-sm space-y-4">
             <div className="flex justify-between items-center">
@@ -125,6 +139,24 @@ export default function AppLeadsPage() {
           </div>
         </main>
       </div>
+  );
+
+  if (userRole === 'admin') {
+    return (
+      <div className="flex h-screen bg-gray-100">
+        <AdminSidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+             {content}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <OverlordSidebar>
+      {content}
     </OverlordSidebar>
   );
 }
