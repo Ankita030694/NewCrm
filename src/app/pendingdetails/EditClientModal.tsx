@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Lead } from './types/lead'
 // import firebase from '../../firebase/firebase'
 import  {db, storage}  from '../../firebase/firebase'
-import { collection, doc, setDoc, writeBatch, updateDoc } from 'firebase/firestore'
+import { doc, setDoc, writeBatch } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { getBankDataSync } from '../../data/bankData'
 
@@ -128,7 +128,6 @@ const EditClientModal = ({
 
   // Handle field changes
   const handleFieldChange = (field: keyof Lead, value: any) => {
-    console.log(`Updating field: ${field} with value:`, value); // Debug logging
     
     // Special handling for name field - capitalize first letter of each word
     if (field === 'name') {
@@ -332,7 +331,6 @@ const EditClientModal = ({
     setLocalSaveError(null);
     
     // Log the lead object to see what's being sent
-    console.log('Submitting lead with source:', lead.source_database);
     
     try {
       // Create a cleaned version of the lead to send
@@ -348,18 +346,15 @@ const EditClientModal = ({
       
       // If this is a new lead (ID starts with 'new-'), generate an ID based on the source
       if (leadToSave.id && leadToSave.id.startsWith('new-')) {
-        console.log('Processing new lead creation');
         
         // Generate a new ID based on source database
         if (leadToSave.source_database) {
           const timestamp = Date.now();
           const sourcePrefix = leadToSave.source_database.substring(0, 3).toUpperCase();
           leadToSave.id = `${sourcePrefix}-${timestamp}`;
-          console.log('Generated new lead ID:', leadToSave.id);
         } else {
           // If no source selected, remove the ID to let Firebase generate one
           (leadToSave as any).id = undefined;
-          console.log('No source selected, letting Firebase generate ID');
         }
       }
       
@@ -394,7 +389,6 @@ const EditClientModal = ({
     try {
       setUploading(true);
       setUploadError(null);
-      console.log('Starting agreement generation for lead:', leadData.id);
 
       // Determine which API endpoint to use based on source and loan amount
       let apiEndpoint = '/api/agreement';
@@ -406,7 +400,6 @@ const EditClientModal = ({
           return total + (parseFloat(bank.loanAmount) || 0);
         }, 0);
         
-        console.log('Total loan amount for billcut client:', totalLoanAmount);
         
         // If total loan amount is <= 400000, use billcut agreement
         if (totalLoanAmount <= 400000) {
@@ -449,7 +442,6 @@ const EditClientModal = ({
         }
       }
       
-      console.log(`Sending request to ${apiEndpoint} with data:`, requestData);
 
       const response = await fetch(apiEndpoint, {
         method: 'POST',
@@ -466,7 +458,6 @@ const EditClientModal = ({
       }
       
       const data = await response.json();
-      console.log('Received response from agreement API:', data);
       
       // Update lead with document information
       setLead(prevLead => ({
@@ -481,7 +472,6 @@ const EditClientModal = ({
       
       // Download the file
       if (data.documentUrl && data.documentName) {
-        console.log('Attempting to download file:', data.documentName, 'from URL:', data.documentUrl);
         try {
           const fileResponse = await fetch(data.documentUrl);
           if (!fileResponse.ok) {
@@ -496,7 +486,6 @@ const EditClientModal = ({
           a.click();
           a.remove();
           window.URL.revokeObjectURL(url);
-          console.log('File download initiated successfully.');
         } catch (downloadError) {
           console.error('Error downloading the generated document:', downloadError);
           setUploadError('Document saved to cloud, but automatic download failed.');
@@ -540,25 +529,6 @@ const EditClientModal = ({
 
     const isDisabled = reasons.length > 0;
     const reasonText = isDisabled ? `Cannot generate: ${reasons.join(' ')}` : 'Generate Agreement Document';
-    
-    // Log the state to the console for debugging
-    console.log('Generate Agreement Button State:', { 
-      isDisabled, 
-      reasons,
-      leadData: {
-        name: !!lead.name,
-        email: !!lead.email,
-        startDate: !!lead.startDate,
-        tenure: !!lead.tenure,
-        monthlyFees: lead.monthlyFees,
-        isBillcut: lead.source_database === 'billcut',
-        loanPercentage: loanPercentage,
-        isBoxChecked: shouldGenerateAgreement,
-        totalLoanAmount: lead.source_database === 'billcut' ? (lead.banks || []).reduce((total: number, bank: any) => {
-          return total + (parseFloat(bank.loanAmount) || 0);
-        }, 0) : 0
-      }
-    });
 
     return { isGenerateDisabled: isDisabled, generateDisabledReason: reasonText };
   }, [uploading, lead, loanPercentage, shouldGenerateAgreement]);

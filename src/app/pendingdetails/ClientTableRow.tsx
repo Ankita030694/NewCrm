@@ -1,5 +1,5 @@
 import React from 'react'
-import { FaEnvelope, FaPhone, FaMapMarkerAlt } from 'react-icons/fa'
+import { FaEnvelope, FaPhone } from 'react-icons/fa'
 import { Lead } from './types/lead'
 import EditClientDetailsButton from './EditClientDetailsButton'
 

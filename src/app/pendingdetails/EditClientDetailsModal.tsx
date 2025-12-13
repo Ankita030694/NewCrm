@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { doc, updateDoc, setDoc, collection, writeBatch, Timestamp } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, writeBatch, Timestamp, collection } from 'firebase/firestore';
 import { db, storage } from '../../firebase/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import BankForm from './BankForm';
@@ -242,7 +242,6 @@ const EditClientDetailsModal = ({ clientData: initialClientData, onClose, onSave
             parseInt(clientData.tenure.toString()),
             parseFloat(clientData.monthlyFees.toString()),
           );
-          console.log("Payment schedule created successfully");
         } catch (error) {
           console.error("Error creating payment schedule:", error);
           // Continue with the rest of the process even if payment schedule creation fails
@@ -347,7 +346,6 @@ const EditClientDetailsModal = ({ clientData: initialClientData, onClose, onSave
       // Commit the batch
       await batch.commit();
       
-      console.log(`Created payment schedule for client ${clientId} with ${tenure} months`);
     } catch (error) {
       console.error("Error creating payment schedule:", error);
       throw error;
