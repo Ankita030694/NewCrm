@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { addBank, getAllBanksWithIds, updateBank, deleteBank, type BankDocument, type BankData } from '../../lib/bankService';
 import { refreshBankData } from '../../data/bankData';
 import AdvocateSidebar from '@/components/navigation/AdvocateSidebar';
+import AdminSidebar from '@/components/navigation/AdminSidebar';
+import { useAuth } from '@/context/AuthContext';
 import { FaSearch, FaPlus, FaEdit, FaTrash, FaMapMarkerAlt, FaEnvelope, FaUniversity, FaSave, FaTimes } from 'react-icons/fa';
 
 interface FormData {
@@ -13,6 +15,7 @@ interface FormData {
 }
 
 export default function AddBankPage() {
+  const { userRole } = useAuth();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     address: '',
@@ -146,7 +149,7 @@ export default function AddBankPage() {
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
       {/* Sidebar */}
-      <AdvocateSidebar />
+      {userRole === 'admin' ? <AdminSidebar /> : <AdvocateSidebar />}
       
       {/* Main Content */}
       <div className="flex-1 p-8 overflow-auto">
