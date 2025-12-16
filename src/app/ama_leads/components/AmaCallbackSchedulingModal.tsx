@@ -3,14 +3,14 @@
 import { useState, useEffect } from 'react';
 import { addDoc, collection, serverTimestamp, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { toast } from 'react-toastify';
+import { db } from '@/firebase/firebase';
 
 interface AmaCallbackSchedulingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onSuccess: () => void;
   leadId: string;
   leadName: string;
-  crmDb: any;
   isEditing?: boolean;
   existingCallbackInfo?: {
     id: string;
@@ -23,10 +23,9 @@ interface AmaCallbackSchedulingModalProps {
 const AmaCallbackSchedulingModal = ({
   isOpen,
   onClose,
-  onConfirm,
+  onSuccess,
   leadId,
   leadName,
-  crmDb,
   isEditing = false,
   existingCallbackInfo = null
 }: AmaCallbackSchedulingModalProps) => {
@@ -68,32 +67,43 @@ const AmaCallbackSchedulingModal = ({
     try {
       const userName = typeof window !== 'undefined' ? localStorage.getItem('userName') || 'Unknown User' : 'Unknown User';
       
+      const callbackData = {
+        scheduled_dt: scheduledDateTime,
+        scheduled_by: userName,
+        updated_at: serverTimestamp()
+      };
+
       if (isEditing && existingCallbackInfo) {
-        // Update existing callback info
-        const callbackInfoRef = collection(crmDb, 'ama_leads', leadId, 'callback_info');
+        // Update existing callback info in subcollection
+        const callbackInfoRef = collection(db, 'ama_leads', leadId, 'callback_info');
         const callbackSnapshot = await getDocs(callbackInfoRef);
         
         if (!callbackSnapshot.empty) {
-          const docRef = doc(crmDb, 'ama_leads', leadId, 'callback_info', callbackSnapshot.docs[0].id);
-          await updateDoc(docRef, {
-            scheduled_dt: scheduledDateTime,
-            scheduled_by: userName,
-            updated_at: serverTimestamp()
-          });
+          const docRef = doc(db, 'ama_leads', leadId, 'callback_info', callbackSnapshot.docs[0].id);
+          await updateDoc(docRef, callbackData);
         }
       } else {
-        // Create new callback info
-        const callbackInfoRef = collection(crmDb, 'ama_leads', leadId, 'callback_info');
+        // Create new callback info in subcollection
+        const callbackInfoRef = collection(db, 'ama_leads', leadId, 'callback_info');
         await addDoc(callbackInfoRef, {
           id: 'attempt_1',
-          scheduled_dt: scheduledDateTime,
-          scheduled_by: userName,
+          ...callbackData,
           created_at: serverTimestamp()
         });
       }
 
+      // Update main lead document with callback info for easy access
+      const leadDocRef = doc(db, 'ama_leads', leadId);
+      await updateDoc(leadDocRef, {
+        callbackInfo: {
+            ...callbackData,
+            // Store as string/timestamp for consistency if needed, but Firestore handles Date objects well
+            scheduled_dt: scheduledDateTime 
+        }
+      });
+
       toast.success(isEditing ? 'Callback updated successfully!' : 'Callback scheduled successfully!');
-      onConfirm();
+      onSuccess();
     } catch (error) {
       toast.error(isEditing ? 'Failed to update callback. Please try again.' : 'Failed to schedule callback. Please try again.');
     } finally {

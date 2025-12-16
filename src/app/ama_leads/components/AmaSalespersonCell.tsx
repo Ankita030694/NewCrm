@@ -56,40 +56,8 @@ const AmaSalespersonCell = ({
   }, [propMembers]);
 
   useEffect(() => {
-    const fetchSalesTeam = async () => {
-      if (!crmDb) return;
-      setLoading(true);
-      try {
-        const q = query(collection(crmDb, 'users'), where('role', 'in', ['salesperson', 'sales']));
-        const snap = await getDocs(q);
-        const fetched = snap.docs.map((d) => {
-          const data = d.data() as any;
-          const name = `${data.firstName || ''} ${data.lastName || ''}`.trim() || data.name || data.email || 'Unknown';
-          return {
-            id: d.id,
-            uid: data.uid,
-            name,
-            email: data.email,
-            phoneNumber: data.phoneNumber,
-            role: data.role,
-            status: data.status
-          };
-        }).filter(user => user.status?.toLowerCase() === 'active');
-        const mergedMap = new Map<string, any>();
-        [...(propMembers || []), ...fetched].forEach((m) => {
-          const key = m.id || m.uid || m.email || m.name;
-          if (key && !mergedMap.has(key)) mergedMap.set(key, m);
-        });
-        setSalesTeamMembers(Array.from(mergedMap.values()));
-      } catch (err) {
-        // Error fetching sales team members
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSalesTeam();
-  }, [crmDb]);
+    setSalesTeamMembers(propMembers || []);
+  }, [propMembers]);
 
   // Determine if user can modify assignment
   const canModifyAssignment = (lead: any) => {

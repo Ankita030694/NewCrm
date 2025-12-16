@@ -9,13 +9,15 @@ interface AmaBulkWhatsAppModalProps {
   onClose: () => void;
   selectedLeads: any[];
   onSendBulkWhatsApp: (templateName: string, leadIds: string[], leadData?: any[]) => Promise<void>;
+  onSuccess?: () => void;
 }
 
 const AmaBulkWhatsAppModal: React.FC<AmaBulkWhatsAppModalProps> = ({
   isOpen,
   onClose,
   selectedLeads,
-  onSendBulkWhatsApp
+  onSendBulkWhatsApp,
+  onSuccess
 }) => {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -56,6 +58,7 @@ const AmaBulkWhatsAppModal: React.FC<AmaBulkWhatsAppModalProps> = ({
     try {
       // Pass the full lead data instead of just IDs
       await onSendBulkWhatsApp(selectedTemplate, leadData.map(lead => lead.id), leadData);
+      if (onSuccess) onSuccess();
       onClose();
     } catch (error) {
       // Error sending bulk WhatsApp

@@ -1,0 +1,340 @@
+import { NextRequest, NextResponse } from "next/server"
+import { adminDb } from "@/firebase/firebase-admin"
+import { Timestamp, Filter } from "firebase-admin/firestore"
+
+export const dynamic = "force-dynamic"
+
+export async function GET(request: NextRequest) {
+    try {
+        const searchParams = request.nextUrl.searchParams
+        const page = Number.parseInt(searchParams.get("page") || "1")
+        const limit = Number.parseInt(searchParams.get("limit") || "50")
+        const status = searchParams.get("status")
+        const source = searchParams.get("source")
+        const salespersonId = searchParams.get("salespersonId")
+        const search = searchParams.get("search") || ""
+        const sortKey = searchParams.get("sort") || "synced_at"
+        const sortDir = searchParams.get("order") === "asc" ? "asc" : "desc"
+        const tab = searchParams.get("tab") || "all"
+
+        // Base collection reference
+        let queryRef: FirebaseFirestore.Query = adminDb.collection("ama_leads")
+
+        // --- Filtering ---
+
+        // 1. Tab Filters
+        if (tab === "callback") {
+            queryRef = queryRef.where("status", "==", "Callback")
+        } else if (tab === "today") {
+            // Logic for "Today" - assuming 'date' or 'synced_at' is used
+            const startOfDay = new Date()
+            startOfDay.setHours(0, 0, 0, 0)
+            const endOfDay = new Date()
+            endOfDay.setHours(23, 59, 59, 999)
+            queryRef = queryRef
+                .where("synced_at", ">=", Timestamp.fromDate(startOfDay))
+                .where("synced_at", "<=", Timestamp.fromDate(endOfDay))
+        }
+
+        // 2. Explicit Filters
+        if (status && status !== "all") {
+            queryRef = queryRef.where("status", "==", status)
+        }
+
+        if (source && source !== "all") {
+            queryRef = queryRef.where("source", "==", source)
+        }
+
+        if (salespersonId && salespersonId !== "all") {
+            queryRef = queryRef.where("assigned_to", "==", salespersonId)
+        }
+
+        // Date Filtering (synced_at)
+        const startDateParam = searchParams.get("startDate")
+        const endDateParam = searchParams.get("endDate")
+
+        if (startDateParam) {
+            const start = new Date(startDateParam)
+            start.setHours(0, 0, 0, 0)
+            queryRef = queryRef.where("synced_at", ">=", Timestamp.fromDate(start))
+        }
+
+        if (endDateParam) {
+            const end = new Date(endDateParam)
+            end.setHours(23, 59, 59, 999)
+            queryRef = queryRef.where("synced_at", "<=", Timestamp.fromDate(end))
+        }
+
+        // --- Pagination ---
+        // For simple offset pagination (not efficient for massive datasets but easiest to drop-in replace)
+        // For cursor pagination, we'd need to pass the last doc snapshot, which is hard via REST API without serializing it.
+        // We'll use offset for now, but limit max offset to avoid performance cliffs.
+        const offset = (page - 1) * limit
+
+        // 3. Search (Server-side simple search)
+        // Note: Firestore doesn't support full-text search natively.
+        // We can implement basic prefix matching for Name or Phone if no other filters are active.
+        // If complex filters are active + search, it's best to filter in memory or use a dedicated search service (Algolia/Typesense).
+        // For this implementation, if search is present, we might need to fetch a bit more data or rely on specific indexes.
+        // A common pattern without Algolia is to search by specific fields if the query looks like a phone number.
+
+        let isSearchActive = false
+        if (search.trim()) {
+            isSearchActive = true
+            const searchLower = search.toLowerCase().trim()
+
+            // If it looks like a phone number (allow spaces/dashes in input but strip them)
+            const stripped = searchLower.replace(/\D/g, "")
+            if (stripped.length >= 4) { // Only trigger for reasonable length
+                console.log(`[API DEBUG] Searching for "${stripped}" via parallel queries`)
+
+                const queries: Promise<FirebaseFirestore.QuerySnapshot>[] = []
+
+                // Helper to create base query with other filters
+                const createBaseQuery = () => {
+                    let q = adminDb.collection("ama_leads") as FirebaseFirestore.Query
+                    if (tab === "callback") q = q.where("status", "==", "Callback")
+                    if (status && status !== "all") q = q.where("status", "==", status)
+                    if (source && source !== "all") q = q.where("source", "==", source)
+                    if (salespersonId && salespersonId !== "all") q = q.where("assigned_to", "==", salespersonId)
+
+                    if (startDateParam) {
+                        const start = new Date(startDateParam)
+                        start.setHours(0, 0, 0, 0)
+                        q = q.where("synced_at", ">=", Timestamp.fromDate(start))
+                    }
+
+                    if (endDateParam) {
+                        const end = new Date(endDateParam)
+                        end.setHours(23, 59, 59, 999)
+                        q = q.where("synced_at", "<=", Timestamp.fromDate(end))
+                    }
+
+                    return q
+                }
+
+                // 1. Exact Number Match
+                const num = Number(stripped)
+                if (!isNaN(num)) {
+                    queries.push(createBaseQuery().where("mobile", "==", num).limit(50).get())
+                    queries.push(createBaseQuery().where("phone", "==", num).limit(50).get())
+                    queries.push(createBaseQuery().where("number", "==", num).limit(50).get())
+                }
+
+                // 2. Numeric Range Match (for partial numbers stored as number type)
+                // If search is "81783" (5 digits) and we expect 10-digit numbers:
+                // Range is 8178300000 to 8178399999
+                if (stripped.length > 0 && stripped.length < 10 && !isNaN(num)) {
+                    const padCount = 10 - stripped.length
+                    const min = num * Math.pow(10, padCount)
+                    const max = min + Math.pow(10, padCount) - 1
+
+                    console.log(`[API DEBUG] Numeric Range: ${min} - ${max}`)
+
+                    queries.push(createBaseQuery().where("mobile", ">=", min).where("mobile", "<=", max).limit(50).get())
+                    queries.push(createBaseQuery().where("phone", ">=", min).where("phone", "<=", max).limit(50).get())
+                    queries.push(createBaseQuery().where("number", ">=", min).where("number", "<=", max).limit(50).get())
+                }
+
+                // 3. String Range Match
+                queries.push(createBaseQuery().where("mobile", ">=", stripped).where("mobile", "<=", stripped + "\uf8ff").limit(50).get())
+                queries.push(createBaseQuery().where("phone", ">=", stripped).where("phone", "<=", stripped + "\uf8ff").limit(50).get())
+                queries.push(createBaseQuery().where("number", ">=", stripped).where("number", "<=", stripped + "\uf8ff").limit(50).get())
+
+                const snapshots = await Promise.all(queries)
+
+                // Merge results
+                const mergedDocs = new Map<string, FirebaseFirestore.DocumentSnapshot>()
+                snapshots.forEach(snap => {
+                    snap.docs.forEach(doc => {
+                        if (!mergedDocs.has(doc.id)) {
+                            mergedDocs.set(doc.id, doc)
+                        }
+                    })
+                })
+
+                console.log(`[API DEBUG] Merged ${mergedDocs.size} docs from parallel queries`)
+
+                // We have the docs now. We can't use the original queryRef for pagination/sorting easily.
+                // We'll return these docs directly, applying manual pagination if needed (though usually search results fit in one page)
+
+                const allDocs = Array.from(mergedDocs.values())
+                const total = allDocs.length
+
+                // Slice for pagination
+                const paginatedDocs = allDocs.slice(offset, offset + limit)
+
+                // Map to lead objects
+                const leads = await Promise.all(paginatedDocs.map(async (doc) => {
+                    try {
+                        const data = doc.data() || {}
+                        let callbackInfo = data.callbackInfo
+
+                        // If in callback tab and missing info on main doc, try to fetch from subcollection
+                        if (tab === "callback" && !callbackInfo) {
+                            try {
+                                const callbackRef = adminDb.collection("ama_leads").doc(doc.id).collection("callback_info")
+                                const callbackSnap = await callbackRef.orderBy("scheduled_dt", "desc").limit(1).get()
+                                if (!callbackSnap.empty) {
+                                    callbackInfo = callbackSnap.docs[0].data()
+                                }
+                            } catch (e) {
+                                console.error(`Error fetching callback info for ${doc.id}:`, e)
+                            }
+                        }
+
+                        // Helper to serialize Timestamps to ISO strings
+                        const serializeDate = (val: any) => {
+                            if (val instanceof Timestamp) return val.toDate().toISOString()
+                            if (val instanceof Date) return val.toISOString()
+                            if (typeof val === 'string') return val
+                            return null
+                        }
+
+                        return {
+                            id: doc.id,
+                            ...data,
+                            date: serializeDate(data.date),
+                            synced_at: serializeDate(data.synced_at),
+                            convertedAt: serializeDate(data.convertedAt),
+                            mobile: String(data.mobile || data.phone || ""),
+                            assignedTo: data.assigned_to || data.assignedTo || "",
+                            assignedToId: data.assignedToId || data.assigned_to_id || "",
+                            callbackInfo: callbackInfo ? {
+                                ...callbackInfo,
+                                scheduled_dt: serializeDate(callbackInfo.scheduled_dt),
+                                created_at: serializeDate(callbackInfo.created_at),
+                                updated_at: serializeDate(callbackInfo.updated_at),
+                            } : null,
+                        }
+                    } catch (err) {
+                        console.error(`[API DEBUG] Error mapping doc ${doc.id}:`, err)
+                        return null
+                    }
+                }))
+
+                const validLeads = leads.filter(l => l !== null)
+
+                return NextResponse.json({
+                    leads: validLeads,
+                    meta: {
+                        total,
+                        page,
+                        limit,
+                        totalPages: Math.ceil(total / limit),
+                    },
+                }, {
+                    headers: {
+                        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0',
+                        'Surrogate-Control': 'no-store'
+                    }
+                })
+
+            } else {
+                // Name search
+                queryRef = queryRef.where("name", ">=", search).where("name", "<=", search + "\uf8ff")
+            }
+        }
+
+        // --- Sorting ---
+        // Only apply sorting if not searching (search usually requires specific order for range queries)
+        if (!isSearchActive) {
+            queryRef = queryRef.orderBy(sortKey, sortDir)
+        }
+
+        // --- Pagination ---
+        // For simple offset pagination (not efficient for massive datasets but easiest to drop-in replace)
+        // For cursor pagination, we'd need to pass the last doc snapshot, which is hard via REST API without serializing it.
+        // We'll use offset for now, but limit max offset to avoid performance cliffs.
+        // const offset = (page - 1) * limit (Moved to top)
+
+        // Get total count (for pagination UI)
+        // Note: count() is fast and cheap
+        const countSnapshot = await queryRef.count().get()
+        const total = countSnapshot.data().count
+
+        // Apply limit and offset
+        queryRef = queryRef.limit(limit).offset(offset)
+
+        // Execute Query
+        const snapshot = await queryRef.get()
+        console.log(`[API DEBUG] Search: "${search}", Total (Count): ${total}, Snapshot Size: ${snapshot.size}, Offset: ${offset}, Limit: ${limit}`)
+
+        const leads = await Promise.all(snapshot.docs.map(async (doc) => {
+            try {
+                const data = doc.data()
+                let callbackInfo = data.callbackInfo
+
+                // If in callback tab and missing info on main doc, try to fetch from subcollection
+                if (tab === "callback" && !callbackInfo) {
+                    try {
+                        const callbackRef = adminDb.collection("ama_leads").doc(doc.id).collection("callback_info")
+                        const callbackSnap = await callbackRef.orderBy("scheduled_dt", "desc").limit(1).get()
+                        if (!callbackSnap.empty) {
+                            callbackInfo = callbackSnap.docs[0].data()
+                        }
+                    } catch (e) {
+                        console.error(`Error fetching callback info for ${doc.id}:`, e)
+                    }
+                }
+
+                // Helper to serialize Timestamps to ISO strings
+                const serializeDate = (val: any) => {
+                    if (val instanceof Timestamp) return val.toDate().toISOString()
+                    if (val instanceof Date) return val.toISOString()
+                    if (typeof val === 'string') return val
+                    return null
+                }
+
+                return {
+                    id: doc.id,
+                    ...data,
+                    date: serializeDate(data.date),
+                    synced_at: serializeDate(data.synced_at),
+                    convertedAt: serializeDate(data.convertedAt),
+                    // Ensure numeric/string fields are consistent
+                    mobile: String(data.mobile || data.phone || ""),
+                    // Map snake_case fields to camelCase if needed
+                    // Prioritize assigned_to as requested by user
+                    assignedTo: data.assigned_to || data.assignedTo || "",
+                    assignedToId: data.assignedToId || data.assigned_to_id || "",
+                    callbackInfo: callbackInfo ? {
+                        ...callbackInfo,
+                        scheduled_dt: serializeDate(callbackInfo.scheduled_dt),
+                        created_at: serializeDate(callbackInfo.created_at),
+                        updated_at: serializeDate(callbackInfo.updated_at),
+                    } : null,
+                }
+            } catch (err) {
+                console.error(`[API DEBUG] Error mapping doc ${doc.id}:`, err)
+                return null
+            }
+        }))
+
+        // Filter out nulls if any errors occurred
+        const validLeads = leads.filter(l => l !== null)
+        console.log(`[API DEBUG] Leads returned: ${validLeads.length}`)
+
+        return NextResponse.json({
+            leads: validLeads,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        }, {
+            headers: {
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'Surrogate-Control': 'no-store'
+            }
+        })
+    } catch (error) {
+        console.error("Error fetching leads:", error)
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    }
+}

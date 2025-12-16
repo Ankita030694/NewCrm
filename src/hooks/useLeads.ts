@@ -1,0 +1,182 @@
+import { useState, useCallback, useEffect } from "react"
+import { toast } from "react-toastify"
+
+export interface Lead {
+    id: string
+    name: string
+    email: string
+    phone: string
+    mobile: string
+    status: string
+    source: string
+    assignedTo?: string
+    assignedToId?: string
+    salesNotes?: string
+    customerQuery?: string
+    date: string | number
+    synced_at?: string
+    convertedAt?: string
+    [key: string]: any
+}
+
+interface FetchParams {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    source?: string
+    salespersonId?: string
+    tab?: string
+    sort?: string
+    order?: "asc" | "desc"
+    startDate?: string
+    endDate?: string
+}
+
+interface LeadsMeta {
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+}
+
+interface Stats {
+    total: number
+    callback: number
+    today: number
+}
+
+export const useLeads = () => {
+    const [leads, setLeads] = useState<Lead[]>([])
+    const [meta, setMeta] = useState<LeadsMeta>({ total: 0, page: 1, limit: 50, totalPages: 0 })
+    const [stats, setStats] = useState<Stats>({ total: 0, callback: 0, today: 0 })
+    const [isLoading, setIsLoading] = useState(false)
+    const [isStatsLoading, setIsStatsLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+
+    const fetchLeads = useCallback(async (params: FetchParams, append: boolean = false) => {
+        setIsLoading(true)
+        setError(null)
+        try {
+            const queryParams = new URLSearchParams()
+            if (params.page) queryParams.set("page", params.page.toString())
+            if (params.limit) queryParams.set("limit", params.limit.toString())
+            if (params.search) queryParams.set("search", params.search)
+            if (params.status && params.status !== "all") queryParams.set("status", params.status)
+            if (params.source && params.source !== "all") queryParams.set("source", params.source)
+            if (params.salespersonId && params.salespersonId !== "all") queryParams.set("salespersonId", params.salespersonId)
+            if (params.tab) queryParams.set("tab", params.tab)
+            if (params.sort) queryParams.set("sort", params.sort)
+            if (params.order) queryParams.set("order", params.order)
+            if (params.startDate) queryParams.set("startDate", params.startDate)
+            if (params.endDate) queryParams.set("endDate", params.endDate)
+
+            const response = await fetch(`/api/leads?${queryParams.toString()}`, {
+                cache: 'no-store',
+                headers: {
+                    'Pragma': 'no-cache',
+                    'Cache-Control': 'no-cache'
+                }
+            })
+            if (!response.ok) throw new Error("Failed to fetch leads")
+
+            const data = await response.json()
+
+            if (append) {
+                setLeads(prev => [...prev, ...data.leads])
+            } else {
+                setLeads(data.leads)
+            }
+            setMeta(data.meta)
+        } catch (err) {
+            console.error(err)
+            setError(err instanceof Error ? err.message : "An error occurred")
+            toast.error("Failed to load leads")
+        } finally {
+            setIsLoading(false)
+        }
+    }, [])
+
+    const fetchStats = useCallback(async (params: FetchParams) => {
+        setIsStatsLoading(true)
+        try {
+            const queryParams = new URLSearchParams()
+            if (params.status && params.status !== "all") queryParams.set("status", params.status)
+            if (params.source && params.source !== "all") queryParams.set("source", params.source)
+            if (params.salespersonId && params.salespersonId !== "all") queryParams.set("salespersonId", params.salespersonId)
+            if (params.tab) queryParams.set("tab", params.tab || "all")
+
+            const response = await fetch(`/api/leads/stats?${queryParams.toString()}`, {
+                cache: 'no-store',
+                headers: {
+                    'Pragma': 'no-cache',
+                    'Cache-Control': 'no-cache'
+                }
+            })
+            if (!response.ok) throw new Error("Failed to fetch stats")
+
+            const data = await response.json()
+            setStats(data)
+        } catch (err) {
+            console.error(err)
+            // Don't toast for stats error to avoid spamming
+        } finally {
+            setIsStatsLoading(false)
+        }
+    }, [])
+
+    const performAction = useCallback(async (action: string, leadIds: string[], payload: any = {}) => {
+        try {
+            const response = await fetch("/api/leads/actions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action, leadIds, payload }),
+            })
+
+            if (!response.ok) {
+                const errorData = await response.json()
+                throw new Error(errorData.error || "Action failed")
+            }
+
+            return true
+        } catch (err) {
+            console.error(err)
+            toast.error(err instanceof Error ? err.message : "Action failed")
+            return false
+        }
+    }, [])
+
+    const [salespersons, setSalespersons] = useState<any[]>([])
+
+    const fetchSalespersons = useCallback(async () => {
+        try {
+            const response = await fetch("/api/users/salespersons", {
+                cache: 'no-store',
+                headers: {
+                    'Pragma': 'no-cache',
+                    'Cache-Control': 'no-cache'
+                }
+            })
+            if (!response.ok) throw new Error("Failed to fetch salespersons")
+            const data = await response.json()
+            setSalespersons(data)
+        } catch (err) {
+            console.error(err)
+        }
+    }, [])
+
+    return {
+        leads,
+        meta,
+        stats,
+        salespersons,
+        isLoading,
+        isStatsLoading,
+        error,
+        fetchLeads,
+        fetchStats,
+        fetchSalespersons,
+        performAction,
+        setLeads, // Expose setter for optimistic updates if needed
+    }
+}

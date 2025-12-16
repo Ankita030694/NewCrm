@@ -6,6 +6,7 @@ interface AmaConversionConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
   onConfirm: () => void
+  leadId: string
   leadName: string
   isLoading?: boolean
 }
@@ -14,6 +15,7 @@ const AmaConversionConfirmationModal: React.FC<AmaConversionConfirmationModalPro
   isOpen,
   onClose,
   onConfirm,
+  leadId,
   leadName,
   isLoading = false,
 }) => {

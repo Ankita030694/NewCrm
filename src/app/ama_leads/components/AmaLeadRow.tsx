@@ -10,7 +10,7 @@ import { useState, useRef, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { FaEllipsisV, FaWhatsapp } from "react-icons/fa"
 import { httpsCallable } from "firebase/functions"
-import { functions } from "@/firebase/firebase"
+import { functions, db } from "@/firebase/firebase"
 import { useWhatsAppTemplates } from "@/hooks/useWhatsAppTemplates"
 
 // Utility function to check if user can edit a lead
@@ -419,7 +419,7 @@ const AmaLeadRow = ({
       }
 
       // Add to history subcollection within ama_leads
-      const historyCollectionRef = collection(crmDb, "ama_leads", lead.id, "history")
+      const historyCollectionRef = collection(db, "ama_leads", lead.id, "history")
       await addDoc(historyCollectionRef, noteData)
 
       // Update the lead document with the new sales notes
@@ -441,7 +441,9 @@ const AmaLeadRow = ({
 
   // Send WhatsApp message function
   const sendWhatsAppMessage = async (templateName: string) => {
-    if (!lead.phone) {
+    const phoneNumber = lead.phone || lead.mobile || lead.number
+    
+    if (!phoneNumber) {
       toast.error("No phone number available for this lead")
       return
     }
@@ -453,7 +455,7 @@ const AmaLeadRow = ({
       const sendWhatsappMessageFn = httpsCallable(functions, "sendWhatsappMessage")
 
       // Format phone number to ensure it's in the correct format
-      let formattedPhone = lead.phone.replace(/\s+/g, "").replace(/[()-]/g, "")
+      let formattedPhone = String(phoneNumber).replace(/\s+/g, "").replace(/[()-]/g, "")
       if (formattedPhone.startsWith("+91")) {
         formattedPhone = formattedPhone.substring(3)
       }
@@ -638,19 +640,6 @@ const AmaLeadRow = ({
           />
         )}
 
-        {/* Callback column placeholder */}
-        {activeTab === "callback" && columnVisibility.callback && (
-          <td className="px-1 py-0.5 text-[11px]">
-            {lead.callbackInfo ? (
-              <div className={`text-sm ${rowColors.textColor || "text-[#5A4C33]"}`}>Callback scheduled</div>
-            ) : (
-              <div className={`text-sm italic ${rowColors.textColor ? "text-[#ffffff]/50" : "text-[#5A4C33]/50"}`}>
-                No callback info
-              </div>
-            )}
-          </td>
-        )}
-
         {/* Customer Query / Callback Info */}
         {columnVisibility.customerQuery && (
           <td className="px-1 py-0.5 text-[11px] max-w-[200px]">
@@ -667,11 +656,6 @@ const AmaLeadRow = ({
                       {callbackInfo.scheduledBy && (
                         <div className={rowColors.textColor ? "text-[#ffffff]/60" : "text-[#5A4C33]/60"}>
                           Scheduled by: {callbackInfo.scheduledBy}
-                        </div>
-                      )}
-                      {callbackInfo.scheduledDate && (
-                        <div className={rowColors.textColor ? "text-[#ffffff]/60" : "text-[#5A4C33]/60"}>
-                          {callbackInfo.scheduledDate}
                         </div>
                       )}
                       {lead.callbackInfo && (

@@ -7,7 +7,7 @@ import { toast } from "react-toastify"
 type AmaLanguageBarrierModalProps = {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (language: string) => Promise<void>
+  onSuccess: (language: string) => Promise<void>
   leadId: string
   leadName: string
   existingLanguage?: string
@@ -44,7 +44,7 @@ const indianLanguages = [
 const AmaLanguageBarrierModal: React.FC<AmaLanguageBarrierModalProps> = ({
   isOpen,
   onClose,
-  onConfirm,
+  onSuccess,
   leadId,
   leadName,
   existingLanguage,
@@ -60,7 +60,7 @@ const AmaLanguageBarrierModal: React.FC<AmaLanguageBarrierModalProps> = ({
 
     setIsSubmitting(true)
     try {
-      await onConfirm(selectedLanguage)
+      await onSuccess(selectedLanguage)
       onClose()
     } catch (error) {
       toast.error("Failed to update language barrier")

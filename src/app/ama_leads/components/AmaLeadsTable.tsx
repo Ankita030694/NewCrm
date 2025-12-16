@@ -137,42 +137,6 @@ const AmaLeadsTable = (props: LeadsTableProps) => {
     toastShownRef.current = false
   }, [list.length])
 
-  // Fetch sales team members dynamically (like in AmaSalespersonCell)
-  useEffect(() => {
-    const fetchSalesTeam = async () => {
-      if (!crmDb) return
-      setLoadingSalesTeam(true)
-      try {
-        const q = query(collection(crmDb, "users"), where("role", "in", ["salesperson", "sales"]))
-        const snap = await getDocs(q)
-        const fetched = snap.docs.map((d) => {
-          const data = d.data() as any
-          const name = `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.name || data.email || "Unknown"
-          return {
-            id: d.id,
-            uid: data.uid,
-            name,
-            email: data.email,
-            phoneNumber: data.phoneNumber,
-            role: data.role,
-          }
-        })
-        const mergedMap = new Map<string, any>()
-        ;[...(salesTeamMembers || []), ...fetched].forEach((m) => {
-          const key = m.id || m.uid || m.email || m.name
-          if (key && !mergedMap.has(key)) mergedMap.set(key, m)
-        })
-        setDynamicSalesTeamMembers(Array.from(mergedMap.values()))
-      } catch (err) {
-        // Error fetching sales team members
-      } finally {
-        setLoadingSalesTeam(false)
-      }
-    }
-
-    fetchSalesTeam()
-  }, [crmDb, salesTeamMembers])
-
   // Update dynamic sales team when props change
   useEffect(() => {
     setDynamicSalesTeamMembers(salesTeamMembers || [])
@@ -519,29 +483,7 @@ const AmaLeadsTable = (props: LeadsTableProps) => {
           </th>
         )}
 
-        {activeTab === "callback" && columnVisibility.callback && (
-          <th
-            className="px-1 py-1 text-left text-xs font-semibold text-[#5A4C33] uppercase tracking-wider w-[2%] border border-[#5A4C33] bg-[#ffffff]/50"
-            scope="col"
-          >
-            <div className="flex items-center justify-between border border-[#5A4C33] rounded-lg p-2">
-              <span className="text-[#D2A02A] text-[10px]">Callback Details</span>
-              <button
-                onClick={() => toggleColumn("callback")}
-                className="ml-1 text-[#5A4C33]/50 hover:text-[#5A4C33] transition-colors"
-                title="Hide callback column"
-              >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
-            </div>
-          </th>
-        )}
+
 
         {columnVisibility.customerQuery && (
           <th
@@ -645,50 +587,28 @@ const AmaLeadsTable = (props: LeadsTableProps) => {
   }
 
   const renderLoadMoreButton = () => {
-    if (!hasMoreLeads || !loadMoreLeads) {
-      if (!hasMoreLeads && list.length > 0) {
-        return (
-          <div className="flex justify-center py-4">
-            <div className="px-4 py-2 bg-[#5A4C33]/10 text-[#5A4C33] rounded-md text-sm font-medium">
-              No more leads available
-            </div>
+    if (isLoadingMore) {
+      return (
+        <div className="flex justify-center py-4">
+          <div className="flex items-center space-x-2 text-[#D2A02A]">
+            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-[#D2A02A]"></div>
+            <span className="text-sm font-medium">Loading leads...</span>
           </div>
-        )
-      }
-      return null
+        </div>
+      )
     }
 
-    const handleLoadMore = async () => {
-      try {
-        if (loadMoreLeads) {
-          await loadMoreLeads()
-        }
-      } catch (error) {
-        toast.error("Failed to load more leads", {
-          position: "top-right",
-          autoClose: 3000,
-        })
-      }
+    if (!hasMoreLeads && list.length > 0) {
+      return (
+        <div className="flex justify-center py-4">
+          <div className="px-4 py-2 bg-[#5A4C33]/10 text-[#5A4C33] rounded-md text-sm font-medium">
+            No more leads available
+          </div>
+        </div>
+      )
     }
 
-    return (
-      <div className="flex justify-center py-4">
-        <button
-          onClick={handleLoadMore}
-          disabled={isLoadingMore}
-          className="px-4 py-2 bg-[#D2A02A] hover:bg-[#B8911E] disabled:bg-[#5A4C33]/30 text-[#ffffff] rounded-md text-sm font-medium transition-colors duration-200 flex items-center space-x-2"
-        >
-          {isLoadingMore ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-[#ffffff]"></div>
-              <span>Loading...</span>
-            </>
-          ) : (
-            <span>Load More Leads</span>
-          )}
-        </button>
-      </div>
-    )
+    return null
   }
 
   // Get assignment options for the bulk assignment dropdown

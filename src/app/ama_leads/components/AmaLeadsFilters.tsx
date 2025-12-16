@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { FaFilter, FaUserTie } from "react-icons/fa"
+import { toast } from "react-toastify"
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore"
 import { db as crmDb } from "@/firebase/firebase"
@@ -418,7 +419,7 @@ const AmaLeadsFilters = ({
           <input
             type="text"
             className="block w-full pl-10 pr-10 py-3 border border-[#5A4C33]/20 bg-[#ffffff] text-[#5A4C33] rounded-xl focus:outline-none focus:ring-[#D2A02A] focus:border-[#D2A02A] transition-all duration-200 placeholder-[#5A4C33]/50"
-            placeholder="Search by name, email, or phone number... (searches entire database)"
+            placeholder="Name or Phone Number"
             value={searchInput}
             onChange={handleSearchInputChange}
           />
@@ -444,34 +445,7 @@ const AmaLeadsFilters = ({
           )}
         </div>
 
-        {/* Enhanced Search results summary */}
-        {searchQuery && (
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-[#5A4C33]/70">
-                {isSearching ? (
-                  <span className="flex items-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#D2A02A] mr-2"></div>
-                    Searching database...
-                  </span>
-                ) : (
-                  <>
-                    Found <span className="text-[#D2A02A] font-medium">{searchResultsCount}</span> results for "
-                    {searchQuery}"
-                    {searchResultsCount > 0 && <span className="text-[#D2A02A] ml-2">✓ Database search complete</span>}
-                  </>
-                )}
-              </span>
-            </div>
-            <button
-              onClick={clearSearch}
-              className="text-xs text-[#D2A02A] hover:text-[#B8911E] focus:outline-none border border-[#D2A02A]/30 px-2 py-1 rounded-md hover:border-[#D2A02A]/50 transition-colors"
-              type="button"
-            >
-              Clear search
-            </button>
-          </div>
-        )}
+        {/* Enhanced Search results summary removed */}
       </div>
 
       {/* Filters section with improved layout */}
@@ -547,9 +521,10 @@ const AmaLeadsFilters = ({
               className="block w-full pl-3 pr-10 py-2 text-sm border border-[#5A4C33]/20 bg-[#ffffff] text-[#5A4C33] focus:outline-none focus:ring-[#D2A02A] focus:border-[#D2A02A] rounded-md"
             >
               <option value="all">All Sources</option>
-              <option value="ama">AMA</option>
-              <option value="credsettlee">CredSettle</option>
-              <option value="settleloans">SettleLoans</option>
+              <option value="AMA">AMA</option>
+              <option value="CREDSETTLE">CREDSETTLE</option>
+              <option value="Settleloans Contact">Settleloans Contact</option>
+              <option value="Settleloans Home">Settleloans Home</option>
             </select>
           </div>
 
@@ -633,16 +608,20 @@ const AmaLeadsFilters = ({
                 <label className="block text-xs text-[#5A4C33]/70">My Leads</label>
                 <div className="flex items-center h-[38px]">
                   <button
-                    onClick={() => {
-                      const currentUserName = typeof window !== "undefined" ? localStorage.getItem("userName") : ""
-                      if (currentUserName) {
-                        if (salesPersonFilter === currentUserName) {
-                          setSalesPersonFilter("all")
+                      onClick={() => {
+                        const currentUserName = typeof window !== "undefined" ? localStorage.getItem("userName") : ""
+                        if (currentUserName) {
+                          if (salesPersonFilter === currentUserName) {
+                            setSalesPersonFilter("all")
+                            toast.info("Showing all leads")
+                          } else {
+                            setSalesPersonFilter(currentUserName)
+                            toast.success(`Showing leads for ${currentUserName}`)
+                          }
                         } else {
-                          setSalesPersonFilter(currentUserName)
+                          toast.error("User name not found. Please log in again.")
                         }
-                      }
-                    }}
+                      }}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#D2A02A] focus:ring-offset-2 ${
                       salesPersonFilter === (typeof window !== "undefined" ? localStorage.getItem("userName") : "")
                         ? "bg-[#D2A02A]"
