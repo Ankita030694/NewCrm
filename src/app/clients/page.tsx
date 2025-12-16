@@ -10,6 +10,7 @@ import {
   doc,
   updateDoc,
   where,
+  or,
   deleteDoc,
   limit,
   addDoc,
@@ -435,10 +436,29 @@ function ClientsPageWithParams() {
       const normalizedLowerTerm = normalizedTerm.toLowerCase()
       const collectionRef = collection(db, "clients")
       const queries: Array<ReturnType<typeof query>> = []
-      const limitClause = limit(50)
+      const limitClause = limit(1000)
+
+      // Split term into words for fallback search
+      const words = normalizedTerm.split(/\s+/)
+      const firstWord = words[0]
+      
+      // If we have multiple words, we'll also search by the first word to be safe
+      // (e.g. User searches "Archisman Das", DB has "Archisman  Das" or "Archisman Kumar Das")
+      const searchTerms = new Set(searchVariants)
+      if (words.length > 1 && firstWord.length > 2) {
+        const firstWordVariants = createSearchVariants(firstWord)
+        firstWordVariants.forEach(v => searchTerms.add(v))
+      }
+
+      // Add variants with leading space to handle dirty data (e.g. " Archisman")
+      // The user specifically requested handling for records with leading spaces
+      const originalTerms = Array.from(searchTerms)
+      originalTerms.forEach(term => {
+        searchTerms.add(` ${term}`)
+      })
 
       // Name Search (Prefix)
-      searchVariants.forEach((variant) => {
+      searchTerms.forEach((variant) => {
         try {
           queries.push(
             query(
@@ -498,15 +518,20 @@ function ClientsPageWithParams() {
         }),
       )
 
+      const searchKeywords = normalizedLowerTerm.split(/\s+/).filter(k => k.length > 0)
+
       const caseInsensitiveFiltered = enhanced.filter((client) => {
         const valuesToCheck = [
           client.name,
           client.phone,
           client.altPhone,
-        ]
+        ].filter((v): v is string => typeof v === "string").map(v => v.toLowerCase())
 
-        return valuesToCheck.some(
-          (value) => typeof value === "string" && value.toLowerCase().includes(normalizedLowerTerm),
+        // Check if ALL keywords are present in ANY of the fields
+        // This allows "Archisman Das" to match "Archisman Kumar Das"
+        // or "Archisman" in name and "98765" in phone
+        return searchKeywords.every(keyword => 
+          valuesToCheck.some(value => value.includes(keyword))
         )
       })
 
@@ -523,7 +548,17 @@ function ClientsPageWithParams() {
     const constraints: QueryConstraint[] = []
 
     if (statusFilter !== "all") {
-      constraints.push(where("adv_status", "==", statusFilter))
+      if (statusFilter === "Inactive" || statusFilter === "inactive") {
+        constraints.push(
+          or(
+            where("status", "==", ""),
+            where("adv_status", "==", null),
+            where("adv_status", "==", "(null)")
+          ) as unknown as QueryConstraint
+        )
+      } else {
+        constraints.push(where("adv_status", "==", statusFilter))
+      }
     }
 
     if (primaryAdvocateFilter !== "all") {
@@ -599,7 +634,14 @@ function ClientsPageWithParams() {
         const collectionRef = collection(db, "clients")
 
         if (trimmedSearch) {
-          const searchResults = await executeSearchQueries(trimmedSearch, baseConstraints)
+          // For search, we want to ignore most filters to ensure we find the client "no matter what".
+          // However, we must respect the "billcut" role restriction.
+          const searchConstraints: QueryConstraint[] = []
+          if (userRole === "billcut") {
+            searchConstraints.push(where("source_database", "==", "billcut"))
+          }
+
+          const searchResults = await executeSearchQueries(trimmedSearch, searchConstraints)
           setClients(searchResults)
           setFilteredClients(searchResults)
           setHasMore(false)
@@ -665,7 +707,7 @@ function ClientsPageWithParams() {
         }
       }
     },
-    [debouncedSearchTerm, executeSearchQueries, enhanceClientData, mergeAndSortClients, buildBaseFilterConstraints, fetchFilteredCount],
+    [debouncedSearchTerm, executeSearchQueries, enhanceClientData, mergeAndSortClients, buildBaseFilterConstraints, fetchFilteredCount, userRole],
   )
 
   // Toast function to add new toast

@@ -229,10 +229,13 @@ export async function POST(request: NextRequest) {
       week_topic = 'third_week';
     }
 
-    const docId = `91${body.phone}`;
+    const rawPhone = String(body.phone);
+    const phone = rawPhone.startsWith('91') ? rawPhone : `91${rawPhone}`;
+    const docId = phone;
 
     const newUser = {
       ...body,
+      phone,
       id: docId,
       week_topic,
       created_at: Math.floor(Date.now() / 1000),
