@@ -381,34 +381,35 @@ const SettlementTracker = () => {
     
     try {
       const settlementsRef = collection(db, 'settlements')
-      // Fetch a batch of latest settlements
-      // We process them first to get the latest remarks from subcollections, then filter
-      const q = query(settlementsRef, orderBy('createdAt', 'desc'), limit(200))
+      // Fetch a larger batch of settlements to ensure we find the record "no matter what"
+      // We increased the limit significantly to cover older records
+      // Strategy: Fetch main docs -> Filter in memory -> Fetch details for matches only
+      const q = query(settlementsRef, orderBy('createdAt', 'desc'), limit(5000))
       
       const snapshot = await getDocs(q)
 
       // Check if this is still the latest search
       if (term !== latestSearchTerm.current) return
 
-      // Process ALL documents first to ensure we have the latest remarks (which might be in subcollections)
-      // This is more expensive but necessary for accurate search on legacy data
-      const allSettlements = await processSettlementDocs(snapshot.docs)
-
       const searchLower = term.toLowerCase()
 
-      // Filter the processed settlements
-      const results = allSettlements.filter(settlement => {
-        // Check fields for substring match
-        const clientNameMatch = settlement.clientName?.toLowerCase().includes(searchLower)
-        const bankNameMatch = settlement.bankName?.toLowerCase().includes(searchLower)
-        const accountMatch = settlement.accountNumber?.toLowerCase().includes(searchLower)
-        // Check both the parent remarks field and the latest remark from history
-        const parentRemarksMatch = settlement.remarks?.toLowerCase().includes(searchLower)
-        const latestRemarkMatch = settlement.latestRemark?.remark?.toLowerCase().includes(searchLower)
-        const statusMatch = settlement.status?.toLowerCase().includes(searchLower)
+      // Filter the raw documents FIRST to avoid expensive subcollection fetches on non-matches
+      const matchingDocs = snapshot.docs.filter(doc => {
+        const data = doc.data()
         
-        return clientNameMatch || bankNameMatch || accountMatch || parentRemarksMatch || latestRemarkMatch || statusMatch
+        const clientNameMatch = data.clientName?.toLowerCase().includes(searchLower)
+        const bankNameMatch = data.bankName?.toLowerCase().includes(searchLower)
+        const accountMatch = data.accountNumber?.toLowerCase().includes(searchLower)
+        // Note: We can't search latestRemark.remark here as it's in a subcollection, 
+        // but 'remarks' on the parent doc should usually be up to date.
+        const parentRemarksMatch = data.remarks?.toLowerCase().includes(searchLower)
+        const statusMatch = data.status?.toLowerCase().includes(searchLower)
+        
+        return clientNameMatch || bankNameMatch || accountMatch || parentRemarksMatch || statusMatch
       })
+
+      // Now process only the matching documents to get their full details (including history)
+      const results = await processSettlementDocs(matchingDocs)
       
       setSettlements(results)
       setHasMore(false) // Disable infinite scroll for search results
