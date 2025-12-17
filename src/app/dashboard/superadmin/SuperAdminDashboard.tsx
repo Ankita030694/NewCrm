@@ -164,7 +164,8 @@ const SuperAdminDashboard = React.memo(() => {
   const {
     salesAnalytics,
     salespeople,
-    individualSalesData
+    individualSalesData,
+    allSalesTargets
   } = useSalesAnalytics({
     selectedAnalyticsMonth,
     selectedAnalyticsYear,
@@ -180,6 +181,7 @@ const SuperAdminDashboard = React.memo(() => {
   const {
     leadsBySourceData,
     sourceTotals,
+    leadsBySalesperson,
     isLoading: leadsLoading
   } = useLeadsData({
     startDate,
@@ -435,6 +437,9 @@ const SuperAdminDashboard = React.memo(() => {
                       <CRMLeadsTable
                         leadsBySourceData={leadsBySourceData}
                         sourceTotals={sourceTotals}
+                        salespeople={salespeople}
+                        allSalesTargets={allSalesTargets}
+                        leadsBySalesperson={leadsBySalesperson}
                         isLoading={leadsLoading}
                         selectedAnalyticsMonth={selectedAnalyticsMonth}
                         selectedAnalyticsYear={selectedAnalyticsYear}

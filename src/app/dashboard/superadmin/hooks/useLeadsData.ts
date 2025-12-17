@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, getDocs, query, where, Timestamp, QueryConstraint } from 'firebase/firestore';
+import { collection, query, where, Timestamp, onSnapshot, QueryConstraint } from 'firebase/firestore';
 import { db } from '@/firebase/firebase';
 import { LeadsBySourceData, SourceTotals, StatusKey, SourceKey, ChartDataset } from '../types';
 import { statusColors } from '../utils/chartConfigs';
-import { analyticsCache, generateCacheKey } from '../utils/cache';
 
 interface UseLeadsDataParams {
   startDate: string;
@@ -26,21 +25,21 @@ export const useLeadsData = ({
     labels: ['Settleloans', 'Credsettlee', 'AMA', 'Billcut'],
     datasets: [],
   });
-  
+
   const [sourceTotals, setSourceTotals] = useState<SourceTotals>({
     settleloans: 0,
     credsettlee: 0,
     ama: 0,
     billcut: 0,
   });
-  
+
+  const [leadsBySalesperson, setLeadsBySalesperson] = useState<Record<string, { interested: number; converted: number }>>({});
+
   const [isLoading, setIsLoading] = useState(true);
 
   // Use ref to store the callback to avoid dependency issues
   const onLoadCompleteRef = useRef(onLoadComplete);
   onLoadCompleteRef.current = onLoadComplete;
-
-  const leadsDataCacheKey = generateCacheKey.leadsData(startDate, endDate, selectedLeadsSalesperson, isFilterApplied);
 
   useEffect(() => {
     if (!enabled) {
@@ -48,210 +47,198 @@ export const useLeadsData = ({
       return;
     }
 
-    const fetchLeadsData = async () => {
-      try {
-        // Check cache first
-        const cached = analyticsCache.get<{ leadsBySourceData: LeadsBySourceData; sourceTotals: SourceTotals; }>(leadsDataCacheKey);
-        if (cached) {
-          setLeadsBySourceData(cached.leadsBySourceData);
-          setSourceTotals(cached.sourceTotals);
-          setIsLoading(false);
-          onLoadCompleteRef.current?.();
-          return;
-        }
-        
-        // Create a base query
-        const leadsCollection = collection(db, 'crm_leads');
-        let leadsQuery: any = leadsCollection;
-        
-        // Apply date filters if set
-        if (isFilterApplied && (startDate || endDate)) {
-          const constraints: QueryConstraint[] = [];
-          
-          if (startDate) {
-            constraints.push(where(
-              'synced_at', 
-              '>=', 
-              Timestamp.fromDate(new Date(startDate))
-            ));
-          }
-          
-          if (endDate) {
-            constraints.push(where(
-              'synced_at', 
-              '<=', 
-              Timestamp.fromDate(new Date(`${endDate}T23:59:59`))
-            ));
-          }
-          
-          leadsQuery = query(leadsQuery, ...constraints);
-        }
-        // Removed the limit(500) to load ALL leads when no date filter is applied
-        
-        // Add salesperson filter if selected
-        if (selectedLeadsSalesperson) {
-          leadsQuery = query(leadsQuery, where('assignedTo', '==', selectedLeadsSalesperson));
-        }
-        
-        const leadsSnapshot = await getDocs(leadsQuery);
-        
-        // Fetch billcutLeads data
-        const billcutCollection = collection(db, 'billcutLeads');
-        let billcutQuery: any = billcutCollection;
-        
-        // Apply date filters to billcutLeads if set
-        if (isFilterApplied && (startDate || endDate)) {
-          const constraints: QueryConstraint[] = [];
-          
-          if (startDate) {
-            constraints.push(where(
-              'synced_date', 
-              '>=', 
-              Timestamp.fromDate(new Date(startDate))
-            ));
-          }
-          
-          if (endDate) {
-            constraints.push(where(
-              'synced_date', 
-              '<=', 
-              Timestamp.fromDate(new Date(`${endDate}T23:59:59`))
-            ));
-          }
-          
-          billcutQuery = query(billcutQuery, ...constraints);
-        }
-        
-        // Add salesperson filter to billcutLeads if selected
-        if (selectedLeadsSalesperson) {
-          billcutQuery = query(billcutQuery, where('assigned_to', '==', selectedLeadsSalesperson));
-        }
-        
-        const billcutSnapshot = await getDocs(billcutQuery);
-        
-        // Initialize direct counts for total leads by source
-        const sourceTotalCounts = {
-          settleloans: 0,
-          credsettlee: 0,
-          ama: 0,
-          billcut: 0,
-        };
-        
-        // Initialize counters for each status and source combination (including new statuses)
-        const statusCounts = {
-          'Interested': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Not Interested': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Not Answering': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Callback': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Converted': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Loan Required': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Short Loan': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Cibil Issue': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Closed Lead': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Language Barrier': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'Future Potential': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-          'No Status': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
-        };
-        
-        // Process each lead document from crm_leads
-        leadsSnapshot.forEach((doc) => {
-          const lead = doc.data() as {
-            source_database?: string;
-            status?: string;
-            [key: string]: any;
-          };
-          
-          let source = lead.source_database;
-          
-          // Normalize source to lowercase if it exists
-          if (source) {
-            source = source.toLowerCase();
-            
-            // Map source to one of our four categories
-            let mappedSource;
-            if (source.includes('settleloans')) {
-              mappedSource = 'settleloans';
-            } else if (source.includes('credsettlee') || source.includes('credsettle')) {
-              mappedSource = 'credsettlee';
-            } else if (source.includes('ama')) {
-              mappedSource = 'ama';
-            }
-            
-            // First, count all leads by source (regardless of status)
-            if (mappedSource) {
-              sourceTotalCounts[mappedSource as SourceKey]++;
-              
-              // Then categorize leads by status for the chart
-              const status = lead.status;
-              if (status && statusCounts[status as StatusKey]) {
-                statusCounts[status as StatusKey][mappedSource as SourceKey]++;
-              } else {
-                // Count leads with valid source but invalid/missing status as "No Status"
-                statusCounts['No Status'][mappedSource as SourceKey]++;
-              }
-            }
-          }
-        });
-        
-        // Process each lead document from billcutLeads
-        billcutSnapshot.forEach((doc) => {
-          const lead = doc.data() as {
-            category?: string;
-            assigned_to?: string;
-            [key: string]: any;
-          };
-          
-          // Count all billcut leads
-          sourceTotalCounts.billcut++;
-          
-          // Map category to status for billcut leads
-          const category = lead.category;
-          if (category && statusCounts[category as StatusKey]) {
-            statusCounts[category as StatusKey].billcut++;
-          } else {
-            // Count leads with invalid/missing category as "No Status"
-            statusCounts['No Status'].billcut++;
-          }
-        });
-        
-        // Prepare chart data
-        const datasets = Object.entries(statusCounts).map(([status, sources], index): ChartDataset => {
-          return {
-            label: status,
-            data: [sources.settleloans, sources.credsettlee, sources.ama, sources.billcut],
-            backgroundColor: statusColors[index % statusColors.length],
-          };
-        });
-        
-        // Update chart data
-        const result = {
-          leadsBySourceData: {
-            labels: ['Settleloans', 'Credsettlee', 'AMA', 'Billcut'],
-            datasets,
-          },
-          sourceTotals: sourceTotalCounts,
-        };
-        analyticsCache.set(leadsDataCacheKey, result);
-        
-        setLeadsBySourceData(result.leadsBySourceData);
-        setSourceTotals(result.sourceTotals);
-        setIsLoading(false);
-        
-        // Call the callback using the ref to avoid dependency issues
-        onLoadCompleteRef.current?.();
-      } catch (error) {
-        setIsLoading(false);
-        onLoadCompleteRef.current?.();
+    setIsLoading(true);
+
+    // Create queries
+    const leadsCollection = collection(db, 'ama_leads');
+    let leadsQuery: any = leadsCollection;
+
+    const billcutCollection = collection(db, 'billcutLeads');
+    let billcutQuery: any = billcutCollection;
+
+    // Apply filters
+    const leadsConstraints: QueryConstraint[] = [];
+    const billcutConstraints: QueryConstraint[] = [];
+
+    if (isFilterApplied && (startDate || endDate)) {
+      if (startDate) {
+        const startTimestamp = Timestamp.fromDate(new Date(startDate));
+        leadsConstraints.push(where('synced_at', '>=', startTimestamp));
+        billcutConstraints.push(where('synced_date', '>=', startTimestamp));
       }
+
+      if (endDate) {
+        const endTimestamp = Timestamp.fromDate(new Date(`${endDate}T23:59:59`));
+        leadsConstraints.push(where('synced_at', '<=', endTimestamp));
+        billcutConstraints.push(where('synced_date', '<=', endTimestamp));
+      }
+    }
+
+    if (selectedLeadsSalesperson) {
+      // For ama_leads, check both fields or just one if we are sure. 
+      // Firestore 'OR' queries for same field are 'IN', but for different fields it's complex.
+      // Given the schema has both and they seem identical, we'll stick to assignedTo but maybe we should check assigned_to if assignedTo is missing?
+      // Actually, for filtering, we need to be precise. If the schema guarantees both, assignedTo is fine.
+      // But if some docs only have assigned_to, we might miss them.
+      // Let's assume assignedTo is the primary one for now as per schema "assignedTo" presence.
+      // However, to be safe and consistent with the read logic:
+      leadsConstraints.push(where('assignedTo', '==', selectedLeadsSalesperson));
+      billcutConstraints.push(where('assigned_to', '==', selectedLeadsSalesperson));
+    }
+
+    if (leadsConstraints.length > 0) {
+      leadsQuery = query(leadsCollection, ...leadsConstraints);
+    }
+    if (billcutConstraints.length > 0) {
+      billcutQuery = query(billcutCollection, ...billcutConstraints);
+    }
+
+    // Data holders
+    let leadsData: any[] = [];
+    let billcutData: any[] = [];
+    let leadsLoaded = false;
+    let billcutLoaded = false;
+
+    const processData = () => {
+      if (!leadsLoaded || !billcutLoaded) return;
+
+      // Initialize counts
+      const sourceTotalCounts = {
+        settleloans: 0,
+        credsettlee: 0,
+        ama: 0,
+        billcut: 0,
+      };
+
+      const statusCounts = {
+        'Interested': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Not Interested': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Not Answering': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Callback': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Converted': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Loan Required': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Short Loan': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Cibil Issue': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Closed Lead': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Language Barrier': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'Future Potential': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+        'No Status': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
+      };
+
+      // Process CRM Leads
+      leadsData.forEach(lead => {
+        let source = lead.source_database;
+        if (source) {
+          source = source.toLowerCase();
+          let mappedSource;
+          if (source.includes('settleloans')) mappedSource = 'settleloans';
+          else if (source.includes('credsettlee') || source.includes('credsettle')) mappedSource = 'credsettlee';
+          else if (source.includes('ama')) mappedSource = 'ama';
+
+          if (mappedSource) {
+            sourceTotalCounts[mappedSource as SourceKey]++;
+            const status = lead.status;
+            if (status && statusCounts[status as StatusKey]) {
+              statusCounts[status as StatusKey][mappedSource as SourceKey]++;
+            } else {
+              statusCounts['No Status'][mappedSource as SourceKey]++;
+            }
+          }
+        }
+      });
+
+      // Process Billcut Leads
+      billcutData.forEach(lead => {
+        sourceTotalCounts.billcut++;
+        const category = lead.category;
+        if (category && statusCounts[category as StatusKey]) {
+          statusCounts[category as StatusKey].billcut++;
+        } else {
+          statusCounts['No Status'].billcut++;
+        }
+      });
+
+      // Aggregate leads by salesperson
+      const salespersonCounts: Record<string, { interested: number; converted: number }> = {};
+
+      // Helper to update salesperson counts
+      const updateSalespersonCount = (name: string, status: string, category?: string) => {
+        if (!name || name === 'Unassigned') return;
+
+        if (!salespersonCounts[name]) {
+          salespersonCounts[name] = { interested: 0, converted: 0 };
+        }
+
+        // Check for Interested
+        if (status === 'Interested' || category === 'Interested') {
+          salespersonCounts[name].interested++;
+        }
+
+        // Check for Converted (though usually we use targets for this, having it here is good for cross-ref)
+        if (status === 'Converted' || category === 'Converted') {
+          salespersonCounts[name].converted++;
+        }
+      };
+
+      leadsData.forEach(lead => {
+        updateSalespersonCount(lead.assignedTo || lead.assigned_to, lead.status);
+      });
+
+      billcutData.forEach(lead => {
+        updateSalespersonCount(lead.assigned_to, lead.status, lead.category);
+      });
+
+      setLeadsBySalesperson(salespersonCounts);
+
+      // Prepare chart data
+      const datasets = Object.entries(statusCounts).map(([status, sources], index): ChartDataset => {
+        return {
+          label: status,
+          data: [sources.settleloans, sources.credsettlee, sources.ama, sources.billcut],
+          backgroundColor: statusColors[index % statusColors.length],
+        };
+      });
+
+      setLeadsBySourceData({
+        labels: ['Settleloans', 'Credsettlee', 'AMA', 'Billcut'],
+        datasets,
+      });
+      setSourceTotals(sourceTotalCounts);
+      setIsLoading(false);
+      onLoadCompleteRef.current?.();
     };
-    
-    fetchLeadsData();
-    // Removed onLoadComplete from dependency array to prevent infinite re-renders
+
+    // Set up listeners
+    const unsubscribeLeads = onSnapshot(leadsQuery, (snapshot: any) => {
+      leadsData = snapshot.docs.map((doc: any) => doc.data());
+      leadsLoaded = true;
+      processData();
+    }, (error: any) => {
+      console.error("Error listening to ama_leads:", error);
+      leadsLoaded = true; // Proceed even on error
+      processData();
+    });
+
+    const unsubscribeBillcut = onSnapshot(billcutQuery, (snapshot: any) => {
+      billcutData = snapshot.docs.map((doc: any) => doc.data());
+      billcutLoaded = true;
+      processData();
+    }, (error: any) => {
+      console.error("Error listening to billcutLeads:", error);
+      billcutLoaded = true; // Proceed even on error
+      processData();
+    });
+
+    return () => {
+      unsubscribeLeads();
+      unsubscribeBillcut();
+    };
   }, [startDate, endDate, isFilterApplied, selectedLeadsSalesperson, enabled]);
 
   return {
     leadsBySourceData,
     sourceTotals,
+    leadsBySalesperson,
     isLoading
   };
 }; 

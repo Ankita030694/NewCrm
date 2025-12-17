@@ -1,6 +1,6 @@
 // Define type for status and source keys
-export type StatusKey = 'Interested' | 'Not Interested' | 'Not Answering' | 'Callback' 
-| 'Converted' | 'Loan Required' | 'Cibil Issue' | 'Closed Lead' | 'Language Barrier' | 'Future Potential' | 'No Status';
+export type StatusKey = 'Interested' | 'Not Interested' | 'Not Answering' | 'Callback'
+  | 'Converted' | 'Loan Required' | 'Cibil Issue' | 'Closed Lead' | 'Language Barrier' | 'Future Potential' | 'No Status';
 
 export type SourceKey = 'settleloans' | 'credsettlee' | 'ama' | 'billcut';
 
@@ -46,15 +46,28 @@ export type IndividualSalesData = {
   monthlyData: number[];
 } | null;
 
+export type SalesTargetData = {
+  userId: string;
+  userName: string;
+  amountCollectedTarget: number;
+  amountCollected: number;
+  convertedLeads: number;
+};
+
+export type LeadsBySalesperson = Record<string, {
+  interested: number;
+  converted: number;
+}>;
+
 // Client analytics types
 export type ClientAnalytics = {
   totalClients: number;
-  statusDistribution: { 
-    Active: number; 
-    Dropped: number; 
-    'Not Responding': number; 
-    'On Hold': number; 
-    Inactive: number; 
+  statusDistribution: {
+    Active: number;
+    Dropped: number;
+    'Not Responding': number;
+    'On Hold': number;
+    Inactive: number;
   };
   topAdvocates: { name: string; clientCount: number }[];
   loanTypeDistribution: Record<string, number>;

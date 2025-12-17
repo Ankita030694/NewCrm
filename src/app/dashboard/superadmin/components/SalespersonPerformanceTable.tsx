@@ -1,184 +1,65 @@
-import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, Timestamp, doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/firebase';
-
-interface SalespersonPerformance {
-  name: string;
-  convertedLeads: number;
-  interestedLeads: number;
-  targetAmount: number;
-  collectedAmount: number;
-  pendingAmount: number;
-  conversionRate: number;
-  targetAchievement: number;
-}
+import React, { useMemo } from 'react';
+import { Salesperson, SalesTargetData, LeadsBySalesperson } from '../types';
 
 interface SalespersonPerformanceTableProps {
+  salespeople: Salesperson[];
+  allSalesTargets: Record<string, SalesTargetData>;
+  leadsBySalesperson: LeadsBySalesperson;
   isLoading?: boolean;
   selectedAnalyticsMonth?: number | null;
   selectedAnalyticsYear?: number | null;
 }
 
 export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTableProps> = ({
+  salespeople,
+  allSalesTargets,
+  leadsBySalesperson,
   isLoading = false,
   selectedAnalyticsMonth = null,
   selectedAnalyticsYear = null
 }) => {
-  const [salespeople, setSalespeople] = useState<SalespersonPerformance[]>([]);
-  const [loading, setLoading] = useState(true);
   
-  // Separate month filter state for salesperson performance
-  const [selectedPerformanceMonth, setSelectedPerformanceMonth] = useState<number | null>(null);
-  const [selectedPerformanceYear, setSelectedPerformanceYear] = useState<number | null>(null);
+  const performanceData = useMemo(() => {
+    return salespeople.map(person => {
+      const targetData = allSalesTargets[person.id] || {
+        amountCollectedTarget: 0,
+        amountCollected: 0,
+        convertedLeads: 0
+      };
+      
+      const leadsData = leadsBySalesperson[person.name] || {
+        interested: 0,
+        converted: 0
+      };
 
-  useEffect(() => {
-    const fetchSalespersonData = async () => {
-      try {
-        setLoading(true);
+      const convertedLeads = targetData.convertedLeads || leadsData.converted || 0;
+      const interestedLeads = leadsData.interested || 0;
+      const targetAmount = targetData.amountCollectedTarget || 0;
+      const collectedAmount = targetData.amountCollected || 0;
+      const pendingAmount = Math.max(0, targetAmount - collectedAmount);
+      
+      const conversionRate = (convertedLeads + interestedLeads) > 0 
+        ? Math.round((convertedLeads / (convertedLeads + interestedLeads)) * 100) 
+        : 0;
         
-        // Use performance month filter if set, otherwise fall back to analytics filter, then current month
-        const now = new Date();
-        const targetMonth = selectedPerformanceMonth !== null ? selectedPerformanceMonth : 
-                          (selectedAnalyticsMonth !== null ? selectedAnalyticsMonth : now.getMonth());
-        const targetYear = selectedPerformanceYear !== null ? selectedPerformanceYear : 
-                          (selectedAnalyticsYear !== null ? selectedAnalyticsYear : now.getFullYear());
-        
-        // Get month and year in the correct format (e.g., "Aug_2025")
-        const monthNames = [
-          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-        ];
-        const monthYearName = `${monthNames[targetMonth]}_${targetYear}`;
-        
-        // First, get all active salespeople from users collection
-        const usersRef = collection(db, 'users');
-        const usersQuery = query(
-          usersRef, 
-          where('role', '==', 'sales')
-        );
-        const usersSnapshot = await getDocs(usersQuery);
-        
-        const salespersonData: SalespersonPerformance[] = [];
-        
-        // Process each user
-        for (const userDoc of usersSnapshot.docs) {
-          const userData = userDoc.data();
-          
-          // Filter out inactive users (case insensitive)
-          const status = userData.status?.toLowerCase() || '';
-          if (status !== 'active') continue;
-          
-          const salespersonName = userData.firstName && userData.lastName 
-            ? `${userData.firstName} ${userData.lastName}` 
-            : userData.firstName || userData.email || 'Unknown';
-          
-          // Fetch leads data for this salesperson from crm_leads (for interested leads only)
-          const leadsQuery = query(
-            collection(db, 'crm_leads'),
-            where('assignedTo', '==', salespersonName),
-            where('synced_at', '>=', Timestamp.fromDate(new Date(targetYear, targetMonth, 1))),
-            where('synced_at', '<=', Timestamp.fromDate(new Date(targetYear, targetMonth + 1, 0, 23, 59, 59)))
-          );
-          const leadsSnapshot = await getDocs(leadsQuery);
-          
-          // Fetch billcut leads data for this salesperson (for interested leads only)
-          const billcutQuery = query(
-            collection(db, 'billcutLeads'),
-            where('assigned_to', '==', salespersonName),
-            where('synced_date', '>=', Timestamp.fromDate(new Date(targetYear, targetMonth, 1))),
-            where('synced_date', '<=', Timestamp.fromDate(new Date(targetYear, targetMonth + 1, 0, 23, 59, 59)))
-          );
-          const billcutSnapshot = await getDocs(billcutQuery);
-          
-          // Count interested leads only (converted leads will come from targets collection)
-          let interestedLeads = 0;
-          
-          // Process crm_leads for interested leads
-          leadsSnapshot.forEach(doc => {
-            const lead = doc.data();
-            if (lead.status === 'Interested') {
-              interestedLeads++;
-            }
-          });
-          
-          // Process billcutLeads for interested leads
-          billcutSnapshot.forEach(doc => {
-            const lead = doc.data();
-            if (lead.category === 'Interested') {
-              interestedLeads++;
-            }
-          });
-          
-          // Fetch target data for this salesperson from targets collection
-          let targetAmount = 0;
-          let collectedAmount = 0;
-          let convertedLeads = 0; // This will come from targets collection
-          
-          try {
-            // Get the user's target document from the targets collection
-            const userTargetRef = doc(db, 'targets', monthYearName, 'sales_targets', userDoc.id);
-            const userTargetSnap = await getDoc(userTargetRef);
-            
-            if (userTargetSnap.exists()) {
-              const targetData = userTargetSnap.data();
-              targetAmount = targetData.amountCollectedTarget || 0;
-              collectedAmount = targetData.amountCollected || 0;
-              convertedLeads = targetData.convertedLeads || 0; // Get converted leads from targets collection
-            }
-          } catch (error) {
-            // Error fetching target
-          }
-          
-          const pendingAmount = Math.max(0, targetAmount - collectedAmount);
-          const conversionRate = (convertedLeads + interestedLeads) > 0 
-            ? Math.round((convertedLeads / (convertedLeads + interestedLeads)) * 100) 
-            : 0;
-          const targetAchievement = targetAmount > 0 
-            ? Math.round((collectedAmount / targetAmount) * 100) 
-            : 0;
-          
-          // Only add salesperson if they have any data (leads or targets)
-          if (convertedLeads > 0 || interestedLeads > 0 || targetAmount > 0) {
-            salespersonData.push({
-              name: salespersonName,
-              convertedLeads,
-              interestedLeads,
-              targetAmount,
-              collectedAmount,
-              pendingAmount,
-              conversionRate,
-              targetAchievement
-            });
-          } else {
-            // Add salesperson with zero data for visibility
-            salespersonData.push({
-              name: salespersonName,
-              convertedLeads: 0,
-              interestedLeads: 0,
-              targetAmount: 0,
-              collectedAmount: 0,
-              pendingAmount: 0,
-              conversionRate: 0,
-              targetAchievement: 0
-            });
-          }
-        }
-        
-        // Sort by target achievement (descending)
-        salespersonData.sort((a, b) => b.targetAchievement - a.targetAchievement);
-        
-        setSalespeople(salespersonData);
-      } catch (error) {
-        // Error fetching salesperson data
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchSalespersonData();
-  }, [selectedAnalyticsMonth, selectedAnalyticsYear, selectedPerformanceMonth, selectedPerformanceYear]);
+      const targetAchievement = targetAmount > 0 
+        ? Math.round((collectedAmount / targetAmount) * 100) 
+        : 0;
 
-  if (isLoading || loading) {
+      return {
+        name: person.name,
+        convertedLeads,
+        interestedLeads,
+        targetAmount,
+        collectedAmount,
+        pendingAmount,
+        conversionRate,
+        targetAchievement
+      };
+    }).sort((a, b) => b.targetAchievement - a.targetAchievement);
+  }, [salespeople, allSalesTargets, leadsBySalesperson]);
+
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center h-48 bg-white dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">
         <div className="text-blue-600 dark:text-blue-200">Loading salesperson data...</div>
@@ -204,10 +85,8 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
             <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
               {(() => {
                 const now = new Date();
-                const targetMonth = selectedPerformanceMonth !== null ? selectedPerformanceMonth : 
-                                  (selectedAnalyticsMonth !== null ? selectedAnalyticsMonth : now.getMonth());
-                const targetYear = selectedPerformanceYear !== null ? selectedPerformanceYear : 
-                                  (selectedAnalyticsYear !== null ? selectedAnalyticsYear : now.getFullYear());
+                const targetMonth = selectedAnalyticsMonth !== null ? selectedAnalyticsMonth : now.getMonth();
+                const targetYear = selectedAnalyticsYear !== null ? selectedAnalyticsYear : now.getFullYear();
                 const monthNames = [
                   'January', 'February', 'March', 'April', 'May', 'June',
                   'July', 'August', 'September', 'October', 'November', 'December'
@@ -215,52 +94,6 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
                 return `${monthNames[targetMonth]} ${targetYear}`;
               })()}
             </p>
-          </div>
-          
-          {/* Performance Month Filter */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
-              <select
-                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                value={selectedPerformanceMonth !== null ? selectedPerformanceMonth : new Date().getMonth()}
-                onChange={(e) => setSelectedPerformanceMonth(parseInt(e.target.value))}
-              >
-                <option value="0">January</option>
-                <option value="1">February</option>
-                <option value="2">March</option>
-                <option value="3">April</option>
-                <option value="4">May</option>
-                <option value="5">June</option>
-                <option value="6">July</option>
-                <option value="7">August</option>
-                <option value="8">September</option>
-                <option value="9">October</option>
-                <option value="10">November</option>
-                <option value="11">December</option>
-              </select>
-              
-              <select
-                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                value={selectedPerformanceYear !== null ? selectedPerformanceYear : new Date().getFullYear()}
-                onChange={(e) => setSelectedPerformanceYear(parseInt(e.target.value))}
-              >
-                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-              
-              {(selectedPerformanceMonth !== null || selectedPerformanceYear !== null) && (
-                <button 
-                  onClick={() => {
-                    setSelectedPerformanceMonth(null);
-                    setSelectedPerformanceYear(null);
-                  }}
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-900/30 px-1 py-1 rounded-md transition-colors"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -278,7 +111,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
             </tr>
           </thead>
           <tbody>
-            {salespeople.map((person, index) => (
+            {performanceData.map((person, index) => (
               <tr 
                 key={person.name} 
                 className={`hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors ${
@@ -307,7 +140,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
               </tr>
             ))}
             
-            {salespeople.length === 0 && (
+            {performanceData.length === 0 && (
               <tr>
                 <td colSpan={6} className="p-4 text-center text-gray-500 dark:text-gray-400 text-sm">
                   No salesperson data available
@@ -319,31 +152,31 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
       </div>
       
       {/* Summary row */}
-      {salespeople.length > 0 && (
+      {performanceData.length > 0 && (
         <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-200 dark:bg-gradient-to-r dark:from-blue-900/90 dark:to-purple-900/90 transition-colors">
           <div className="grid grid-cols-4 gap-4 text-xs">
             <div>
               <span className="text-blue-600 dark:text-blue-200">Total Converted (Month): </span>
               <span className="text-gray-900 dark:text-white font-semibold">
-                {salespeople.reduce((sum, p) => sum + p.convertedLeads, 0)}
+                {performanceData.reduce((sum, p) => sum + p.convertedLeads, 0)}
               </span>
             </div>
             <div>
               <span className="text-blue-600 dark:text-blue-200">Total Target: </span>
               <span className="text-gray-900 dark:text-white font-semibold">
-                {formatCurrency(salespeople.reduce((sum, p) => sum + p.targetAmount, 0))}
+                {formatCurrency(performanceData.reduce((sum, p) => sum + p.targetAmount, 0))}
               </span>
             </div>
             <div>
               <span className="text-blue-600 dark:text-blue-200">Total Collected: </span>
               <span className="text-gray-900 dark:text-white font-semibold">
-                {formatCurrency(salespeople.reduce((sum, p) => sum + p.collectedAmount, 0))}
+                {formatCurrency(performanceData.reduce((sum, p) => sum + p.collectedAmount, 0))}
               </span>
             </div>
             <div>
               <span className="text-blue-600 dark:text-blue-200">Total Interested (Month): </span>
               <span className="text-gray-900 dark:text-white font-semibold">
-                {salespeople.reduce((sum, p) => sum + p.interestedLeads, 0)}
+                {performanceData.reduce((sum, p) => sum + p.interestedLeads, 0)}
               </span>
             </div>
           </div>

@@ -1,8 +1,8 @@
 "use client"
 import { useState, useEffect, useMemo } from "react"
 import type React from "react"
-import { collection, getDocs, query, where } from "firebase/firestore"
-import { db as crmDb } from "@/firebase/firebase"
+// import { collection, getDocs, query, where } from "firebase/firestore"
+// import { db as crmDb } from "@/firebase/firebase"
 import { toast } from "react-toastify"
 import { useRouter } from "next/navigation"
 import OverlordSidebar from "@/components/navigation/OverlordSidebar"
@@ -42,24 +42,7 @@ import {
 } from "react-icons/fi"
 
 // Types
-interface BillcutLead {
-  id: string
-  address: string
-  assigned_to: string
-  category: string
-  date: number
-  debt_range: string
-  email: string
-  income: string
-  mobile: string
-  name: string
-  sales_notes: string
-  synced_date: any
-  convertedAt?: any
-  lastModified?: any
-  status?: string
-  language_barrier?: string
-}
+
 
 interface MetricCardProps {
   title: string
@@ -243,7 +226,8 @@ const getAllStatuses = () => [
 ]
 
 const BillcutLeadReportContent = () => {
-  const [leads, setLeads] = useState<BillcutLead[]>([])
+
+  const [analytics, setAnalytics] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState({
     startDate: "",
@@ -733,360 +717,73 @@ const BillcutLeadReportContent = () => {
     }
   }
 
-  // Fetch leads data
+  // Fetch analytics data
   useEffect(() => {
-    const fetchLeads = async () => {
+    const fetchAnalytics = async () => {
       setIsLoading(true)
       try {
-        const billcutLeadsRef = collection(crmDb, "billcutLeads")
-        const queryConstraints = []
-
+        const params = new URLSearchParams()
+        params.append("type", "analytics")
+        
         if (dateRange.startDate) {
-          const startDate = new Date(dateRange.startDate)
-          startDate.setHours(0, 0, 0, 0)
-          queryConstraints.push(where("date", ">=", startDate.getTime()))
+          params.append("startDate", dateRange.startDate)
         }
-
         if (dateRange.endDate) {
-          const endDate = new Date(dateRange.endDate)
-          // If it's today, use current time, otherwise use end of day
-          if (endDate.toDateString() === new Date().toDateString()) {
-            endDate.setTime(new Date().getTime())
-          } else {
-            endDate.setHours(23, 59, 59, 999)
-          }
-          queryConstraints.push(where("date", "<=", endDate.getTime()))
+          params.append("endDate", dateRange.endDate)
         }
 
-        const q = queryConstraints.length > 0 ? query(billcutLeadsRef, ...queryConstraints) : billcutLeadsRef
-        const querySnapshot = await getDocs(q)
-        const fetchedLeads = querySnapshot.docs.map(
-          (doc) =>
-            ({
-              id: doc.id,
-              ...doc.data(),
-            }) as BillcutLead,
-        )
-
-        setLeads(fetchedLeads)
+        const response = await fetch(`/api/reports/billcut-leads?${params.toString()}`, { cache: 'no-store' })
+        if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API Error Details:", errorData);
+        throw new Error(errorData.message || "Failed to fetch analytics");
+      }  
+        const data = await response.json()
+        setAnalytics(data.analytics)
       } catch (error) {
-        console.error("Error fetching billcut leads:", error)
+        console.error("Error fetching billcut leads analytics:", error)
         toast.error("Failed to load billcut leads data")
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchLeads()
+    fetchAnalytics()
   }, [dateRange])
 
-  // FIXED: Separate useEffect for productivity tracking with proper timezone handling and convertedAt support
+  // Fetch productivity data
   useEffect(() => {
     const fetchProductivityData = async () => {
       try {
         setProductivityLoading(true)
-
-        // For today, use real-time data from billcutLeads collection
-        if (selectedProductivityRange === "today") {
-          // Get productivity date range with proper IST handling
-          const { startDate, endDate } = getProductivityDateRange(selectedProductivityRange)
-
-          console.log("Productivity tracking (Today - Real-time):", {
-            range: selectedProductivityRange,
-            startDateUTC: startDate.toISOString(),
-            endDateUTC: endDate.toISOString(),
-            startDateIST: new Date(startDate.getTime() + 5.5 * 60 * 60 * 1000).toISOString(),
-            endDateIST: new Date(endDate.getTime() + 5.5 * 60 * 60 * 1000).toISOString(),
-          })
-
-          // Query for general lead modifications (using lastModified)
-          const generalProductivityQuery = query(
-            collection(crmDb, "billcutLeads"),
-            where("lastModified", ">=", startDate),
-            where("lastModified", "<=", endDate),
-          )
-
-          // Query for converted leads (using convertedAt)
-          const convertedProductivityQuery = query(
-            collection(crmDb, "billcutLeads"),
-            where("convertedAt", ">=", startDate),
-            where("convertedAt", "<=", endDate),
-          )
-
-          const [generalSnapshot, convertedSnapshot] = await Promise.all([
-            getDocs(generalProductivityQuery),
-            getDocs(convertedProductivityQuery),
-          ])
-
-          console.log("Found leads for productivity tracking:", {
-            general: generalSnapshot.docs.length,
-            converted: convertedSnapshot.docs.length,
-          })
-
-          // Group leads by user and date
-          const productivityMap: { [key: string]: { [key: string]: ProductivityStats } } = {}
-          
-          // Debug: Track all leads processed
-          const debugLeads: any[] = []
-
-          // Process general lead modifications (non-converted)
-          generalSnapshot.docs.forEach((doc) => {
-            const leadData = doc.data()
-            
-            // FIXED: Use both category and status fields, prioritize category
-            const leadStatus = leadData.category || leadData.status || "No Status"
-            
-            // Only process if lead has lastModified and status is not "-" and not converted
-            if (leadData.lastModified && leadStatus !== "-" && leadStatus !== "Converted") {
-              const lastModifiedUTC = leadData.lastModified.toDate()
-              // Convert to IST for display purposes
-              const lastModifiedIST = new Date(lastModifiedUTC.getTime() + 5.5 * 60 * 60 * 1000)
-
-              // Debug: Add to debug array
-              debugLeads.push({
-                id: doc.id,
-                name: leadData.name,
-                assignedTo: leadData.assigned_to,
-                status: leadStatus,
-                category: leadData.category,
-                lastModified: lastModifiedIST.toISOString(),
-                type: 'general'
-              })
-
-              // Use individual date keys for today
-              const dateKey = lastModifiedIST.toLocaleDateString("en-IN", {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })
-
-              const userId = leadData.assigned_to || "Unassigned"
-              const userName = leadData.assigned_to || "Unassigned"
-
-              // Initialize user if not exists
-              if (!productivityMap[userId]) {
-                productivityMap[userId] = {}
-              }
-
-              // Initialize date if not exists
-              if (!productivityMap[userId][dateKey]) {
-                productivityMap[userId][dateKey] = {
-                  userId,
-                  userName,
-                  date: dateKey,
-                  leadsWorked: 0,
-                  convertedLeads: 0,
-                  lastActivity: lastModifiedUTC, // Store as UTC
-                  statusBreakdown: {},
-                }
-              }
-
-              // Update stats
-              productivityMap[userId][dateKey].leadsWorked += 1
-              productivityMap[userId][dateKey].statusBreakdown[leadStatus] =
-                (productivityMap[userId][dateKey].statusBreakdown[leadStatus] || 0) + 1
-
-              // Update last activity if this is more recent
-              if (lastModifiedUTC > productivityMap[userId][dateKey].lastActivity) {
-                productivityMap[userId][dateKey].lastActivity = lastModifiedUTC
-              }
-            }
-          })
-
-          // Process converted leads separately (using convertedAt)
-          convertedSnapshot.docs.forEach((doc) => {
-            const leadData = doc.data()
-            // Only process if lead has convertedAt and is actually converted
-            if (leadData.convertedAt && (leadData.category === "Converted" || leadData.status === "Converted")) {
-              const convertedAtUTC = leadData.convertedAt.toDate()
-              // Convert to IST for display purposes
-              const convertedAtIST = new Date(convertedAtUTC.getTime() + 5.5 * 60 * 60 * 1000)
-
-              // Debug: Add to debug array
-              debugLeads.push({
-                id: doc.id,
-                name: leadData.name,
-                assignedTo: leadData.assigned_to,
-                status: leadData.category || leadData.status,
-                category: leadData.category,
-                convertedAt: convertedAtIST.toISOString(),
-                type: 'converted'
-              })
-
-              // Use individual date keys for today
-              const dateKey = convertedAtIST.toLocaleDateString("en-IN", {
-                timeZone: "Asia/Kolkata",
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })
-
-              const userId = leadData.assigned_to || "Unassigned"
-              const userName = leadData.assigned_to || "Unassigned"
-              const status = "Converted"
-
-              // Initialize user if not exists
-              if (!productivityMap[userId]) {
-                productivityMap[userId] = {}
-              }
-
-              // Initialize date if not exists
-              if (!productivityMap[userId][dateKey]) {
-                productivityMap[userId][dateKey] = {
-                  userId,
-                  userName,
-                  date: dateKey,
-                  leadsWorked: 0,
-                  convertedLeads: 0,
-                  lastActivity: convertedAtUTC, // Store as UTC
-                  statusBreakdown: {},
-                }
-              }
-
-              // Update stats for converted leads
-              productivityMap[userId][dateKey].leadsWorked += 1
-              productivityMap[userId][dateKey].convertedLeads += 1
-              productivityMap[userId][dateKey].statusBreakdown[status] =
-                (productivityMap[userId][dateKey].statusBreakdown[status] || 0) + 1
-
-              // Update last activity if this is more recent
-              if (convertedAtUTC > productivityMap[userId][dateKey].lastActivity) {
-                productivityMap[userId][dateKey].lastActivity = convertedAtUTC
-              }
-            }
-          })
-
-          // Debug: Log all processed leads
-          console.log("Debug - All processed leads:", debugLeads)
-
-          // Convert to array format
-          const productivityArray: ProductivityStats[] = []
-          Object.values(productivityMap).forEach((userDates) => {
-            Object.values(userDates).forEach((stats) => {
-              productivityArray.push(stats)
-            })
-          })
-
-          // Sort by date (newest first) and then by leads worked (descending)
-          productivityArray.sort((a, b) => {
-            if (a.date !== b.date) {
-              return b.date.localeCompare(a.date)
-            }
-            return b.leadsWorked - a.leadsWorked
-          })
-
-          console.log("Productivity stats (Today - Real-time):", productivityArray)
-          setProductivityStats(productivityArray)
-        } else {
-          // For historical data (yesterday, last 7 days, last 30 days), use productivity_snapshots collection
-          console.log("Productivity tracking (Historical - Snapshots):", {
-            range: selectedProductivityRange,
-          })
-
-          // Generate date range for snapshot collection
-          const today = new Date()
-          const snapshotDates: string[] = []
-
-          if (selectedProductivityRange === "yesterday") {
-            const yesterday = new Date(today)
-            yesterday.setDate(yesterday.getDate() - 1)
-            const dateStr = yesterday.toISOString().split('T')[0] // Format: YYYY-MM-DD
-            snapshotDates.push(dateStr)
-          } else if (selectedProductivityRange === "last7days") {
-            for (let i = 6; i >= 0; i--) {
-              const date = new Date(today)
-              date.setDate(date.getDate() - i)
-              const dateStr = date.toISOString().split('T')[0] // Format: YYYY-MM-DD
-              snapshotDates.push(dateStr)
-            }
-          } else if (selectedProductivityRange === "last30days") {
-            for (let i = 29; i >= 0; i--) {
-              const date = new Date(today)
-              date.setDate(date.getDate() - i)
-              const dateStr = date.toISOString().split('T')[0] // Format: YYYY-MM-DD
-              snapshotDates.push(dateStr)
-            }
-          }
-
-          console.log("Snapshot dates to fetch:", snapshotDates)
-
-          // Fetch productivity snapshots
-          const productivitySnapshotsRef = collection(crmDb, "productivity_snapshots")
-          const snapshotQueries = snapshotDates.map(date => 
-            query(productivitySnapshotsRef, where("__name__", "==", date))
-          )
-
-          const snapshotResults = await Promise.all(
-            snapshotQueries.map(snapshotQuery => getDocs(snapshotQuery))
-          )
-
-          // Process snapshot data
-          const productivityArray: ProductivityStats[] = []
-          const userSummaryMap: { [key: string]: ProductivityStats } = {}
-
-          snapshotResults.forEach((snapshot, index) => {
-            snapshot.docs.forEach((doc) => {
-              const snapshotData = doc.data()
-              console.log(`Snapshot data for ${snapshotDates[index]}:`, snapshotData)
-
-              // Extract Billcut leads data from snapshot
-              if (snapshotData.billcutLeads && snapshotData.billcutLeads.userProductivity) {
-                snapshotData.billcutLeads.userProductivity.forEach((userData: any) => {
-                  const userId = userData.userId || "Unassigned"
-                  const userName = userData.userName || "Unassigned"
-                  
-                  // Initialize user summary if not exists
-                  if (!userSummaryMap[userId]) {
-                    userSummaryMap[userId] = {
-                      userId,
-                      userName,
-                      date: selectedProductivityRange === "yesterday" ? "Yesterday" : 
-                            selectedProductivityRange === "last7days" ? "Last 7 Days" : "Last 30 Days",
-                      leadsWorked: 0,
-                      convertedLeads: 0,
-                      lastActivity: new Date(0),
-                      statusBreakdown: {},
-                    }
-                  }
-
-                  // Aggregate data
-                  userSummaryMap[userId].leadsWorked += userData.leadsWorked || 0
-                  userSummaryMap[userId].convertedLeads += userData.convertedLeads || 0
-                  
-                  // Update last activity
-                  if (userData.lastActivity) {
-                    const lastActivityDate = userData.lastActivity.toDate ? userData.lastActivity.toDate() : new Date(userData.lastActivity)
-                    if (lastActivityDate > userSummaryMap[userId].lastActivity) {
-                      userSummaryMap[userId].lastActivity = lastActivityDate
-                    }
-                  }
-
-                  // Aggregate status breakdown
-                  if (userData.statusBreakdown) {
-                    Object.entries(userData.statusBreakdown).forEach(([status, count]) => {
-                      const normalizedStatus = status === "–" ? "No Status" : status
-                      userSummaryMap[userId].statusBreakdown[normalizedStatus] = 
-                        (userSummaryMap[userId].statusBreakdown[normalizedStatus] || 0) + (count as number)
-                    })
-                  }
-                })
-              }
-            })
-          })
-
-          // Convert to array and sort
-          Object.values(userSummaryMap).forEach((stats) => {
-            productivityArray.push(stats)
-          })
-
-          productivityArray.sort((a, b) => b.leadsWorked - a.leadsWorked)
-
-          console.log("Productivity stats (Historical - Snapshots):", productivityArray)
-          setProductivityStats(productivityArray)
+        
+        const params = new URLSearchParams()
+        params.append("type", "productivity")
+        params.append("range", selectedProductivityRange)
+        
+        if (selectedProductivityRange === "custom") {
+            params.append("productivityStartDate", productivityDateRange.startDate.toISOString())
+            params.append("productivityEndDate", productivityDateRange.endDate.toISOString())
         }
+
+        const response = await fetch(`/api/reports/billcut-leads?${params.toString()}`, { cache: 'no-store' })
+        if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API Error Details:", errorData);
+        throw new Error(errorData.message || "Failed to fetch productivity data");
+      }  
+        const data = await response.json()
+        
+        // Convert date strings back to Date objects if needed, or handle in component
+        const processedStats = data.productivityStats.map((stat: any) => ({
+            ...stat,
+            lastActivity: new Date(stat.lastActivity)
+        }))
+
+        setProductivityStats(processedStats)
       } catch (error) {
         console.error("Error fetching productivity data:", error)
+        toast.error("Failed to load productivity data")
       } finally {
         setProductivityLoading(false)
       }
@@ -1095,597 +792,7 @@ const BillcutLeadReportContent = () => {
     fetchProductivityData()
   }, [selectedProductivityRange, productivityDateRange])
 
-  // Analytics calculations
-  const analytics = useMemo(() => {
-    if (!leads.length) return null
 
-    // Basic metrics
-    const totalLeads = leads.length
-    const uniqueAssignees = new Set(leads.map((lead) => lead.assigned_to)).size
-
-    // Calculate average debt range
-    const debtRanges: number[] = leads
-      .map((lead) => {
-        const range = lead.debt_range || "Not specified"
-        if (range === "Not specified") return null
-        const [min, max] = range.split(" - ").map((r) => {
-          const num = Number.parseInt(r)
-          return isNaN(num) ? 0 : num * 100000 // Convert lakhs to actual amount, handle invalid numbers
-        })
-        return (min + max) / 2
-      })
-      .filter((val): val is number => val !== null && val > 0) // Filter out null and zero values
-
-    const averageDebt =
-      debtRanges.length > 0 ? Math.round(debtRanges.reduce((sum, val) => sum + val, 0) / debtRanges.length) : 0
-
-    // Calculate conversion rate
-    const convertedLeads = leads.filter((lead) => lead.category === "Converted").length
-    const conversionRate = (convertedLeads / totalLeads) * 100
-
-    // NEW: Short Loan Analytics
-    const shortLoanLeads = leads.filter((lead) => lead.category === "Short Loan").length
-    const shortLoanRate = (shortLoanLeads / totalLeads) * 100
-
-    // NEW: Conversion Time Analysis
-    const convertedLeadsWithTime = leads.filter(
-      (lead) => lead.category === "Converted" && lead.convertedAt && (lead.date || lead.synced_date),
-    )
-
-    const conversionTimeData = convertedLeadsWithTime.map((lead) => {
-      const leadCreationTime =
-        lead.date || (lead.synced_date?.toMillis ? lead.synced_date.toMillis() : lead.synced_date)
-      const conversionTime = lead.convertedAt?.toMillis ? lead.convertedAt.toMillis() : lead.convertedAt
-      const timeDiffMs = conversionTime - leadCreationTime
-      const timeDiffDays = Math.floor(timeDiffMs / (1000 * 60 * 60 * 24))
-      const timeDiffHours = Math.floor((timeDiffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-
-      return {
-        leadName: lead.name,
-        assignedTo: lead.assigned_to,
-        createdAt: new Date(leadCreationTime),
-        convertedAt: new Date(conversionTime),
-        conversionTimeDays: timeDiffDays,
-        conversionTimeHours: timeDiffHours,
-        conversionTimeMs: timeDiffMs,
-        debtRange: lead.debt_range,
-        income: lead.income,
-      }
-    })
-
-    // Average conversion time calculation
-    const avgConversionTimeMs =
-      conversionTimeData.length > 0
-        ? conversionTimeData.reduce((sum, item) => sum + item.conversionTimeMs, 0) / conversionTimeData.length
-        : 0
-
-    const avgConversionTimeDays = Math.floor(avgConversionTimeMs / (1000 * 60 * 60 * 24))
-    const avgConversionTimeHours = Math.floor((avgConversionTimeMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-
-    // Conversion time distribution (buckets)
-    const conversionTimeBuckets = {
-      "Same Day (0-24h)": 0,
-      "2-3 Days": 0,
-      "4-7 Days": 0,
-      "1-2 Weeks": 0,
-      "2-4 Weeks": 0,
-      "1-2 Months": 0,
-      "2+ Months": 0,
-    }
-
-    conversionTimeData.forEach((item) => {
-      const days = item.conversionTimeDays
-      if (days === 0) conversionTimeBuckets["Same Day (0-24h)"]++
-      else if (days <= 3) conversionTimeBuckets["2-3 Days"]++
-      else if (days <= 7) conversionTimeBuckets["4-7 Days"]++
-      else if (days <= 14) conversionTimeBuckets["1-2 Weeks"]++
-      else if (days <= 30) conversionTimeBuckets["2-4 Weeks"]++
-      else if (days <= 60) conversionTimeBuckets["1-2 Months"]++
-      else conversionTimeBuckets["2+ Months"]++
-    })
-
-    // NEW: Lead Entry Timeline Analysis
-    const leadEntryTimeline = leads.reduce(
-      (acc, lead) => {
-        const creationDate = new Date(
-          lead.date || (lead.synced_date?.toMillis ? lead.synced_date.toMillis() : lead.synced_date),
-        )
-        const dateKey = creationDate.toISOString().split("T")[0] // YYYY-MM-DD format
-
-        if (!acc[dateKey]) {
-          acc[dateKey] = {
-            date: dateKey,
-            totalLeads: 0,
-            convertedLeads: 0,
-            interestedLeads: 0,
-            notInterestedLeads: 0,
-          }
-        }
-
-        acc[dateKey].totalLeads++
-        if (lead.category === "Converted") {
-          acc[dateKey].convertedLeads++
-        } else if (lead.category === "Interested") {
-          acc[dateKey].interestedLeads++
-        } else if (lead.category === "Not Interested") {
-          acc[dateKey].notInterestedLeads++
-        }
-
-        return acc
-      },
-      {} as Record<string, any>,
-    )
-
-    const leadEntryTimelineData = Object.values(leadEntryTimeline)
-      .sort((a: any, b: any) => a.date.localeCompare(b.date))
-      .slice(-30) // Show last 30 days
-
-    // Conversion time by salesperson
-    const conversionTimeBySalesperson = conversionTimeData.reduce(
-      (acc, item) => {
-        if (!acc[item.assignedTo]) {
-          acc[item.assignedTo] = {
-            name: item.assignedTo,
-            conversions: [],
-            avgDays: 0,
-            fastestDays: Number.POSITIVE_INFINITY,
-            slowestDays: 0,
-          }
-        }
-        acc[item.assignedTo].conversions.push(item.conversionTimeDays)
-        return acc
-      },
-      {} as Record<string, any>,
-    )
-
-    // Calculate averages for each salesperson
-    Object.values(conversionTimeBySalesperson).forEach((rep: any) => {
-      const conversions = rep.conversions
-      rep.avgDays = conversions.reduce((sum: number, days: number) => sum + days, 0) / conversions.length
-      rep.fastestDays = Math.min(...conversions)
-      rep.slowestDays = Math.max(...conversions)
-      rep.totalConversions = conversions.length
-    })
-
-    const conversionTimeBySalespersonData = Object.values(conversionTimeBySalesperson)
-
-    // Hourly lead entry pattern
-    const hourlyPattern = leads.reduce(
-      (acc, lead) => {
-        const creationDate = new Date(
-          lead.date || (lead.synced_date?.toMillis ? lead.synced_date.toMillis() : lead.synced_date),
-        )
-        const hour = creationDate.getHours()
-        acc[hour] = (acc[hour] || 0) + 1
-        return acc
-      },
-      {} as Record<number, number>,
-    )
-
-    const hourlyPatternData = Array.from({ length: 24 }, (_, hour) => ({
-      hour: `${hour}:00`,
-      leads: hourlyPattern[hour] || 0,
-    }))
-
-    // Day of week pattern
-    const dayOfWeekPattern = leads.reduce(
-      (acc, lead) => {
-        const creationDate = new Date(
-          lead.date || (lead.synced_date?.toMillis ? lead.synced_date.toMillis() : lead.synced_date),
-        )
-        const dayOfWeek = creationDate.getDay() // 0 = Sunday, 6 = Saturday
-        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-        const dayName = dayNames[dayOfWeek]
-        acc[dayName] = (acc[dayName] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    const dayOfWeekPatternData = Object.entries(dayOfWeekPattern).map(([day, count]) => ({ day, count }))
-
-    // Category distribution with percentage
-    const categoryDistribution = leads.reduce(
-      (acc, lead) => {
-        const category = lead.category || "Uncategorized"
-        acc[category] = (acc[category] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    const categoryData = Object.entries(categoryDistribution).map(([name, value]) => ({
-      name,
-      value,
-      percentage: (value / totalLeads) * 100,
-    }))
-
-    // Assigned to distribution
-    const assigneeDistribution = leads.reduce(
-      (acc, lead) => {
-        const assignee = lead.assigned_to || "Unassigned"
-        acc[assignee] = (acc[assignee] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    // Debt range distribution
-    const debtRangeDistribution = leads.reduce(
-      (acc, lead) => {
-        const range = lead.debt_range || "Not specified"
-        // Sort the ranges numerically for better display
-        if (range !== "Not specified") {
-          const [min, max] = range.split(" - ").map((r) => {
-            const num = Number.parseInt(r)
-            return num * 100000 // Convert lakhs to actual amount
-          })
-          acc[range] = (acc[range] || 0) + 1
-        } else {
-          acc[range] = (acc[range] || 0) + 1
-        }
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    // Sort debt ranges for better visualization
-    const sortedDebtRanges = Object.entries(debtRangeDistribution)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => {
-        if (a.name === "Not specified") return 1
-        if (b.name === "Not specified") return -1
-        const [aMin] = a.name.split(" - ").map((r) => Number.parseInt(r))
-        const [bMin] = b.name.split(" - ").map((r) => Number.parseInt(r))
-        return aMin - bMin
-      })
-
-    // Income distribution
-    const incomeRanges = {
-      "0-25K": 0,
-      "25K-50K": 0,
-      "50K-75K": 0,
-      "75K-100K": 0,
-      "100K+": 0,
-    }
-
-    leads.forEach((lead) => {
-      const income = Number.parseInt(lead.income) || 0
-      if (income <= 25000) incomeRanges["0-25K"]++
-      else if (income <= 50000) incomeRanges["25K-50K"]++
-      else if (income <= 75000) incomeRanges["50K-75K"]++
-      else if (income <= 100000) incomeRanges["75K-100K"]++
-      else incomeRanges["100K+"]++
-    })
-
-    // Geographic distribution (extract state from pincode)
-    const stateDistribution = leads.reduce(
-      (acc, lead) => {
-        const address = lead.address || ""
-        // Extract pincode (6 digits) from address
-        const pincodeMatch = address.match(/\b\d{6}\b/)
-        const pincode = pincodeMatch ? pincodeMatch[0] : ""
-        let state = "Unknown"
-
-        if (pincode) {
-          const firstTwoDigits = Number.parseInt(pincode.substring(0, 2))
-          if (firstTwoDigits === 11) state = "Delhi"
-          else if (firstTwoDigits >= 12 && firstTwoDigits <= 13) state = "Haryana"
-          else if (firstTwoDigits >= 14 && firstTwoDigits <= 16) state = "Punjab"
-          else if (firstTwoDigits === 17) state = "Himachal Pradesh"
-          else if (firstTwoDigits >= 18 && firstTwoDigits <= 19) state = "Jammu & Kashmir"
-          else if (firstTwoDigits >= 20 && firstTwoDigits <= 28) state = "Uttar Pradesh"
-          else if (firstTwoDigits >= 30 && firstTwoDigits <= 34) state = "Rajasthan"
-          else if (firstTwoDigits >= 36 && firstTwoDigits <= 39) state = "Gujarat"
-          else if (firstTwoDigits >= 0 && firstTwoDigits <= 44) state = "Maharashtra"
-          else if (firstTwoDigits >= 45 && firstTwoDigits <= 48) state = "Madhya Pradesh"
-          else if (firstTwoDigits === 49) state = "Chhattisgarh"
-          else if (firstTwoDigits >= 50 && firstTwoDigits <= 53) state = "Andhra Pradesh/Telangana"
-          else if (firstTwoDigits >= 56 && firstTwoDigits <= 59) state = "Karnataka"
-          else if (firstTwoDigits >= 60 && firstTwoDigits <= 64) state = "Tamil Nadu"
-          else if (firstTwoDigits >= 67 && firstTwoDigits <= 69) state = "Kerala"
-          else if (firstTwoDigits === 682) state = "Lakshadweep"
-          else if (firstTwoDigits >= 70 && firstTwoDigits <= 74) state = "West Bengal"
-          else if (firstTwoDigits === 744) state = "Andaman & Nicobar"
-          else if (firstTwoDigits >= 75 && firstTwoDigits <= 77) state = "Odisha"
-          else if (firstTwoDigits === 78) state = "Assam"
-          else if (firstTwoDigits === 79) state = "North Eastern States"
-          else if (firstTwoDigits >= 80 && firstTwoDigits <= 85) state = "Bihar"
-          else if ((firstTwoDigits >= 80 && firstTwoDigits <= 83) || firstTwoDigits === 92) state = "Jharkhand"
-        }
-
-        acc[state] = (acc[state] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    // Sort states by count in descending order
-    const sortedStateDistribution = Object.entries(stateDistribution)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 10) // Take top 10 states
-
-    // Time-based analysis
-    const monthlyDistribution = leads.reduce(
-      (acc, lead) => {
-        const date = new Date(lead.date)
-        const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
-        acc[monthYear] = (acc[monthYear] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    // FIXED: Sales performance with proper converted lead tracking using convertedAt
-    const salesPerformance = Object.entries(assigneeDistribution).map(([name, count]) => {
-      const assigneeLeads = leads.filter((lead) => lead.assigned_to === name)
-      const interestedCount = assigneeLeads.filter((lead) => lead.category === "Interested").length
-      
-      // FIXED: For converted leads, we should ideally check convertedAt field exists
-      // But since we're working with the current leads array, we'll use category for now
-      // In a real implementation, you might want to fetch converted leads separately
-      const convertedCount = assigneeLeads.filter((lead) => 
-        lead.category === "Converted" && lead.convertedAt // Only count if convertedAt exists
-      ).length
-      
-      const conversionRate = count > 0 ? ((interestedCount + convertedCount) / count) * 100 : 0
-
-      return {
-        name,
-        totalLeads: count,
-        interested: interestedCount,
-        converted: convertedCount,
-        conversionRate: Math.round(conversionRate * 100) / 100,
-      }
-    })
-
-    // Contact info analysis
-    const contactAnalysis = {
-      hasEmail: leads.filter((lead) => lead.email && lead.email !== "").length,
-      hasPhone: leads.filter((lead) => lead.mobile && lead.mobile !== "").length,
-      hasNotes: leads.filter((lead) => lead.sales_notes && lead.sales_notes !== "").length,
-    }
-
-    // NEW: Language Barrier Analytics
-    const languageBarrierLeads = leads.filter(
-      (lead) =>
-        lead.category === "Language Barrier" ||
-        lead.status === "Language Barrier" ||
-        (lead.language_barrier && lead.language_barrier !== ""),
-    )
-
-    // Language distribution analysis
-    const languageDistribution = languageBarrierLeads.reduce(
-      (acc, lead) => {
-        // Check multiple sources for language information
-        let language = ""
-        if (lead.language_barrier && lead.language_barrier !== "") {
-          language = lead.language_barrier
-        } else if (lead.sales_notes && lead.sales_notes.includes("Language Barrier")) {
-          // Extract language from sales notes if available
-          const languageMatch = lead.sales_notes.match(/Language Barrier[:\s-]+([A-Za-z]+)/i)
-          language = languageMatch ? languageMatch[1] : "Unknown"
-        } else {
-          language = "Unknown"
-        }
-
-        acc[language] = (acc[language] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    const languageDistributionData = Object.entries(languageDistribution)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-
-    // Language barrier by salesperson
-    const languageBarrierBySalesperson = languageBarrierLeads.reduce(
-      (acc, lead) => {
-        const salesperson = lead.assigned_to || "Unassigned"
-        if (!acc[salesperson]) {
-          acc[salesperson] = {
-            name: salesperson,
-            totalLanguageBarrierLeads: 0,
-            languages: {} as Record<string, number>,
-          }
-        }
-
-        acc[salesperson].totalLanguageBarrierLeads += 1
-
-        // Track languages for this salesperson
-        let language = ""
-        if (lead.language_barrier && lead.language_barrier !== "") {
-          language = lead.language_barrier
-        } else if (lead.sales_notes && lead.sales_notes.includes("Language Barrier")) {
-          const languageMatch = lead.sales_notes.match(/Language Barrier[:\s-]+([A-Za-z]+)/i)
-          language = languageMatch ? languageMatch[1] : "Unknown"
-        } else {
-          language = "Unknown"
-        }
-
-        acc[salesperson].languages[language] = (acc[salesperson].languages[language] || 0) + 1
-        return acc
-      },
-      {} as Record<string, { name: string; totalLanguageBarrierLeads: number; languages: Record<string, number> }>,
-    )
-
-    const languageBarrierBySalespersonData = Object.values(languageBarrierBySalesperson)
-      .map((rep) => ({
-        name: rep.name,
-        totalLeads: rep.totalLanguageBarrierLeads,
-        topLanguage: Object.entries(rep.languages).sort((a, b) => b[1] - a[1])[0]?.[0] || "Unknown",
-        topLanguageCount: Object.entries(rep.languages).sort((a, b) => b[1] - a[1])[0]?.[1] || 0,
-        uniqueLanguages: Object.keys(rep.languages).length,
-      }))
-      .sort((a, b) => b.totalLeads - a.totalLeads)
-
-    // Language barrier by geographic region (state)
-    const languageBarrierByState = languageBarrierLeads.reduce(
-      (acc, lead) => {
-        const address = lead.address || ""
-        const pincodeMatch = address.match(/\b\d{6}\b/)
-        const pincode = pincodeMatch ? pincodeMatch[0] : ""
-        let state = "Unknown"
-
-        if (pincode) {
-          const firstTwoDigits = Number.parseInt(pincode.substring(0, 2))
-          if (firstTwoDigits === 11) state = "Delhi"
-          else if (firstTwoDigits >= 12 && firstTwoDigits <= 13) state = "Haryana"
-          else if (firstTwoDigits >= 14 && firstTwoDigits <= 16) state = "Punjab"
-          else if (firstTwoDigits === 17) state = "Himachal Pradesh"
-          else if (firstTwoDigits >= 18 && firstTwoDigits <= 19) state = "Jammu & Kashmir"
-          else if (firstTwoDigits >= 20 && firstTwoDigits <= 28) state = "Uttar Pradesh"
-          else if (firstTwoDigits >= 30 && firstTwoDigits <= 34) state = "Rajasthan"
-          else if (firstTwoDigits >= 36 && firstTwoDigits <= 39) state = "Gujarat"
-          else if (firstTwoDigits >= 0 && firstTwoDigits <= 44) state = "Maharashtra"
-          else if (firstTwoDigits >= 45 && firstTwoDigits <= 48) state = "Madhya Pradesh"
-          else if (firstTwoDigits === 49) state = "Chhattisgarh"
-          else if (firstTwoDigits >= 50 && firstTwoDigits <= 53) state = "Andhra Pradesh/Telangana"
-          else if (firstTwoDigits >= 56 && firstTwoDigits <= 59) state = "Karnataka"
-          else if (firstTwoDigits >= 60 && firstTwoDigits <= 64) state = "Tamil Nadu"
-          else if (firstTwoDigits >= 67 && firstTwoDigits <= 69) state = "Kerala"
-          else if (firstTwoDigits === 682) state = "Lakshadweep"
-          else if (firstTwoDigits >= 70 && firstTwoDigits <= 74) state = "West Bengal"
-          else if (firstTwoDigits === 744) state = "Andaman & Nicobar"
-          else if (firstTwoDigits >= 75 && firstTwoDigits <= 77) state = "Odisha"
-          else if (firstTwoDigits === 78) state = "Assam"
-          else if (firstTwoDigits === 79) state = "North Eastern States"
-          else if (firstTwoDigits >= 80 && firstTwoDigits <= 85) state = "Bihar"
-          else if ((firstTwoDigits >= 80 && firstTwoDigits <= 83) || firstTwoDigits === 92) state = "Jharkhand"
-        }
-
-        if (!acc[state]) {
-          acc[state] = {
-            name: state,
-            totalLanguageBarrierLeads: 0,
-            languages: {} as Record<string, number>,
-          }
-        }
-
-        acc[state].totalLanguageBarrierLeads += 1
-
-        let language = ""
-        if (lead.language_barrier && lead.language_barrier !== "") {
-          language = lead.language_barrier
-        } else if (lead.sales_notes && lead.sales_notes.includes("Language Barrier")) {
-          const languageMatch = lead.sales_notes.match(/Language Barrier[:\s-]+([A-Za-z]+)/i)
-          language = languageMatch ? languageMatch[1] : "Unknown"
-        } else {
-          language = "Unknown"
-        }
-
-        acc[state].languages[language] = (acc[state].languages[language] || 0) + 1
-        return acc
-      },
-      {} as Record<string, { name: string; totalLanguageBarrierLeads: number; languages: Record<string, number> }>,
-    )
-
-    const languageBarrierByStateData = Object.values(languageBarrierByState)
-      .map((state) => ({
-        name: state.name,
-        totalLeads: state.totalLanguageBarrierLeads,
-        topLanguage: Object.entries(state.languages).sort((a, b) => b[1] - a[1])[0]?.[0] || "Unknown",
-        topLanguageCount: Object.entries(state.languages).sort((a, b) => b[1] - a[1])[0]?.[1] || 0,
-        uniqueLanguages: Object.keys(state.languages).length,
-      }))
-      .sort((a, b) => b.totalLeads - a.totalLeads)
-      .slice(0, 10) // Top 10 states
-
-    // Language barrier conversion analysis
-    const languageBarrierConversionData = languageBarrierLeads.reduce(
-      (acc, lead) => {
-        let language = ""
-        if (lead.language_barrier && lead.language_barrier !== "") {
-          language = lead.language_barrier
-        } else if (lead.sales_notes && lead.sales_notes.includes("Language Barrier")) {
-          const languageMatch = lead.sales_notes.match(/Language Barrier[:\s-]+([A-Za-z]+)/i)
-          language = languageMatch ? languageMatch[1] : "Unknown"
-        } else {
-          language = "Unknown"
-        }
-
-        if (!acc[language]) {
-          acc[language] = {
-            language,
-            totalLeads: 0,
-            convertedLeads: 0,
-            interestedLeads: 0,
-            notInterestedLeads: 0,
-            conversionRate: 0,
-          }
-        }
-
-        acc[language].totalLeads += 1
-        if (lead.category === "Converted") {
-          acc[language].convertedLeads += 1
-        } else if (lead.category === "Interested") {
-          acc[language].interestedLeads += 1
-        } else if (lead.category === "Not Interested") {
-          acc[language].notInterestedLeads += 1
-        }
-
-        return acc
-      },
-      {} as Record<
-        string,
-        {
-          language: string
-          totalLeads: number
-          convertedLeads: number
-          interestedLeads: number
-          notInterestedLeads: number
-          conversionRate: number
-        }
-      >,
-    )
-
-    // Calculate conversion rates
-    Object.values(languageBarrierConversionData).forEach((data) => {
-      data.conversionRate = data.totalLeads > 0 ? (data.convertedLeads / data.totalLeads) * 100 : 0
-    })
-
-    const languageBarrierConversionDataArray = Object.values(languageBarrierConversionData).sort(
-      (a, b) => b.totalLeads - a.totalLeads,
-    )
-
-    return {
-      totalLeads,
-      uniqueAssignees,
-      averageDebt,
-      conversionRate: Math.round(conversionRate * 100) / 100,
-      // NEW: Short Loan Analytics
-      shortLoanRate: Math.round(shortLoanRate * 100) / 100,
-      // NEW: Conversion time analytics
-      conversionTimeData,
-      avgConversionTimeDays,
-      avgConversionTimeHours,
-      conversionTimeBuckets: Object.entries(conversionTimeBuckets).map(([name, value]) => ({ name, value })),
-      conversionTimeBySalesperson: conversionTimeBySalespersonData,
-      // NEW: Lead entry analytics
-      leadEntryTimelineData,
-      hourlyPatternData,
-      dayOfWeekPatternData,
-      // NEW: Language barrier analytics
-      languageBarrierLeads: languageBarrierLeads.length,
-      languageDistribution: languageDistributionData,
-      languageBarrierBySalesperson: languageBarrierBySalespersonData,
-      languageBarrierByState: languageBarrierByStateData,
-      languageBarrierConversion: languageBarrierConversionDataArray,
-      // Existing analytics
-      categoryDistribution: categoryData,
-      assigneeDistribution: Object.entries(assigneeDistribution).map(([name, value]) => ({ name, value })),
-      debtRangeDistribution: sortedDebtRanges,
-      incomeDistribution: Object.entries(incomeRanges).map(([name, value]) => ({ name, value })),
-      stateDistribution: sortedStateDistribution,
-      monthlyDistribution: Object.entries(monthlyDistribution)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-      salesPerformance,
-      contactAnalysis,
-    }
-  }, [leads])
 
   if (isLoading) {
     return (
@@ -2172,7 +1279,7 @@ const BillcutLeadReportContent = () => {
               value={
                 analytics.conversionTimeData.length > 0
                   ? (() => {
-                      const fastest = Math.min(...analytics.conversionTimeData.map((item) => item.conversionTimeDays))
+                      const fastest = Math.min(...analytics.conversionTimeData.map((item: any) => item.conversionTimeDays))
                       return fastest === 0 ? "Same Day" : `${fastest} days`
                     })()
                   : "N/A"
@@ -2184,7 +1291,7 @@ const BillcutLeadReportContent = () => {
               title="Slowest Conversion"
               value={
                 analytics.conversionTimeData.length > 0
-                  ? `${Math.max(...analytics.conversionTimeData.map((item) => item.conversionTimeDays))} days`
+                  ? `${Math.max(...analytics.conversionTimeData.map((item: any) => item.conversionTimeDays))} days`
                   : "N/A"
               }
               icon={<FiActivity size={24} />}
@@ -2405,7 +1512,7 @@ const BillcutLeadReportContent = () => {
                     dataKey="value"
                     label={({ name, value }) => `${name}: ${value}`}
                   >
-                    {analytics.incomeDistribution.map((entry, index) => (
+                    {analytics.incomeDistribution.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -2580,7 +1687,7 @@ const BillcutLeadReportContent = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {analytics.languageDistribution.map((language, index) => {
+                    {analytics.languageDistribution.map((language: any, index: number) => {
                       const percentage =
                         analytics.languageBarrierLeads > 0
                           ? ((language.value / analytics.languageBarrierLeads) * 100).toFixed(1)
@@ -2660,7 +1767,7 @@ const BillcutLeadReportContent = () => {
                 Column Visibility Controls
               </h4>
               <div className="flex flex-wrap gap-2">
-                {analytics.categoryDistribution.map((category) => (
+                {analytics.categoryDistribution.map((category: any) => (
                   <button
                     key={category.name}
                     onClick={() => toggleColumnVisibility(category.name)}
@@ -2701,7 +1808,7 @@ const BillcutLeadReportContent = () => {
                         </button>
                       </div>
                     </th>
-                    {analytics.categoryDistribution.map((category) => (
+                    {analytics.categoryDistribution.map((category: any) => (
                       <th
                         key={category.name}
                         className={`px-3 lg:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider border-2 ${
@@ -2747,23 +1854,9 @@ const BillcutLeadReportContent = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {analytics.salesPerformance.map((rep) => {
+                  {analytics.salesPerformance.map((rep: any) => {
                     // Get detailed status breakdown for this salesperson
-                    const repLeads = leads.filter((lead) => lead.assigned_to === rep.name)
-                    const statusBreakdown = analytics.categoryDistribution.reduce(
-                      (acc, category) => {
-                        // FIXED: For converted status, only count leads that have convertedAt field
-                        if (category.name === "Converted") {
-                          acc[category.name] = repLeads.filter(
-                            (lead) => lead.category === category.name && lead.convertedAt
-                          ).length
-                        } else {
-                          acc[category.name] = repLeads.filter((lead) => lead.category === category.name).length
-                        }
-                        return acc
-                      },
-                      {} as Record<string, number>,
-                    )
+                    const statusBreakdown = rep.statusBreakdown || {}
 
                     return (
                       <tr key={rep.name} className="hover:opacity-80 transition-opacity duration-200">
@@ -2772,7 +1865,7 @@ const BillcutLeadReportContent = () => {
                         }`}>
                           {rep.name}
                         </td>
-                        {analytics.categoryDistribution.map((category) => (
+                        {analytics.categoryDistribution.map((category: any) => (
                           <td
                             key={category.name}
                             className={`px-3 lg:px-6 py-4 whitespace-nowrap text-sm border-2 ${
@@ -2827,7 +1920,7 @@ const BillcutLeadReportContent = () => {
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                 <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">Top Performer</h4>
                 {(() => {
-                  const topPerformer = analytics.salesPerformance.reduce((max, rep) =>
+                  const topPerformer = analytics.salesPerformance.reduce((max: any, rep: any) =>
                     rep.conversionRate > max.conversionRate ? rep : max,
                   )
                   return (
@@ -2843,7 +1936,7 @@ const BillcutLeadReportContent = () => {
               <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
                 <h4 className="font-semibold text-green-900 dark:text-green-200 mb-2">Most Leads</h4>
                 {(() => {
-                  const mostLeads = analytics.salesPerformance.reduce((max, rep) =>
+                  const mostLeads = analytics.salesPerformance.reduce((max: any, rep: any) =>
                     rep.totalLeads > max.totalLeads ? rep : max,
                   )
                   return (
@@ -2859,7 +1952,7 @@ const BillcutLeadReportContent = () => {
               <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
                 <h4 className="font-semibold text-purple-900 dark:text-purple-200 mb-2">Most Converted</h4>
                 {(() => {
-                  const mostConverted = analytics.salesPerformance.reduce((max, rep) =>
+                  const mostConverted = analytics.salesPerformance.reduce((max: any, rep: any) =>
                     rep.converted > max.converted ? rep : max,
                   )
                   return (

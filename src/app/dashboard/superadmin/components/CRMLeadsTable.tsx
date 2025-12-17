@@ -1,10 +1,13 @@
 import React from 'react';
-import { LeadsBySourceData, SourceTotals } from '../types';
+import { LeadsBySourceData, SourceTotals, Salesperson, SalesTargetData, LeadsBySalesperson } from '../types';
 import { SalespersonPerformanceTable } from './SalespersonPerformanceTable';
 
 interface CRMLeadsTableProps {
   leadsBySourceData: LeadsBySourceData;
   sourceTotals: SourceTotals;
+  salespeople: Salesperson[];
+  allSalesTargets: Record<string, SalesTargetData>;
+  leadsBySalesperson: LeadsBySalesperson;
   isLoading: boolean;
   selectedAnalyticsMonth?: number | null;
   selectedAnalyticsYear?: number | null;
@@ -13,6 +16,9 @@ interface CRMLeadsTableProps {
 export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   leadsBySourceData,
   sourceTotals,
+  salespeople,
+  allSalesTargets,
+  leadsBySalesperson,
   isLoading,
   selectedAnalyticsMonth,
   selectedAnalyticsYear
@@ -125,6 +131,9 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       {/* Salesperson Performance Table */}
       <div className="mt-4">
         <SalespersonPerformanceTable
+          salespeople={salespeople}
+          allSalesTargets={allSalesTargets}
+          leadsBySalesperson={leadsBySalesperson}
           selectedAnalyticsMonth={selectedAnalyticsMonth}
           selectedAnalyticsYear={selectedAnalyticsYear}
         />
