@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       month: '2-digit',
       year: 'numeric'
     });
-    
+
     // Set up data for the template
     const requestData = {
       bankName,
@@ -45,10 +45,13 @@ export async function POST(request: Request) {
     };
 
     // Use storage directly
+    if (!storage) {
+      throw new Error("Firebase Admin Storage is not initialized");
+    }
     const bucket = storage.bucket();
     const file = bucket.file('templates/harassment_complaint_template.docx');
     const [templateBuffer] = await file.download();
-    
+
     // Process the template
     const zip = new PizZip(templateBuffer);
     const doc = new Docxtemplater(zip, {
@@ -61,7 +64,7 @@ export async function POST(request: Request) {
 
     // Generate document buffer
     const buffer = doc.getZip().generate({ type: 'nodebuffer' });
-    
+
     // Create response with appropriate headers
     return new NextResponse(buffer, {
       headers: {
