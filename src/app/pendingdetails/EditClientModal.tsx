@@ -4,7 +4,7 @@ import { Lead } from './types/lead'
 import  {db, storage}  from '../../firebase/firebase'
 import { doc, setDoc, writeBatch } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { getBankDataSync } from '../../data/bankData'
+import { getBankDataSync, getBankData } from '../../data/bankData'
 
 // Define Indian states array
 const indianStates = [
@@ -955,31 +955,7 @@ const EditClientModal = ({
                 </div>
               </FormSection>
 
-              <FormSection title="Notes & Remarks">
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="remarks" className="block text-sm font-medium text-gray-400 mb-1">Client Message/Query</label>
-                    <textarea
-                      id="remarks"
-                      value={lead.remarks || ''}
-                      onChange={(e) => handleFieldChange('remarks', e.target.value)}
-                      rows={3}
-                      className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    ></textarea>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="salesNotes" className="block text-sm font-medium text-gray-400 mb-1">Sales Notes</label>
-                    <textarea
-                      id="salesNotes"
-                      value={lead.salesNotes || ''}
-                      onChange={(e) => handleFieldChange('salesNotes', e.target.value)}
-                      rows={3}
-                      className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    ></textarea>
-                  </div>
-                </div>
-              </FormSection>
+
             </div>
             
             <div className="mt-6 flex justify-end space-x-3">
@@ -1149,15 +1125,19 @@ interface BankFormProps {
 }
 
 const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
-  const [isEditingBankName, setIsEditingBankName] = useState(false);
   const [bankData, setBankData] = useState<Record<string, any>>({});
   const [isLoadingBanks, setIsLoadingBanks] = useState(true);
+  
+  // New state for custom dropdown
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   // Load bank data dynamically
   useEffect(() => {
     const loadBankData = async () => {
       try {
-        const data = getBankDataSync();
+        const data = await getBankData();
         setBankData(data);
       } catch (error) {
         console.error('Error loading bank data:', error);
@@ -1169,7 +1149,31 @@ const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
     loadBankData();
   }, []);
 
-  const bankNames = Object.keys(bankData);
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Sort bank names alphabetically
+  const bankNames = useMemo(() => {
+    return Object.keys(bankData).sort((a, b) => a.localeCompare(b));
+  }, [bankData]);
+
+  // Filter banks based on search term
+  const filteredBanks = useMemo(() => {
+    return bankNames.filter(name => 
+      name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [bankNames, searchTerm]);
 
   return (
     <div className="bg-gray-750 p-4 rounded-lg border border-gray-700 relative">
@@ -1184,37 +1188,7 @@ const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
       </button>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor={`bank-${bank.id}-name`} className="block text-sm font-medium text-gray-400 mb-1">Bank Name</label>
-          {isEditingBankName ? (
-            <input
-              id={`bank-${bank.id}-name`}
-              type="text"
-              value={bank.bankName}
-              onChange={(e) => onUpdate(bank.id, 'bankName', e.target.value)}
-              onBlur={() => setIsEditingBankName(false)}
-              className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              autoFocus
-            />
-          ) : (
-            <select
-              id={`bank-${bank.id}-name`}
-              value={bank.bankName}
-              onChange={(e) => {
-                onUpdate(bank.id, 'bankName', e.target.value);
-                setIsEditingBankName(true);
-              }}
-              className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Select Bank</option>
-              {bankNames.map((bankName) => (
-                <option key={bankName} value={bankName}>
-                  {bankName}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
+        {/* Loan Type - Moved to be first */}
         <div>
           <label htmlFor={`bank-${bank.id}-loanType`} className="block text-sm font-medium text-gray-400 mb-1">Loan Type</label>
           <select
@@ -1229,6 +1203,68 @@ const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
             <option value="Business Loan">Business Loan</option>
           </select>
         </div>
+
+        {/* Bank Name - Custom Dropdown with Search */}
+        <div ref={dropdownRef} className="relative">
+          <label htmlFor={`bank-${bank.id}-name`} className="block text-sm font-medium text-gray-400 mb-1">Bank Name</label>
+          
+          <div 
+            className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white cursor-pointer flex justify-between items-center"
+            onClick={() => {
+              setIsDropdownOpen(!isDropdownOpen);
+              // Focus search input when opening
+              if (!isDropdownOpen) {
+                setTimeout(() => {
+                  const searchInput = document.getElementById(`bank-${bank.id}-search`);
+                  if (searchInput) searchInput.focus();
+                }, 100);
+              }
+            }}
+          >
+            <span className={bank.bankName ? 'text-white' : 'text-gray-400'}>
+              {bank.bankName || "Select Bank"}
+            </span>
+            <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+
+          {isDropdownOpen && (
+            <div className="absolute z-10 mt-1 w-full bg-gray-700 border border-gray-600 rounded-md shadow-lg max-h-60 flex flex-col">
+              <div className="p-2 border-b border-gray-600 sticky top-0 bg-gray-700 z-20">
+                <input
+                  id={`bank-${bank.id}-search`}
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search bank..."
+                  className="w-full bg-gray-800 border border-gray-600 rounded-md py-1 px-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+              <div className="overflow-y-auto flex-1">
+                {filteredBanks.length > 0 ? (
+                  filteredBanks.map((bankName) => (
+                    <div
+                      key={bankName}
+                      className={`px-3 py-2 cursor-pointer hover:bg-gray-600 text-sm ${bank.bankName === bankName ? 'bg-blue-900 text-blue-100' : 'text-gray-200'}`}
+                      onClick={() => {
+                        onUpdate(bank.id, 'bankName', bankName);
+                        setIsDropdownOpen(false);
+                        setSearchTerm('');
+                      }}
+                    >
+                      {bankName}
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-sm text-gray-400 text-center">No banks found</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div>
           <label 
             htmlFor={`bank-${bank.id}-accountNumber`}
