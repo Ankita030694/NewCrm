@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import { toast } from "react-toastify"
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth"
-import { auth, functions } from "@/firebase/firebase"
+import { auth, functions, db } from "@/firebase/firebase"
 import { httpsCallable } from "firebase/functions"
+import { doc, onSnapshot } from "firebase/firestore"
 
 import LeadsHeader from "./components/AmaLeadsHeader"
 import LeadsFilters from "./components/AmaLeadsFilters"
@@ -200,6 +201,69 @@ const AmaLeadsPage = () => {
       }
     }
   }, [meta.page, meta.totalPages, isLoading, searchQuery, statusFilter, sourceFilter, salesPersonFilter, activeTab, sortConfig, fromDate, toDate])
+
+  // Real-time Listeners
+  const listenersRef = useRef<{ [key: string]: () => void }>({})
+
+  // Cleanup listeners on unmount
+  useEffect(() => {
+      return () => {
+          Object.values(listenersRef.current).forEach(unsubscribe => unsubscribe())
+          listenersRef.current = {}
+      }
+  }, [])
+
+  useEffect(() => {
+      const currentIds = leads.map(l => l.id)
+      const activeIds = Object.keys(listenersRef.current)
+
+      // 1. Unsubscribe from leads that are no longer in the list
+      activeIds.forEach(id => {
+          if (!currentIds.includes(id)) {
+              if (listenersRef.current[id]) {
+                  listenersRef.current[id]()
+                  delete listenersRef.current[id]
+              }
+          }
+      })
+
+      // 2. Subscribe to new leads
+      currentIds.forEach(id => {
+          if (!listenersRef.current[id]) {
+              listenersRef.current[id] = onSnapshot(doc(db, "ama_leads", id), (docSnapshot) => {
+                  if (docSnapshot.exists()) {
+                      const data = docSnapshot.data()
+                      
+                      setLeads(prevLeads => prevLeads.map(l => {
+                          if (l.id === id) {
+                              const newStatus = data.status
+                              // Handle both camelCase and snake_case for assignment
+                              const newAssignedTo = data.assigned_to || data.assignedTo
+                              const newAssignedToId = data.assigned_to_id || data.assignedToId
+                              const newSalesNotes = data.salesNotes
+
+                              // Only update if relevant fields changed
+                              if (l.status !== newStatus || 
+                                  l.assignedTo !== newAssignedTo || 
+                                  l.salesNotes !== newSalesNotes) {
+                                  
+                                  return {
+                                      ...l,
+                                      status: newStatus,
+                                      assignedTo: newAssignedTo,
+                                      assignedToId: newAssignedToId,
+                                      salesNotes: newSalesNotes,
+                                      // Preserve other fields
+                                  }
+                              }
+                          }
+                          return l
+                      }))
+                  }
+              })
+          }
+      })
+  }, [leads])
 
   const handleSort = (key: string) => {
     setSortConfig((prev) => ({
