@@ -7,6 +7,7 @@ import { collection, getDocs, query, where, orderBy, limit } from "firebase/fire
 import { db as crmDb } from "@/firebase/firebase"
 import { debounce } from "lodash"
 import { resolveLeadState } from "../utils/location"
+import BillcutDateInput from "./BillcutDateInput"
 
 type BillcutLeadsFiltersProps = {
   searchQuery: string
@@ -565,26 +566,24 @@ const BillcutLeadsFiltersOptimized = ({
 
           {/* From Date */}
           <div className="space-y-1">
-            <label className="block text-xs text-gray-400">From Date</label>
-            <input
-              type="date"
+            <BillcutDateInput
+              label="From Date"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              onChange={setFromDate}
               max={toDate || getCurrentDate}
-              className="block w-full pl-3 pr-3 py-2 text-sm border border-gray-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-blue-500 focus:border-blue-400 rounded-lg transition-all duration-200"
+              placeholder="Select start date"
             />
           </div>
 
           {/* To Date */}
           <div className="space-y-1">
-            <label className="block text-xs text-gray-400">To Date</label>
-            <input
-              type="date"
+            <BillcutDateInput
+              label="To Date"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              onChange={setToDate}
               min={fromDate}
               max={getCurrentDate}
-              className="block w-full pl-3 pr-3 py-2 text-sm border border-gray-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-blue-500 focus:border-blue-400 rounded-lg transition-all duration-200"
+              placeholder="Select end date"
             />
           </div>
 

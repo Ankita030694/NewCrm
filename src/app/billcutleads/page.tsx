@@ -468,15 +468,19 @@ const BillCutLeadsPage = () => {
 
       // Date filters - using 'date' field instead of 'synced_date'
       if (fromDate) {
-        const fromDateStart = new Date(fromDate)
-        fromDateStart.setHours(0, 0, 0, 0)
-        constraints.push(where("date", ">=", fromDateStart.getTime()))
+        // Explicitly construct UTC date to avoid local timezone interference
+        const start = new Date(`${fromDate}T00:00:00.000Z`)
+        // Adjust for IST (UTC+5:30) -> Subtract 5.5 hours
+        start.setTime(start.getTime() - (330 * 60 * 1000))
+        constraints.push(where("date", ">=", start.getTime()))
       }
 
       if (toDate) {
-        const toDateEnd = new Date(toDate)
-        toDateEnd.setHours(23, 59, 59, 999)
-        constraints.push(where("date", "<=", toDateEnd.getTime()))
+        // Explicitly construct UTC date
+        const end = new Date(`${toDate}T23:59:59.999Z`)
+        // Adjust for IST (UTC+5:30) -> Subtract 5.5 hours
+        end.setTime(end.getTime() - (330 * 60 * 1000))
+        constraints.push(where("date", "<=", end.getTime()))
       }
 
       // Check if Advanced Date Filters are active
@@ -578,15 +582,19 @@ const BillCutLeadsPage = () => {
 
     // Date filters - using 'date' field instead of 'synced_date'
     if (fromDate) {
-      const fromDateStart = new Date(fromDate)
-      fromDateStart.setHours(0, 0, 0, 0)
-      constraints.push(where("date", ">=", fromDateStart.getTime()))
+      // Explicitly construct UTC date to avoid local timezone interference
+      const start = new Date(`${fromDate}T00:00:00.000Z`)
+      // Adjust for IST (UTC+5:30) -> Subtract 5.5 hours
+      start.setTime(start.getTime() - (330 * 60 * 1000))
+      constraints.push(where("date", ">=", start.getTime()))
     }
 
     if (toDate) {
-      const toDateEnd = new Date(toDate)
-      toDateEnd.setHours(23, 59, 59, 999)
-      constraints.push(where("date", "<=", toDateEnd.getTime()))
+      // Explicitly construct UTC date
+      const end = new Date(`${toDate}T23:59:59.999Z`)
+      // Adjust for IST (UTC+5:30) -> Subtract 5.5 hours
+      end.setTime(end.getTime() - (330 * 60 * 1000))
+      constraints.push(where("date", "<=", end.getTime()))
     }
 
     // Admin/Overlord only filters
