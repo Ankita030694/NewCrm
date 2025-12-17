@@ -558,7 +558,7 @@ const AmaLeadsFilters = ({
                 className="block w-full pl-3 pr-10 py-2 text-sm border border-[#5A4C33]/20 bg-[#ffffff] text-[#5A4C33] focus:outline-none focus:ring-[#D2A02A] focus:border-[#D2A02A] rounded-md"
               >
                 <option value="all">All Salespersons</option>
-                <option value="">Unassigned</option>
+                <option value="unassigned">Unassigned</option>
                 {isLoading ? (
                   <option value="loading" disabled>
                     Loading...

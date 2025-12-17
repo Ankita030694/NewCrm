@@ -292,18 +292,21 @@ const AmaLeadsPage = () => {
   const executeBulkAssign = async () => {
     if (!bulkAssignTarget) return
     
-    // Find name from ID (this logic might need adjustment if we don't have the full list of users here)
-    // For now, we assume bulkAssignTarget is the ID.
-    // Ideally, we pass both ID and Name.
-    // Let's assume the UI passes the ID and we send it.
+    // bulkAssignTarget is in format "id|name" from the dropdown
+    const [targetId, targetName] = bulkAssignTarget.split("|")
+    
+    if (!targetId || !targetName) {
+        toast.error("Invalid salesperson selection")
+        return
+    }
     
     const success = await performAction("assign", selectedLeads, {
-        assignedToId: bulkAssignTarget,
-        assignedTo: "Salesperson" // We might need to look up the name
+        assignedToId: targetId,
+        assignedTo: targetName
     })
 
     if (success) {
-        toast.success("Bulk assignment started")
+        toast.success(`Bulk assigned to ${targetName}`)
         setShowBulkAssignment(false)
         setSelectedLeads([])
         // Refetch to get updated data

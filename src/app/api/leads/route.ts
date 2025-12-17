@@ -38,7 +38,12 @@ export async function GET(request: NextRequest) {
 
         // 2. Explicit Filters
         if (status && status !== "all") {
-            queryRef = queryRef.where("status", "==", status)
+            if (status === "No Status") {
+                // Handle various forms of "No Status"
+                queryRef = queryRef.where("status", "in", ["No Status", "–", "-", "", null])
+            } else {
+                queryRef = queryRef.where("status", "==", status)
+            }
         }
 
         if (source && source !== "all") {
@@ -46,7 +51,12 @@ export async function GET(request: NextRequest) {
         }
 
         if (salespersonId && salespersonId !== "all") {
-            queryRef = queryRef.where("assigned_to", "==", salespersonId)
+            if (salespersonId === "unassigned") {
+                // Handle various forms of "Unassigned"
+                queryRef = queryRef.where("assigned_to", "in", ["–", "-", "", null])
+            } else {
+                queryRef = queryRef.where("assigned_to", "==", salespersonId)
+            }
         }
 
         // Date Filtering (synced_at)
