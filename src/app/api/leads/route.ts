@@ -64,14 +64,27 @@ export async function GET(request: NextRequest) {
         const endDateParam = searchParams.get("endDate")
 
         if (startDateParam) {
-            const start = new Date(startDateParam)
-            start.setHours(0, 0, 0, 0)
+            // Explicitly construct UTC date to avoid local timezone interference
+            // startDateParam is YYYY-MM-DD
+            const start = new Date(`${startDateParam}T00:00:00.000Z`)
+
+            // Adjust for IST (UTC+5:30)
+            // We want 00:00 IST, which is Previous Day 18:30 UTC
+            // Subtract 5.5 hours (330 minutes * 60 * 1000 ms)
+            start.setTime(start.getTime() - (330 * 60 * 1000))
+
             queryRef = queryRef.where("synced_at", ">=", Timestamp.fromDate(start))
         }
 
         if (endDateParam) {
-            const end = new Date(endDateParam)
-            end.setHours(23, 59, 59, 999)
+            // Explicitly construct UTC date
+            const end = new Date(`${endDateParam}T23:59:59.999Z`)
+
+            // Adjust for IST (UTC+5:30)
+            // We want 23:59:59 IST, which is Same Day 18:29:59 UTC
+            // Subtract 5.5 hours
+            end.setTime(end.getTime() - (330 * 60 * 1000))
+
             queryRef = queryRef.where("synced_at", "<=", Timestamp.fromDate(end))
         }
 
