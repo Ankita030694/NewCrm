@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SalesAnalytics, Salesperson, IndividualSalesData } from '../types';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { db } from '@/firebase/firebase';
 
 interface UseSalesAnalyticsParams {
   selectedAnalyticsMonth: number | null;
@@ -66,6 +68,61 @@ export const useSalesAnalytics = ({
     };
 
     fetchData();
+
+    // Real-time listener for Sales Revenue (payments collection)
+    const startOfMonth = new Date(selectedAnalyticsYear || new Date().getFullYear(), selectedAnalyticsMonth || new Date().getMonth(), 1);
+    const endOfMonth = new Date(selectedAnalyticsYear || new Date().getFullYear(), (selectedAnalyticsMonth || new Date().getMonth()) + 1, 0, 23, 59, 59, 999);
+
+    const paymentsRef = collection(db, 'payments');
+    let q = query(
+      paymentsRef,
+      where('status', '==', 'approved'),
+      where('timestamp', '>=', Timestamp.fromDate(startOfMonth)),
+      where('timestamp', '<=', Timestamp.fromDate(endOfMonth))
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let totalCollected = 0;
+      const salespersonTargets: Record<string, number> = {};
+
+      snapshot.forEach((doc) => {
+        const payment = doc.data();
+        const amount = parseFloat(payment.amount) || 0;
+
+        // Filter by salesperson if selected
+        if (selectedSalesperson) {
+          if (payment.salespersonName === selectedSalesperson) {
+            totalCollected += amount;
+          }
+        } else {
+          totalCollected += amount;
+        }
+
+        // Track per-salesperson collected amount for individualSalesData update
+        if (payment.salespersonId) {
+          salespersonTargets[payment.salespersonId] = (salespersonTargets[payment.salespersonId] || 0) + amount;
+        }
+      });
+
+      setSalesAnalytics((prev: SalesAnalytics) => ({
+        ...prev,
+        totalCollectedAmount: totalCollected
+      }));
+
+      if (selectedSalesperson) {
+        setIndividualSalesData((prev: IndividualSalesData) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            collectedAmount: totalCollected
+          };
+        });
+      }
+    }, (error) => {
+      console.error("Error listening to payments:", error);
+    });
+
+    return () => unsubscribe();
   }, [selectedAnalyticsMonth, selectedAnalyticsYear, selectedSalesperson, enabled]);
 
   return {
