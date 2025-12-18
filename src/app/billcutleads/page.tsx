@@ -15,6 +15,7 @@ import {
   limit,
   startAfter,
   or,
+  getCountFromServer,
   type DocumentSnapshot,
   getDoc,
   setDoc,
@@ -664,8 +665,10 @@ const BillCutLeadsPage = () => {
   const fetchTotalCount = useCallback(async () => {
     try {
       const countQuery = buildCountQuery()
-      const countSnapshot = await getDocs(countQuery)
-      setTotalFilteredCount(countSnapshot.size)
+      const countSnapshot = await getCountFromServer(countQuery)
+      const totalCount = countSnapshot.data().count
+      console.log(`[DEBUG] fetchTotalCount (Optimized): Read ~${Math.ceil(totalCount / 1000)} documents worth of reads (Total: ${totalCount})`)
+      setTotalFilteredCount(totalCount)
     } catch (error) {
       console.error("Error fetching total count:", error) 
       setTotalFilteredCount(0)
@@ -692,6 +695,7 @@ const BillCutLeadsPage = () => {
 
         const leadsQuery = buildQuery(isLoadMore, lastDoc)
         const querySnapshot = await getDocs(leadsQuery)
+        console.log(`[DEBUG] fetchBillcutLeads: Read ${querySnapshot.size} documents from DB (isLoadMore: ${isLoadMore})`)
 
         if (querySnapshot.empty) {
           setHasMoreLeads(false)

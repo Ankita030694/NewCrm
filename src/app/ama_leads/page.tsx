@@ -140,6 +140,9 @@ const AmaLeadsPage = () => {
     fetchStats(params)
     fetchSalespersons()
     
+    // Debug logging
+    console.log(`[DEBUG] AMA Leads: Params updated, fetching data...`)
+    
     // Clear selection on filter change
     setSelectedLeads([])
   }, [

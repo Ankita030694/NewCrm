@@ -88,6 +88,7 @@ export const useLeads = () => {
                 setLeads(data.leads)
             }
             setMeta(data.meta)
+            console.log(`[DEBUG] useLeads: Received ${data.leads.length} leads, Total available: ${data.meta.total}`)
         } catch (err) {
             console.error(err)
             setError(err instanceof Error ? err.message : "An error occurred")

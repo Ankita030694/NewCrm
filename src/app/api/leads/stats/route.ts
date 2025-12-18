@@ -62,6 +62,12 @@ export async function GET(request: NextRequest) {
             todayQuery.count().get()             // Total today (global)
         ])
 
+        const totalCount = totalSnap.data().count
+        const callbackCount = callbackSnap.data().count
+        const todayCount = todaySnap.data().count
+        const estimatedReads = Math.ceil(totalCount / 1000) + Math.ceil(callbackCount / 1000) + Math.ceil(todayCount / 1000)
+        console.log(`[API DEBUG] fetchStats: Total: ${totalCount}, Callback: ${callbackCount}, Today: ${todayCount}, Estimated Reads: ${estimatedReads}`)
+
         return NextResponse.json({
             total: totalSnap.data().count,
             callback: callbackSnap.data().count,

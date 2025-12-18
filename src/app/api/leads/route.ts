@@ -288,7 +288,8 @@ export async function GET(request: NextRequest) {
 
         // Execute Query
         const snapshot = await queryRef.get()
-        console.log(`[API DEBUG] Search: "${search}", Total (Count): ${total}, Snapshot Size: ${snapshot.size}, Offset: ${offset}, Limit: ${limit}`)
+        const estimatedCountReads = Math.ceil(total / 1000)
+        console.log(`[API DEBUG] fetchLeads: Search: "${search}", Total (Count): ${total}, Estimated Count Reads: ${estimatedCountReads}, Snapshot Size: ${snapshot.size}, Offset: ${offset}, Limit: ${limit}`)
 
         const leads = await Promise.all(snapshot.docs.map(async (doc) => {
             try {
