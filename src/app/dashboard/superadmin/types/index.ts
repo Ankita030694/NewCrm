@@ -1,6 +1,6 @@
 // Define type for status and source keys
 export type StatusKey = 'Interested' | 'Not Interested' | 'Not Answering' | 'Callback'
-  | 'Converted' | 'Loan Required' | 'Cibil Issue' | 'Closed Lead' | 'Language Barrier' | 'Future Potential' | 'No Status';
+  | 'Converted' | 'Loan Required' | 'Short Loan' | 'Cibil Issue' | 'Closed Lead' | 'Language Barrier' | 'Future Potential' | 'No Status';
 
 export type SourceKey = 'settleloans' | 'credsettlee' | 'ama' | 'billcut';
 
@@ -52,6 +52,7 @@ export type SalesTargetData = {
   amountCollectedTarget: number;
   amountCollected: number;
   convertedLeads: number;
+  convertedLeadsTarget: number;
 };
 
 export type LeadsBySalesperson = Record<string, {

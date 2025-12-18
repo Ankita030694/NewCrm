@@ -10,17 +10,36 @@ export async function GET(request: NextRequest) {
 
     try {
         const clientsRef = adminDb.collection("clients");
+
+        // 1. Optimized Counts (Low Cost)
+        const statuses = ['Active', 'Dropped', 'Not Responding', 'On Hold', 'Inactive'];
+        const countPromises = [
+            clientsRef.count().get(),
+            ...statuses.map(status => clientsRef.where('adv_status', '==', status).count().get()),
+            ...statuses.map(status => clientsRef.where('status', '==', status).count().get()) // Fallback field
+        ];
+
+        const countResults = await Promise.all(countPromises);
+        const totalClients = countResults[0].data().count;
+
+        const statusDistribution: Record<string, number> = {
+            Active: 0, Dropped: 0, 'Not Responding': 0, 'On Hold': 0, Inactive: 0
+        };
+
+        statuses.forEach((status, i) => {
+            // Combine counts from both fields (adv_status and status)
+            // Note: This is a rough approximation if both fields are used inconsistently
+            statusDistribution[status] = countResults[i + 1].data().count + countResults[i + 1 + statuses.length].data().count;
+        });
+
+        // 2. Complex Distributions (Currently requires .get() - High Cost)
+        // TODO: Move these to a summary document or cloud function aggregation
         const snapshot = await clientsRef.get();
+        console.log(`[API DEBUG] Superadmin Clients: Read ${snapshot.size} documents for complex distributions.`);
 
         const analytics = {
-            totalClients: 0,
-            statusDistribution: {
-                Active: 0,
-                Dropped: 0,
-                'Not Responding': 0,
-                'On Hold': 0,
-                Inactive: 0
-            } as Record<string, number>,
+            totalClients: totalClients,
+            statusDistribution: statusDistribution,
             advocateCount: {} as Record<string, number>,
             loanTypeDistribution: {} as Record<string, number>,
             sourceDistribution: {} as Record<string, number>,
@@ -32,14 +51,7 @@ export async function GET(request: NextRequest) {
 
         snapshot.forEach((doc) => {
             const client = doc.data();
-            analytics.totalClients++;
-
-            // Status
             const status = client.adv_status || client.status || 'Inactive';
-            if (analytics.statusDistribution[status] === undefined) {
-                analytics.statusDistribution[status] = 0;
-            }
-            analytics.statusDistribution[status]++;
 
             // Advocate
             const advocate = client.alloc_adv || 'Unassigned';
@@ -48,11 +60,7 @@ export async function GET(request: NextRequest) {
             // Advocate Status Distribution
             if (!analytics.advocateStatusDistribution[advocate]) {
                 analytics.advocateStatusDistribution[advocate] = {
-                    Active: 0,
-                    Dropped: 0,
-                    'Not Responding': 0,
-                    'On Hold': 0,
-                    Inactive: 0
+                    Active: 0, Dropped: 0, 'Not Responding': 0, 'On Hold': 0, Inactive: 0
                 };
             }
             if (analytics.advocateStatusDistribution[advocate][status] !== undefined) {
@@ -75,17 +83,13 @@ export async function GET(request: NextRequest) {
                 const creditCardDues = typeof client.creditCardDues === 'string'
                     ? parseFloat(client.creditCardDues.replace(/[^0-9.-]+/g, ''))
                     : parseFloat(client.creditCardDues) || 0;
-                if (!isNaN(creditCardDues) && creditCardDues > 0) {
-                    totalClientLoanAmount += creditCardDues;
-                }
+                if (!isNaN(creditCardDues) && creditCardDues > 0) totalClientLoanAmount += creditCardDues;
             }
             if (client.personalLoanDues) {
                 const personalLoanDues = typeof client.personalLoanDues === 'string'
                     ? parseFloat(client.personalLoanDues.replace(/[^0-9.-]+/g, ''))
                     : parseFloat(client.personalLoanDues) || 0;
-                if (!isNaN(personalLoanDues) && personalLoanDues > 0) {
-                    totalClientLoanAmount += personalLoanDues;
-                }
+                if (!isNaN(personalLoanDues) && personalLoanDues > 0) totalClientLoanAmount += personalLoanDues;
             }
 
             if (totalClientLoanAmount > 0) {
@@ -102,17 +106,14 @@ export async function GET(request: NextRequest) {
             }
         });
 
-        const avgLoanAmount = analytics.loanCount > 0
-            ? Math.round(analytics.totalLoanAmount / analytics.loanCount)
-            : 0;
-
+        const avgLoanAmount = analytics.loanCount > 0 ? Math.round(analytics.totalLoanAmount / analytics.loanCount) : 0;
         const advocateEntries = Object.entries(analytics.advocateCount);
         advocateEntries.sort((a, b) => b[1] - a[1]);
         const topAdvocates = advocateEntries.slice(0, 10).map(([name, clientCount]) => ({ name, clientCount }));
 
-        const finalAnalytics = {
-            totalClients: analytics.totalClients,
-            statusDistribution: analytics.statusDistribution,
+        return NextResponse.json({
+            totalClients,
+            statusDistribution,
             topAdvocates,
             loanTypeDistribution: analytics.loanTypeDistribution,
             sourceDistribution: analytics.sourceDistribution,
@@ -120,9 +121,7 @@ export async function GET(request: NextRequest) {
             totalLoanAmount: analytics.totalLoanAmount,
             avgLoanAmount,
             advocateStatusDistribution: analytics.advocateStatusDistribution
-        };
-
-        return NextResponse.json(finalAnalytics, {
+        }, {
             headers: {
                 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
             }

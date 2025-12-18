@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/firebase/firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 
 export const dynamic = "force-dynamic";
 
@@ -23,18 +24,15 @@ export async function GET(request: NextRequest) {
         const targetYear = selectedAnalyticsYear ? parseInt(selectedAnalyticsYear) : currentYear;
         const targetMonthName = monthNames[targetMonth];
 
-        // --- 1. Fetch Salespeople ---
+        // --- 1. Fetch Salespeople (Low Cost) ---
         const usersRef = adminDb.collection("users");
         const usersSnapshot = await usersRef.where("role", "==", "sales").get();
 
         const salespeople: { id: string; name: string }[] = [];
         usersSnapshot.forEach((doc) => {
             const userData = doc.data();
-            const firstName = userData.firstName || '';
-            const lastName = userData.lastName || '';
-            const fullName = `${firstName} ${lastName}`.trim();
-            const userStatus = userData.status;
-            const isActive = userStatus === 'active' || userStatus === undefined || userStatus === null;
+            const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            const isActive = userData.status === 'active' || !userData.status;
 
             if (fullName && isActive) {
                 salespeople.push({ id: doc.id, name: fullName });
@@ -42,97 +40,70 @@ export async function GET(request: NextRequest) {
         });
         salespeople.sort((a, b) => a.name.localeCompare(b.name));
 
-        // --- 2. Fetch Sales Analytics ---
+        // --- 2. Fetch Sales Analytics (Optimized) ---
         let totalTarget = 0;
         let totalCollected = 0;
         let paymentBasedRevenue = 0;
-        let hasPaymentData = false;
 
-        // Try to get revenue from payments collection
-        try {
-            const startOfMonth = new Date(targetYear, targetMonth, 1);
-            const endOfMonth = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59, 999);
+        const startOfMonth = new Date(targetYear, targetMonth, 1);
+        const endOfMonth = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59, 999);
 
-            const paymentsSnapshot = await adminDb.collection("payments").get();
+        // Optimized payments fetch
+        const paymentsSnapshot = await adminDb.collection("payments")
+            .where("status", "==", "approved")
+            .where("timestamp", ">=", Timestamp.fromDate(startOfMonth))
+            .where("timestamp", "<=", Timestamp.fromDate(endOfMonth))
+            .get();
 
-            paymentsSnapshot.forEach((doc) => {
-                const payment = doc.data();
-                if (payment.status === 'approved' && payment.timestamp) {
-                    // Handle timestamp if it's a Firestore Timestamp or string
-                    let paymentDate: Date;
-                    if (payment.timestamp.toDate) {
-                        paymentDate = payment.timestamp.toDate();
-                    } else {
-                        paymentDate = new Date(payment.timestamp);
-                    }
+        console.log(`[API DEBUG] Superadmin Sales: Read ${paymentsSnapshot.size} payments for ${targetMonthName} ${targetYear}`);
 
-                    if (paymentDate >= startOfMonth && paymentDate <= endOfMonth) {
-                        const amount = parseFloat(payment.amount) || 0;
-                        paymentBasedRevenue += amount;
-                        hasPaymentData = true;
-                    }
-                }
-            });
-        } catch (error) {
-            console.error("Error fetching payments for sales analytics:", error);
-        }
+        paymentsSnapshot.forEach((doc) => {
+            const payment = doc.data();
+            paymentBasedRevenue += parseFloat(payment.amount) || 0;
+        });
 
-        // Fetch targets and sales data
+        // Fetch targets
         const monthYearName = `${targetMonthName}_${targetYear}`;
         const salesTargetsRef = adminDb.collection(`targets/${monthYearName}/sales_targets`);
         const salesTargetsSnapshot = await salesTargetsRef.get();
 
+        const allSalesTargets: Record<string, any> = {};
         salesTargetsSnapshot.forEach((doc) => {
             const targetData = doc.data();
             totalTarget += targetData.amountCollectedTarget || 0;
-            if (targetData.amountCollected !== undefined) {
+            if (!paymentsSnapshot.size) { // Fallback if no payments data
                 totalCollected += targetData.amountCollected || 0;
             }
+
+            allSalesTargets[doc.id] = {
+                userId: doc.id,
+                userName: targetData.userName || 'Unknown',
+                amountCollectedTarget: targetData.amountCollectedTarget || 0,
+                amountCollected: targetData.amountCollected || 0,
+                convertedLeads: targetData.convertedLeads || 0,
+                convertedLeadsTarget: targetData.convertedLeadsTarget || 0
+            };
         });
 
-        if (hasPaymentData) {
+        if (paymentsSnapshot.size > 0) {
             totalCollected = paymentBasedRevenue;
         }
 
         const salesAnalytics = {
             totalTargetAmount: totalTarget,
             totalCollectedAmount: totalCollected,
-            monthlyRevenue: [0, 0, 0, 0, 0, 0], // Placeholder as per original hook
+            monthlyRevenue: [0, 0, 0, 0, 0, 0],
             conversionRate: totalTarget > 0 ? Math.round((totalCollected / totalTarget) * 100) : 0,
             avgDealSize: 0,
         };
 
-        // --- 3. Fetch Individual Sales Data (if selected) ---
+        // --- 3. Individual Sales Data ---
         let individualSalesData = null;
         if (selectedSalesperson) {
-            let targetUserId = null;
-            // Find user ID from name
-            const userDoc = salespeople.find(p => p.name === selectedSalesperson);
-            if (userDoc) {
-                targetUserId = userDoc.id;
-            }
-
-            if (targetUserId) {
-                const targetDoc = await salesTargetsRef.doc(targetUserId).get();
-                if (targetDoc.exists) {
-                    const targetData = targetDoc.data()!;
-                    individualSalesData = {
-                        name: targetData.userName || selectedSalesperson,
-                        targetAmount: targetData.amountCollectedTarget || 0,
-                        collectedAmount: targetData.amountCollected || 0,
-                        conversionRate: targetData.amountCollectedTarget > 0
-                            ? Math.round((targetData.amountCollected / targetData.amountCollectedTarget) * 100)
-                            : 0,
-                        monthlyData: [0, 0, 0, 0, 0, 0]
-                    };
-                }
-            }
-
-            if (!individualSalesData) {
-                // Fallback query by userName
-                const querySnapshot = await salesTargetsRef.where('userName', '==', selectedSalesperson).get();
-                if (!querySnapshot.empty) {
-                    const targetData = querySnapshot.docs[0].data();
+            const person = salespeople.find(p => p.name === selectedSalesperson);
+            if (person) {
+                const targetData = allSalesTargets[person.id];
+                if (targetData) {
                     individualSalesData = {
                         name: targetData.userName || selectedSalesperson,
                         targetAmount: targetData.amountCollectedTarget || 0,
@@ -149,7 +120,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             salesAnalytics,
             salespeople,
-            individualSalesData
+            individualSalesData,
+            allSalesTargets
         }, {
             headers: {
                 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
