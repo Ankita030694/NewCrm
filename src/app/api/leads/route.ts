@@ -5,6 +5,11 @@ import { Timestamp, Filter } from "firebase-admin/firestore"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
+    if (!adminDb) {
+        return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+    const db = adminDb;
+
     try {
         const searchParams = request.nextUrl.searchParams
         const page = Number.parseInt(searchParams.get("page") || "1")
@@ -18,7 +23,7 @@ export async function GET(request: NextRequest) {
         const tab = searchParams.get("tab") || "all"
 
         // Base collection reference
-        let queryRef: FirebaseFirestore.Query = adminDb.collection("ama_leads")
+        let queryRef: FirebaseFirestore.Query = db.collection("ama_leads")
 
         // --- Filtering ---
 
@@ -115,7 +120,7 @@ export async function GET(request: NextRequest) {
 
                 // Helper to create base query with other filters
                 const createBaseQuery = () => {
-                    let q = adminDb.collection("ama_leads") as FirebaseFirestore.Query
+                    let q = db.collection("ama_leads") as FirebaseFirestore.Query
                     if (tab === "callback") q = q.where("status", "==", "Callback")
                     if (status && status !== "all") q = q.where("status", "==", status)
                     if (source && source !== "all") q = q.where("source", "==", source)
@@ -196,7 +201,7 @@ export async function GET(request: NextRequest) {
                         // If in callback tab and missing info on main doc, try to fetch from subcollection
                         if (tab === "callback" && !callbackInfo) {
                             try {
-                                const callbackRef = adminDb.collection("ama_leads").doc(doc.id).collection("callback_info")
+                                const callbackRef = db.collection("ama_leads").doc(doc.id).collection("callback_info")
                                 const callbackSnap = await callbackRef.orderBy("scheduled_dt", "desc").limit(1).get()
                                 if (!callbackSnap.empty) {
                                     callbackInfo = callbackSnap.docs[0].data()
@@ -293,7 +298,7 @@ export async function GET(request: NextRequest) {
                 // If in callback tab and missing info on main doc, try to fetch from subcollection
                 if (tab === "callback" && !callbackInfo) {
                     try {
-                        const callbackRef = adminDb.collection("ama_leads").doc(doc.id).collection("callback_info")
+                        const callbackRef = db.collection("ama_leads").doc(doc.id).collection("callback_info")
                         const callbackSnap = await callbackRef.orderBy("scheduled_dt", "desc").limit(1).get()
                         if (!callbackSnap.empty) {
                             callbackInfo = callbackSnap.docs[0].data()

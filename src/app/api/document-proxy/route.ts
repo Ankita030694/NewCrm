@@ -2,30 +2,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import { storage } from '@/firebase/firebase-admin';
 
 export async function GET(request: NextRequest) {
+  if (!storage) {
+    return NextResponse.json({ error: "Firebase Admin Storage not initialized" }, { status: 500 });
+  }
+
   try {
     // Get the path from the query parameter
     const searchParams = request.nextUrl.searchParams;
     const path = searchParams.get('path');
-    
+
     if (!path) {
       console.error('No path parameter provided');
       return NextResponse.json({ error: 'Path parameter is required' }, { status: 400 });
     }
-    
+
     const decodedPath = decodeURIComponent(path);
     console.log("Fetching document from path:", decodedPath);
-    
+
     // Use Firebase Admin SDK to get the file
     const bucket = storage.bucket();
     const file = bucket.file(decodedPath);
-    
+
     // Check if the file exists
     const [exists] = await file.exists();
     console.log(`File exists at path "${decodedPath}":`, exists);
-    
+
     if (!exists) {
       console.error(`File not found at path: ${decodedPath}`);
-      
+
       // Try to list files in the directory to help debug
       try {
         const directory = decodedPath.substring(0, decodedPath.lastIndexOf('/'));
@@ -35,14 +39,14 @@ export async function GET(request: NextRequest) {
       } catch (listError) {
         console.error('Error listing directory:', listError);
       }
-      
-      return NextResponse.json({ 
+
+      return NextResponse.json({
         error: 'File not found',
         path: decodedPath,
         message: 'The requested file does not exist in Firebase Storage'
       }, { status: 404 });
     }
-    
+
     // Get file metadata
     const [metadata] = await file.getMetadata();
     console.log('File metadata:', {
@@ -51,16 +55,16 @@ export async function GET(request: NextRequest) {
       contentType: metadata.contentType,
       timeCreated: metadata.timeCreated
     });
-    
+
     // Get the file content
     console.log('Downloading file content...');
     const [fileContent] = await file.download();
     console.log(`Downloaded ${fileContent.length} bytes`);
-    
+
     // Determine content type based on file extension and metadata
     let contentType = metadata.contentType || 'application/octet-stream';
     const fileName = decodedPath.split('/').pop() || 'document';
-    
+
     // Override content type based on file extension if needed
     if (decodedPath.toLowerCase().endsWith('.docx')) {
       contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -71,11 +75,11 @@ export async function GET(request: NextRequest) {
     } else if (decodedPath.toLowerCase().endsWith('.html')) {
       contentType = 'text/html';
     }
-    
+
     console.log(`Serving file with content type: ${contentType}`);
-    
+
     // Return the file content with appropriate headers for inline viewing
-    return new NextResponse(fileContent, {
+    return new NextResponse(new Uint8Array(fileContent), {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `inline; filename="${fileName}"`,
@@ -90,14 +94,14 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error proxying document:', error);
-    
+
     // Provide more detailed error information
     let errorMessage = 'Failed to proxy document';
     let statusCode = 500;
-    
+
     if (error instanceof Error) {
       errorMessage = error.message;
-      
+
       // Handle specific Firebase errors
       if (error.message.includes('permission')) {
         errorMessage = 'Permission denied accessing the file';
@@ -107,8 +111,8 @@ export async function GET(request: NextRequest) {
         statusCode = 404;
       }
     }
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       error: errorMessage,
       details: error instanceof Error ? error.message : 'Unknown error',
       path: request.nextUrl.searchParams.get('path')

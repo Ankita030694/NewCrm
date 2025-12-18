@@ -31,13 +31,14 @@ export async function GET(request: Request) {
             }
         )
     }
+    const db = adminDb;
 
     try {
         if (type === "analytics") {
             const startDateParam = searchParams.get("startDate")
             const endDateParam = searchParams.get("endDate")
 
-            let query = adminDb.collection("billcutLeads") as FirebaseFirestore.Query
+            let query = db.collection("billcutLeads") as FirebaseFirestore.Query
 
             if (startDateParam) {
                 const startDate = new Date(startDateParam)
@@ -669,7 +670,7 @@ export async function GET(request: Request) {
 
             // If range is 'today', fetch directly from billcutLeads for real-time data
             if (range === "today") {
-                const leadsQuery = adminDb
+                const leadsQuery = db
                     .collection("billcutLeads")
                     .where("lastModified", ">=", startDate)
                     .where("lastModified", "<=", endDate)
@@ -719,7 +720,7 @@ export async function GET(request: Request) {
 
             // For other ranges, use snapshots
             // Fetch productivity snapshots within the date range
-            const snapshotsQuery = adminDb
+            const snapshotsQuery = db
                 .collection("productivity_snapshots")
                 .where("date", ">=", startDate)
                 .where("date", "<=", endDate)

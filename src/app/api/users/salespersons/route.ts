@@ -4,6 +4,10 @@ import { adminDb } from "@/firebase/firebase-admin"
 export const dynamic = "force-dynamic"
 
 export async function GET() {
+    if (!adminDb) {
+        return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+
     try {
         const usersRef = adminDb.collection("users")
         const snapshot = await usersRef

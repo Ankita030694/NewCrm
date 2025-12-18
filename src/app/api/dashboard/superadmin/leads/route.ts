@@ -5,6 +5,10 @@ import { Timestamp } from "firebase-admin/firestore";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+    if (!adminDb) {
+        return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+
     try {
         const searchParams = request.nextUrl.searchParams;
         const startDateParam = searchParams.get("startDate");
@@ -12,8 +16,8 @@ export async function GET(request: NextRequest) {
         const selectedLeadsSalesperson = searchParams.get("selectedLeadsSalesperson");
         const isFilterApplied = searchParams.get("isFilterApplied") === "true";
 
-        // --- 1. Fetch crm_leads ---
-        let leadsQuery: FirebaseFirestore.Query = adminDb.collection("crm_leads");
+        // --- 1. Fetch ama_leads ---
+        let leadsQuery: FirebaseFirestore.Query = adminDb.collection("ama_leads");
 
         if (isFilterApplied && (startDateParam || endDateParam)) {
             if (startDateParam) {

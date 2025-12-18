@@ -4,6 +4,10 @@ import Docxtemplater from 'docxtemplater';
 import { storage } from '../../../firebase/firebase-admin';
 
 export async function POST(request: Request) {
+    if (!storage) {
+        return NextResponse.json({ error: "Firebase Admin Storage not initialized" }, { status: 500 });
+    }
+
     try {
         const body = await request.json();
         const {

@@ -4,8 +4,13 @@ import { adminDb } from "@/firebase/firebase-admin";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+    if (!adminDb) {
+        return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+    const db = adminDb;
+
     try {
-        const paymentsCollection = adminDb.collection("clients_payments");
+        const paymentsCollection = db.collection("clients_payments");
         // Limit to 50 as per original logic to avoid timeout, or increase if server can handle it.
         // Keeping it 50 for now to match "fast initial load" logic, but server could potentially do more.
         // Let's try 100 on server.
@@ -73,7 +78,7 @@ export async function GET(request: NextRequest) {
 
         // Parallelize subcollection fetches
         const historyPromises = clientIds.slice(0, maxClientsToProcess).map(async (clientId) => {
-            const paymentHistoryRef = adminDb.collection(`clients_payments/${clientId}/payment_history`);
+            const paymentHistoryRef = db.collection(`clients_payments/${clientId}/payment_history`);
             const historySnapshot = await paymentHistoryRef
                 .where('payment_status', 'in', ['approved', 'Approved'])
                 .limit(5)

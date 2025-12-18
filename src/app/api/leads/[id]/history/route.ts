@@ -7,6 +7,10 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    if (!adminDb) {
+        return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+
     try {
         const { id } = await params
         const leadId = id

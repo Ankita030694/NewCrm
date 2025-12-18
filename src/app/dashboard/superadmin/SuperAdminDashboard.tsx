@@ -245,7 +245,7 @@ const SuperAdminDashboard = React.memo(() => {
 
   const handleLeadsSalespersonChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
-    console.log('🔍 CRM Leads filter changed:', { value, selectedLeadsSalesperson: value !== "all" ? value : null });
+    console.log('🔍 AMA Leads filter changed:', { value, selectedLeadsSalesperson: value !== "all" ? value : null });
     setSelectedLeadsSalesperson(value !== "all" ? value : null);
     // Clear cache for leads data when salesperson changes - use a more specific key
     const currentLeadsCacheKey = generateCacheKey.leadsData(startDate, endDate, value !== "all" ? value : null, isFilterApplied);
@@ -395,7 +395,7 @@ const SuperAdminDashboard = React.memo(() => {
                   {/* Left side: Table with filters - Now full width */}
                   <div className="w-full bg-white dark:bg-gradient-to-br dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 shadow-xl transition-colors">
                     <div className="flex justify-between items-center mb-3">
-                      <h3 className="text-lg font-semibold text-gray-800 dark:text-blue-100">CRM Leads Analytics</h3>
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-blue-100">AMA Leads Analytics</h3>
                       
                       {/* Salesperson filter dropdown */}
                       <div className="flex items-center">

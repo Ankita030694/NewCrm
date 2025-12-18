@@ -4,6 +4,10 @@ import Docxtemplater from 'docxtemplater';
 import { storage } from '../../../firebase/firebase-admin';
 
 export async function POST(request: Request) {
+  if (!storage) {
+    return NextResponse.json({ error: "Firebase Admin Storage not initialized" }, { status: 500 });
+  }
+
   try {
     const body = await request.json();
     const {
@@ -26,12 +30,12 @@ export async function POST(request: Request) {
 
     // Format emails: split by comma and join with newlines for template
     const formattedBankEmails = bankEmail.split(',').map((email: string) => email.trim()).join('\n');
-    
 
-    
+
+
     // Format the date if needed
     const formattedDate = formatDateIfNeeded(noticeDate);
-    
+
     // Set up data for the template
     const templateData = {
       clientName,
@@ -50,7 +54,7 @@ export async function POST(request: Request) {
     const bucket = storage.bucket();
     const file = bucket.file('templates/reply_notice_template.docx');
     const [templateBuffer] = await file.download();
-    
+
     // Process the template
     const zip = new PizZip(templateBuffer);
     const doc = new Docxtemplater(zip, {
@@ -63,9 +67,9 @@ export async function POST(request: Request) {
 
     // Generate document buffer
     const buffer = doc.getZip().generate({ type: 'nodebuffer' });
-    
+
     // Create response with appropriate headers for file download
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Disposition': `attachment; filename="${clientName} Sec 25 Reply ${bankName}.docx"`,
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -88,19 +92,19 @@ function formatDateIfNeeded(dateString: string): string {
   if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateString)) {
     return dateString;
   }
-  
+
   // Try to parse as a date
   const date = new Date(dateString);
-  
+
   // Check if the date is valid
   if (isNaN(date.getTime())) {
     return dateString; // Return original string if invalid
   }
-  
+
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
   const year = date.getFullYear();
-  
+
   return `${day}/${month}/${year}`;
 }
 
@@ -112,6 +116,6 @@ function getCurrentDate(): string {
   const day = String(now.getDate()).padStart(2, '0');
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const year = now.getFullYear();
-  
+
   return `${day}/${month}/${year}`;
 }

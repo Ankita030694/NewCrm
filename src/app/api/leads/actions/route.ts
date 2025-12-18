@@ -3,6 +3,10 @@ import { adminDb } from "@/firebase/firebase-admin"
 import { FieldValue } from "firebase-admin/firestore"
 
 export async function POST(request: NextRequest) {
+    if (!adminDb) {
+        return NextResponse.json({ error: "Firebase Admin not initialized" }, { status: 500 });
+    }
+
     try {
         const body = await request.json()
         const { action, leadIds, payload } = body

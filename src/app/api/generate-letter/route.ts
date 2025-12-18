@@ -4,6 +4,10 @@ import Docxtemplater from 'docxtemplater';
 import { storage } from '../../../firebase/firebase-admin';
 
 export async function POST(request: Request) {
+  if (!storage) {
+    return NextResponse.json({ error: "Firebase Admin Storage not initialized" }, { status: 500 });
+  }
+
   try {
     const body = await request.json();
     const {
@@ -24,11 +28,11 @@ export async function POST(request: Request) {
 
     // For emails: split by comma and join with newlines
     const formattedBankEmails = bankEmail.split(',').map((email: string) => email.trim()).join('\n');
-    
+
     // For addresses: Do NOT split addresses - preserve them as is
     // Just trim extra whitespace
     const formattedBankAddresses = bankAddress.trim();
-    
+
     // Get today's date formatted
     const today = new Date();
     const formattedDate = today.toLocaleDateString('en-US', {
@@ -36,7 +40,7 @@ export async function POST(request: Request) {
       month: 'long',
       day: 'numeric'
     });
-    
+
     // Set up data for the template
     const requestData = {
       name1,
@@ -54,7 +58,7 @@ export async function POST(request: Request) {
     const bucket = storage.bucket();
     const file = bucket.file('templates/request_letter_template.docx');
     const [templateBuffer] = await file.download();
-    
+
     // Process the template
     const zip = new PizZip(templateBuffer);
     const doc = new Docxtemplater(zip, {
@@ -67,9 +71,9 @@ export async function POST(request: Request) {
 
     // Generate document buffer
     const buffer = doc.getZip().generate({ type: 'nodebuffer' });
-    
+
     // Create response with appropriate headers
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Disposition': `attachment; filename="${name1}_request_letter.docx"`,
         'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

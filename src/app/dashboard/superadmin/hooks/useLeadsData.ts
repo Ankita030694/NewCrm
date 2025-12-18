@@ -125,7 +125,7 @@ export const useLeadsData = ({
         'No Status': { settleloans: 0, credsettlee: 0, ama: 0, billcut: 0 },
       };
 
-      // Process CRM Leads
+      // Process AMA Leads
       leadsData.forEach(lead => {
         let source = lead.source_database;
         if (source) {
