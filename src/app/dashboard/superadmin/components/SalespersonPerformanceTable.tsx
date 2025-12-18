@@ -1,10 +1,9 @@
 import React, { useMemo } from 'react';
-import { Salesperson, SalesTargetData, LeadsBySalesperson } from '../types';
+import { Salesperson, SalesTargetData } from '../types';
 
 interface SalespersonPerformanceTableProps {
   salespeople: Salesperson[];
   allSalesTargets: Record<string, SalesTargetData>;
-  leadsBySalesperson: LeadsBySalesperson;
   isLoading?: boolean;
   selectedAnalyticsMonth?: number | null;
   selectedAnalyticsYear?: number | null;
@@ -13,7 +12,6 @@ interface SalespersonPerformanceTableProps {
 export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTableProps> = ({
   salespeople,
   allSalesTargets,
-  leadsBySalesperson,
   isLoading = false,
   selectedAnalyticsMonth = null,
   selectedAnalyticsYear = null
@@ -21,25 +19,17 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
   
   const performanceData = useMemo(() => {
     return salespeople.map(person => {
-      const targetData = allSalesTargets[person.id] || {
-        amountCollectedTarget: 0,
-        amountCollected: 0,
-        convertedLeads: 0
-      };
+      const targetData = allSalesTargets[person.id];
       
-      const leadsData = leadsBySalesperson[person.name] || {
-        interested: 0,
-        converted: 0
-      };
-
-      const convertedLeads = targetData.convertedLeads || leadsData.converted || 0;
-      const interestedLeads = leadsData.interested || 0;
-      const targetAmount = targetData.amountCollectedTarget || 0;
-      const collectedAmount = targetData.amountCollected || 0;
+      const hasData = !!targetData;
+      const convertedLeads = hasData ? targetData.convertedLeads : "N/A";
+      const interestedLeads = "N/A";
+      const targetAmount = hasData ? targetData.amountCollectedTarget : 0;
+      const collectedAmount = hasData ? targetData.amountCollected : 0;
       const pendingAmount = Math.max(0, targetAmount - collectedAmount);
       
-      const conversionRate = (convertedLeads + interestedLeads) > 0 
-        ? Math.round((convertedLeads / (convertedLeads + interestedLeads)) * 100) 
+      const conversionRate = (hasData && typeof convertedLeads === 'number')
+        ? Math.round((convertedLeads / (convertedLeads + 0)) * 100) // Fallback was interested, now 0
         : 0;
         
       const targetAchievement = targetAmount > 0 
@@ -54,10 +44,11 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
         collectedAmount,
         pendingAmount,
         conversionRate,
-        targetAchievement
+        targetAchievement,
+        hasData
       };
     }).sort((a, b) => b.targetAchievement - a.targetAchievement);
-  }, [salespeople, allSalesTargets, leadsBySalesperson]);
+  }, [salespeople, allSalesTargets]);
 
   if (isLoading) {
     return (
@@ -158,7 +149,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
             <div>
               <span className="text-blue-600 dark:text-blue-200">Total Converted (Month): </span>
               <span className="text-gray-900 dark:text-white font-semibold">
-                {performanceData.reduce((sum, p) => sum + p.convertedLeads, 0)}
+                {performanceData.reduce((sum, p) => sum + (typeof p.convertedLeads === 'number' ? p.convertedLeads : 0), 0)}
               </span>
             </div>
             <div>
@@ -176,7 +167,7 @@ export const SalespersonPerformanceTable: React.FC<SalespersonPerformanceTablePr
             <div>
               <span className="text-blue-600 dark:text-blue-200">Total Interested (Month): </span>
               <span className="text-gray-900 dark:text-white font-semibold">
-                {performanceData.reduce((sum, p) => sum + p.interestedLeads, 0)}
+                {performanceData.reduce((sum, p) => sum + (typeof p.interestedLeads === 'number' ? p.interestedLeads : 0), 0)}
               </span>
             </div>
           </div>

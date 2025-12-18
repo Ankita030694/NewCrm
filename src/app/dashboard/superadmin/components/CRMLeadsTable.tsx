@@ -7,7 +7,6 @@ interface CRMLeadsTableProps {
   sourceTotals: SourceTotals;
   salespeople: Salesperson[];
   allSalesTargets: Record<string, SalesTargetData>;
-  leadsBySalesperson: LeadsBySalesperson;
   isLoading: boolean;
   selectedAnalyticsMonth?: number | null;
   selectedAnalyticsYear?: number | null;
@@ -18,7 +17,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   sourceTotals,
   salespeople,
   allSalesTargets,
-  leadsBySalesperson,
   isLoading,
   selectedAnalyticsMonth,
   selectedAnalyticsYear
@@ -133,7 +131,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         <SalespersonPerformanceTable
           salespeople={salespeople}
           allSalesTargets={allSalesTargets}
-          leadsBySalesperson={leadsBySalesperson}
           selectedAnalyticsMonth={selectedAnalyticsMonth}
           selectedAnalyticsYear={selectedAnalyticsYear}
         />

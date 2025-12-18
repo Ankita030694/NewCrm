@@ -439,7 +439,6 @@ const SuperAdminDashboard = React.memo(() => {
                         sourceTotals={sourceTotals}
                         salespeople={salespeople}
                         allSalesTargets={allSalesTargets}
-                        leadsBySalesperson={leadsBySalesperson}
                         isLoading={leadsLoading}
                         selectedAnalyticsMonth={selectedAnalyticsMonth}
                         selectedAnalyticsYear={selectedAnalyticsYear}
