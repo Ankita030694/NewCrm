@@ -23,7 +23,13 @@ export async function GET(request: NextRequest) {
         const applyFilters = (query: FirebaseFirestore.Query) => {
             if (status && status !== "all") query = query.where("status", "==", status)
             if (source && source !== "all") query = query.where("source", "==", source)
-            if (salespersonId && salespersonId !== "all") query = query.where("assignedToId", "==", salespersonId)
+            if (salespersonId && salespersonId !== "all") {
+                if (salespersonId === "unassigned") {
+                    query = query.where("assigned_to", "in", ["–", "-", "", null])
+                } else {
+                    query = query.where("assigned_to", "==", salespersonId)
+                }
+            }
             return query
         }
 
