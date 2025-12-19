@@ -162,6 +162,7 @@ const BillCutLeadsPage = () => {
   const [searchResults, setSearchResults] = useState<Lead[]>([])
   const [hasMoreLeads, setHasMoreLeads] = useState(true)
   const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null)
+  const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
 
   // Filter states
@@ -679,6 +680,24 @@ const BillCutLeadsPage = () => {
       setTotalFilteredCount(0)
     }
   }, [buildCountQuery])
+  
+  // Helper to fetch the latest sales note from subcollection
+  const fetchLatestSalesNote = useCallback(async (leadId: string, fallbackNote: string) => {
+    try {
+      const leadDocRef = doc(crmDb, 'billcutLeads', leadId);
+      const salesNotesRef = collection(leadDocRef, 'salesNotes');
+      const q = query(salesNotesRef, orderBy('createdAt', 'desc'), limit(1));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        return querySnapshot.docs[0].data().content || fallbackNote;
+      }
+      return fallbackNote;
+    } catch (error) {
+      console.error(`Error fetching latest note for lead ${leadId}:`, error);
+      return fallbackNote;
+    }
+  }, [])
 
   // Fetch leads with server-side filtering and pagination (no client-side search logic)
   const fetchBillcutLeads = useCallback(
@@ -689,6 +708,7 @@ const BillCutLeadsPage = () => {
         setIsLoading(true)
         setLeads([])
         setLastDoc(null)
+        setPage(1)
         setHasMoreLeads(true)
       }
 
@@ -715,6 +735,9 @@ const BillCutLeadsPage = () => {
             const data = docSnapshot.data()
             const state = resolveLeadState(data)
 
+            // Fetch latest sales note from subcollection
+            const latestNote = await fetchLatestSalesNote(docSnapshot.id, data.sales_notes || "")
+
             const lead: Lead = {
               id: docSnapshot.id,
               name: data.name || "",
@@ -725,7 +748,7 @@ const BillCutLeadsPage = () => {
               source_database: "Bill Cut",
               assignedTo: data.assigned_to || "",
               monthlyIncome: data.income || "",
-              salesNotes: data.sales_notes || "",
+              salesNotes: latestNote,
               lastModified: data.lastModified ? new Date(data.lastModified.seconds * 1000) : new Date(),
               date: data.date || data.synced_date?.seconds * 1000 || Date.now(),
               callbackInfo: null,
@@ -807,6 +830,13 @@ const BillCutLeadsPage = () => {
         const lastDocument = querySnapshot.docs[querySnapshot.docs.length - 1]
         setLastDoc(lastDocument)
         setHasMoreLeads(querySnapshot.docs.length === LEADS_PER_PAGE)
+        
+        // Update page state
+        if (isLoadMore) {
+          setPage(prev => prev + 1)
+        } else {
+          setPage(1)
+        }
 
         // Initialize editing state
         const initialEditingState: EditingLeadsState = {}
@@ -892,7 +922,7 @@ const BillCutLeadsPage = () => {
   useEffect(() => {
     let collectionUnsubscribe: (() => void) | null = null;
     
-    if (!searchQuery && !lastDoc) {
+    if (!searchQuery && page === 1) {
         let q = query(collection(crmDb, "billcutLeads"));
         
         // Apply Filters (matching buildQuery logic)
@@ -963,25 +993,32 @@ const BillCutLeadsPage = () => {
                 };
 
                 if (change.type === "added") {
-                    setLeads(prev => {
-                        if (prev.find(l => l.id === id)) return prev;
-                        return [leadData, ...prev].slice(0, LEADS_PER_PAGE);
+                    // Fetch latest sales note for the new lead
+                    fetchLatestSalesNote(id, data.sales_notes || "").then(latestNote => {
+                        const updatedLeadData = { ...leadData, salesNotes: latestNote };
+                        setLeads(prev => {
+                            if (prev.find(l => l.id === id)) return prev;
+                            return [updatedLeadData, ...prev].slice(0, LEADS_PER_PAGE);
+                        });
                     });
+                    
                     if (leadData.status === "Callback") {
                         refreshLeadCallbackInfo(id);
                     }
                 } else if (change.type === "modified") {
-                    setLeads(prev => prev.map(l => {
-                        if (l.id === id) {
-                            // Only update if relevant fields changed to avoid unnecessary re-renders
-                            if (l.status !== leadData.status || 
-                                l.assignedTo !== leadData.assignedTo || 
-                                l.salesNotes !== leadData.salesNotes) {
-                                return { ...l, ...leadData };
+                    fetchLatestSalesNote(id, data.sales_notes || "").then(latestNote => {
+                        setLeads(prev => prev.map(l => {
+                            if (l.id === id) {
+                                // Only update if relevant fields changed to avoid unnecessary re-renders
+                                if (l.status !== leadData.status || 
+                                    l.assignedTo !== leadData.assignedTo || 
+                                    l.salesNotes !== latestNote) {
+                                    return { ...l, ...leadData, salesNotes: latestNote };
+                                }
                             }
-                        }
-                        return l;
-                    }));
+                            return l;
+                        }));
+                    });
                     if (leadData.status === "Callback") {
                         refreshLeadCallbackInfo(id);
                     }
@@ -995,7 +1032,7 @@ const BillCutLeadsPage = () => {
     return () => {
         if (collectionUnsubscribe) collectionUnsubscribe();
     }
-  }, [searchQuery, statusFilter, salesPersonFilter, showMyLeads, activeTab, fromDate, toDate, lastDoc])
+  }, [searchQuery, statusFilter, salesPersonFilter, showMyLeads, activeTab, fromDate, toDate, page])
 
   // 2. Individual Document Listeners (for leads already in state)
   useEffect(() => {
@@ -1018,27 +1055,28 @@ const BillCutLeadsPage = () => {
             listenersRef.current[id] = onSnapshot(doc(crmDb, "billcutLeads", id), (docSnapshot) => {
                 if (docSnapshot.exists()) {
                     const data = docSnapshot.data()
-                    
-                    setLeads(prevLeads => prevLeads.map(l => {
-                        if (l.id === id) {
-                            const newStatus = data.category || "No Status"
-                            const newAssignedTo = data.assigned_to || ""
-                            const newSalesNotes = data.sales_notes || ""
+                    fetchLatestSalesNote(id, data.sales_notes || "").then(latestNote => {
+                        setLeads(prevLeads => prevLeads.map(l => {
+                            if (l.id === id) {
+                                const newStatus = data.category || "No Status"
+                                const newAssignedTo = data.assigned_to || ""
+                                const newSalesNotes = latestNote
 
-                            if (l.status !== newStatus || 
-                                l.assignedTo !== newAssignedTo || 
-                                l.salesNotes !== newSalesNotes) {
-                                
-                                return {
-                                    ...l,
-                                    status: newStatus,
-                                    assignedTo: newAssignedTo,
-                                    salesNotes: newSalesNotes,
+                                if (l.status !== newStatus || 
+                                    l.assignedTo !== newAssignedTo || 
+                                    l.salesNotes !== newSalesNotes) {
+                                    
+                                    return {
+                                        ...l,
+                                        status: newStatus,
+                                        assignedTo: newAssignedTo,
+                                        salesNotes: newSalesNotes,
+                                    }
                                 }
                             }
-                        }
-                        return l
-                    }))
+                            return l
+                        }))
+                    })
                 }
             })
         }
@@ -1568,14 +1606,8 @@ const BillCutLeadsPage = () => {
 
       const leadDocRef = doc(crmDb, "billcutLeads", leadId)
       const salesNotesRef = collection(leadDocRef, "salesNotes")
-      const historyRef = collection(leadDocRef, "history")
-
-      // We want to listen to both salesNotes and history? 
-      // The user said "history subcollection sales notes basically"
-      // In Billcut Leads, salesNotes seems to be for notes, and history for assignment changes.
-      // I'll set up a listener for history as requested.
       
-      const q = query(historyRef, orderBy("timestamp", "desc"));
+      const q = query(salesNotesRef, orderBy("createdAt", "desc"));
 
       historyListenerRef.current = onSnapshot(q, (querySnapshot) => {
         const historyData: HistoryItem[] = querySnapshot.docs.map((doc) => {
@@ -1583,22 +1615,27 @@ const BillCutLeadsPage = () => {
           return {
             id: doc.id,
             leadId: leadId,
-            content: data.content || (data.assignmentChange ? `Assigned from ${data.previousAssignee} to ${data.newAssignee}` : ""),
-            createdAt: data.timestamp || data.createdAt,
-            createdBy: data.assignedById || data.createdBy,
-            createdById: data.editor?.id || data.createdById,
-            displayDate: data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleString() : data.displayDate,
-            assignedById: data.assignedById || data.createdById,
-            assignmentChange: data.assignmentChange,
-            previousAssignee: data.previousAssignee,
-            newAssignee: data.newAssignee,
-            timestamp: data.timestamp,
-            editor: data.editor,
+            content: data.content || "",
+            createdAt: data.createdAt,
+            createdBy: data.createdBy || "Unknown",
+            createdById: data.createdById || "",
+            displayDate: data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleString("en-GB", {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: true
+            }) : (data.displayDate || ""),
+            assignedById: "", // Not relevant for sales notes
+            assignmentChange: false,
+            previousAssignee: "",
+            newAssignee: "",
+            timestamp: data.createdAt, // Use createdAt as timestamp
+            editor: undefined,
           }
         })
-
-        // Also fetch salesNotes and merge? 
-        // For now, I'll stick to history as requested.
         
         setCurrentHistory(historyData)
       });

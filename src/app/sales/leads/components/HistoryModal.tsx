@@ -121,11 +121,6 @@ const HistoryModal = ({
                       }
                     };
                     
-                    // First try to use displayDate which is likely already formatted consistently
-                    if (a.displayDate && b.displayDate) {
-                      return new Date(b.displayDate).getTime() - new Date(a.displayDate).getTime();
-                    }
-                    
                     // Fallback to parsing createdAt
                     const timeA = parseDate(a.createdAt);
                     const timeB = parseDate(b.createdAt);

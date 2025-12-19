@@ -98,7 +98,7 @@ const BillcutLeadNotesCell = ({ lead, fetchNotesHistory, crmDb, updateLead, disa
         content: note,
         createdAt: serverTimestamp(),
         createdBy: userName,
-        displayDate: new Date().toLocaleString('en-US', {
+        displayDate: new Date().toLocaleString('en-GB', {
           month: 'numeric',
           day: 'numeric',
           year: 'numeric',
