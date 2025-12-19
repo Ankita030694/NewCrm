@@ -112,11 +112,23 @@ export default function ClientTableRow({
 }: ClientTableRowProps) {
   const [remarkText, setRemarkText] = useState(latestRemark || "")
   
-  // App Status state
-  const latestAppStatus = client.client_app_status && client.client_app_status.length > 0 
-    ? client.client_app_status[client.client_app_status.length - 1].remarks 
-    : ""
-  const [appStatusText, setAppStatusText] = useState(latestAppStatus)
+  // App Status state - Sort by createdAt to get the latest
+  const getLatestAppStatus = (statusArray?: any[]) => {
+    if (!statusArray || statusArray.length === 0) return ""
+    const sorted = [...statusArray].sort((a, b) => b.createdAt - a.createdAt)
+    return sorted[0].remarks
+  }
+
+  const [appStatusText, setAppStatusText] = useState(getLatestAppStatus(client.client_app_status))
+
+  // Sync state with props when they change via onSnapshot
+  useEffect(() => {
+    setRemarkText(latestRemark || "")
+  }, [latestRemark])
+
+  useEffect(() => {
+    setAppStatusText(getLatestAppStatus(client.client_app_status))
+  }, [client.client_app_status])
 
   const [showWhatsAppMenu, setShowWhatsAppMenu] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)

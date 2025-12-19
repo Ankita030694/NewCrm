@@ -70,7 +70,6 @@ import ClientTableRow from "./ClientTableRow"
 
 interface ClientsTableProps {
   clients: Client[]
-  requestLetterStates: { [key: string]: boolean }
   latestRemarks: { [key: string]: string }
   onStatusChange: (clientId: string, newStatus: string) => void
   onRequestLetterChange: (clientId: string, checked: boolean) => void
@@ -86,7 +85,6 @@ interface ClientsTableProps {
 
 export default function ClientsTable({
   clients,
-  requestLetterStates,
   latestRemarks,
   onStatusChange,
   onRequestLetterChange,
@@ -139,7 +137,7 @@ export default function ClientsTable({
             <ClientTableRow
               key={client.id}
               client={client}
-              requestLetterState={requestLetterStates[client.id] || false}
+              requestLetterState={client.request_letter || false}
               latestRemark={latestRemarks[client.id] || ""}
               onStatusChange={onStatusChange}
               onRequestLetterChange={onRequestLetterChange}

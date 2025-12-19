@@ -489,7 +489,9 @@ function ClientsPageWithParams() {
       const snapshots = await Promise.all(
         queries.map(async (q) => {
           try {
-            return await getDocs(q)
+            const snap = await getDocs(q)
+            console.log(`[DEBUG] Search Query Fetched: ${snap.size} docs`)
+            return snap
           } catch (error) {
             console.error("Search query failed:", error)
             return null
@@ -588,6 +590,7 @@ function ClientsPageWithParams() {
       const countQuery = query(collection(db, "clients"), ...constraints)
       const totalSnapshot = await getCountFromServer(countQuery)
       const count = totalSnapshot.data().count
+      console.log(`[DEBUG] Count Fetched: ${count} (Cost: ~${Math.ceil(count / 1000)} read)`)
       setFilteredTotalCount(count)
       if (constraints.length === 0) {
         setTotalClientCount(count)
@@ -660,6 +663,7 @@ function ClientsPageWithParams() {
 
         const clientsQuery = query(collectionRef, ...paginationConstraints)
         const querySnapshot = await getDocs(clientsQuery)
+        console.log(`[DEBUG] Main Batch Fetched: ${querySnapshot.size} docs`)
 
         if (querySnapshot.empty) {
           hasMoreRef.current = false

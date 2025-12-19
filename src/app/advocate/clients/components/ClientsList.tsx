@@ -145,7 +145,6 @@ export default function ClientsList() {
   const {
     clients,
     loading,
-    requestLetterStates,
     latestRemarks,
     updateClientStatus,
     updateRequestLetterStatus,
@@ -154,7 +153,8 @@ export default function ClientsList() {
     deleteAppStatus,
     fetchClientHistory,
     setClients,
-  } = useClients(advocateName)
+    facets,
+  } = useClients(advocateName) // Removed filters arg
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -168,9 +168,10 @@ export default function ClientsList() {
     }
   }, [searchParams])
 
+  // Client-side filtering restored for real-time updates
   const getFilteredClients = () => {
     return clients
-      .filter((client) => {
+      .filter((client: Client) => {
         const matchesSearch =
           filters.searchQuery === "" ||
           client.name.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
@@ -201,28 +202,23 @@ export default function ClientsList() {
 
         return matchesSearch && matchesStatus && matchesSource && matchesAssignment && matchesCity && matchesWeek
       })
-      .sort((a, b) => {
+      .sort((a: Client, b: Client) => {
         const dateA = typeof a.startDate === "string" ? new Date(a.startDate).getTime() : 0
         const dateB = typeof b.startDate === "string" ? new Date(b.startDate).getTime() : 0
         return dateB - dateA
       })
   }
 
-  const getUniqueCities = () => {
-    const cities = clients.map((client) => client.city).filter((city): city is string => Boolean(city))
-    return Array.from(new Set(cities)).sort()
-  }
+  const filteredClients = getFilteredClients()
 
-  const getUniqueSources = () => {
-    const sources = clients.map((client) => client.source_database).filter((source): source is string => Boolean(source))
-    return Array.from(new Set(sources)).sort()
-  }
+  const uniqueCities = facets.cities
+  const uniqueSources = facets.sources
 
   const getWeekStats = () => {
-    const filteredClients = getFilteredClients()
+    // Use clients directly as it is already filtered
     const stats = { week1: 0, week2: 0, week3: 0, week4: 0, unknown: 0 }
-
-    filteredClients.forEach((client) => {
+    
+    clients.forEach((client) => {
       const week = getWeekFromStartDate(client.startDate)
       switch (week) {
         case 1:
@@ -416,9 +412,9 @@ export default function ClientsList() {
     )
   }
 
-  const filteredClients = getFilteredClients()
-  const uniqueCities = getUniqueCities()
-  const uniqueSources = getUniqueSources()
+  // filteredClients is now just clients (filtered from server)
+  // uniqueCities and uniqueSources come from facets
+  // weekStats needs to be calculated on the client based on the filtered list (or server could do it, but client is fine for now)
   const weekStats = getWeekStats()
 
   return (
@@ -439,7 +435,6 @@ export default function ClientsList() {
         <div className="mt-4 overflow-x-auto">
           <ClientsTable
             clients={filteredClients}
-            requestLetterStates={requestLetterStates}
             latestRemarks={latestRemarks}
             onStatusChange={updateClientStatus}
             onRequestLetterChange={updateRequestLetterStatus}

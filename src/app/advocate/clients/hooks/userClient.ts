@@ -2,20 +2,22 @@
 
 import { useState, useEffect } from "react"
 import {
-  collection,
-  getDocs,
-  query,
-  where,
   doc,
   updateDoc,
   addDoc,
   orderBy,
   serverTimestamp,
   limit,
+  getDocs,
+  query,
+  where,
+  collection,
+  onSnapshot, // Import onSnapshot
 } from "firebase/firestore"
+// import { fetchClients as fetchClientsAction } from "../actions" // Comment out server action
 import { db } from "@/firebase/firebase"
 import toast from "react-hot-toast"
-import type { RemarkHistory } from "../types/client"
+import type { RemarkHistory, FilterState } from "../types/client"
 
 // Use compatible Client type that matches ClientEditModal
 interface Bank {
@@ -88,87 +90,124 @@ interface Client {
 export function useClients(advocateName: string) {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
-  const [requestLetterStates, setRequestLetterStates] = useState<{ [key: string]: boolean }>({})
   const [latestRemarks, setLatestRemarks] = useState<{ [key: string]: string }>({})
+  const [facets, setFacets] = useState<{ cities: string[], sources: string[] }>({ cities: [], sources: [] })
 
-  useEffect(() => {
-    async function fetchClients() {
-      if (!advocateName) return
+  const setupListeners = () => {
+    if (!advocateName) return () => { } // Return an empty cleanup function if no advocateName
 
-      setLoading(true)
-      try {
-        const clientsRef = collection(db, "clients")
-        const primaryQuery = query(clientsRef, where("alloc_adv", "==", advocateName))
-        const secondaryQuery = query(clientsRef, where("alloc_adv_secondary", "==", advocateName))
+    setLoading(true)
+    const clientsRef = collection(db, "clients")
+    const primaryQuery = query(clientsRef, where("alloc_adv", "==", advocateName))
+    const secondaryQuery = query(clientsRef, where("alloc_adv_secondary", "==", advocateName))
 
-        const [primarySnapshot, secondarySnapshot] = await Promise.all([getDocs(primaryQuery), getDocs(secondaryQuery)])
+    let primaryClients: Client[] = []
+    let secondaryClients: Client[] = []
+    const remarkUnsubscribes = new Map<string, () => void>()
 
-        const clientsList: Client[] = []
+    const updateClients = () => {
+      const mergedClientsMap = new Map<string, Client>()
 
-        primarySnapshot.forEach((doc) => {
-          const clientData = doc.data()
-          const transformedClient: Client = {
-            ...clientData,
-            id: doc.id,
-            altPhone: clientData.altPhone || "",
-            banks: (clientData.banks || []).map((bank: any) => ({
-              ...bank,
-              settled: bank.settled ?? false
-            })),
-            isPrimary: true,
-            isSecondary: false,
-          } as Client
-          clientsList.push(transformedClient)
+      primaryClients.forEach(c => mergedClientsMap.set(c.id, { ...c }))
+      secondaryClients.forEach(c => {
+        if (mergedClientsMap.has(c.id)) {
+          const existing = mergedClientsMap.get(c.id)!
+          existing.isSecondary = true
+        } else {
+          mergedClientsMap.set(c.id, { ...c })
+        }
+      })
 
-          setRequestLetterStates((prev) => ({
-            ...prev,
-            [doc.id]: clientData.request_letter || false,
-          }))
-        })
+      const mergedClients = Array.from(mergedClientsMap.values())
+      setClients(mergedClients)
 
-        secondarySnapshot.forEach((doc) => {
-          const clientData = doc.data()
-          const existingIndex = clientsList.findIndex((c) => c.id === doc.id)
+      // Calculate facets
+      const cities = Array.from(new Set(mergedClients.map(c => c.city).filter((city): city is string => Boolean(city)))).sort()
+      const sources = Array.from(new Set(mergedClients.map(c => c.source_database).filter((source): source is string => Boolean(source)))).sort()
+      setFacets({ cities, sources })
 
-          if (existingIndex >= 0) {
-            clientsList[existingIndex].isSecondary = true
-            setRequestLetterStates((prev) => ({
-              ...prev,
-              [doc.id]: clientData.request_letter || false,
-            }))
-          } else {
-            const transformedClient: Client = {
-              ...clientData,
-              id: doc.id,
-              altPhone: clientData.altPhone || "",
-              banks: (clientData.banks || []).map((bank: any) => ({
-                ...bank,
-                settled: bank.settled ?? false
-              })),
-              isPrimary: false,
-              isSecondary: true,
-            } as Client
-            clientsList.push(transformedClient)
+      // Setup remark listeners for new clients
+      // Remove listeners for clients no longer in the list
+      const currentIds = new Set(mergedClients.map(c => c.id))
+      remarkUnsubscribes.forEach((unsub, id) => {
+        if (!currentIds.has(id)) {
+          unsub()
+          remarkUnsubscribes.delete(id)
+        }
+      })
 
-            setRequestLetterStates((prev) => ({
-              ...prev,
-              [doc.id]: clientData.request_letter || false,
-            }))
-          }
-        })
+      // Add listeners for new clients
+      mergedClients.forEach(client => {
+        if (!remarkUnsubscribes.has(client.id)) {
+          const historyRef = collection(db, "clients", client.id, "history")
+          const q = query(historyRef, orderBy("timestamp", "desc"), limit(1))
 
-        setClients(clientsList)
-        await Promise.all(clientsList.map((client) => fetchLatestRemark(client.id)))
-      } catch (error) {
-        console.error("Error fetching clients:", error)
-        toast.error("Failed to fetch clients")
-      } finally {
-        setLoading(false)
-      }
+          const unsub = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty) {
+              const latestRemark = snapshot.docs[0].data().remark
+              setLatestRemarks(prev => ({ ...prev, [client.id]: latestRemark }))
+            }
+          }, (error) => {
+            console.error(`Error listening to remarks for ${client.id}:`, error)
+          })
+          remarkUnsubscribes.set(client.id, unsub)
+        }
+      })
     }
 
-    fetchClients()
-  }, [advocateName])
+    const unsubPrimary = onSnapshot(primaryQuery, (snapshot) => {
+      primaryClients = snapshot.docs.map(doc => {
+        const data = doc.data()
+        return {
+          ...data,
+          id: doc.id,
+          altPhone: data.altPhone || "",
+          banks: (data.banks || []).map((bank: any) => ({ ...bank, settled: bank.settled ?? false })),
+          isPrimary: true,
+          isSecondary: false,
+        } as Client
+      })
+
+      updateClients()
+      setLoading(false)
+    }, (error) => {
+      console.error("Error in primary query listener:", error)
+      setLoading(false)
+    })
+
+    const unsubSecondary = onSnapshot(secondaryQuery, (snapshot) => {
+      secondaryClients = snapshot.docs.map(doc => {
+        const data = doc.data()
+        return {
+          ...data,
+          id: doc.id,
+          altPhone: data.altPhone || "",
+          banks: (data.banks || []).map((bank: any) => ({ ...bank, settled: bank.settled ?? false })),
+          isPrimary: false,
+          isSecondary: true,
+        } as Client
+      })
+
+      updateClients()
+      setLoading(false)
+    }, (error) => {
+      console.error("Error in secondary query listener:", error)
+      setLoading(false)
+    })
+
+    return () => {
+      unsubPrimary()
+      unsubSecondary()
+      remarkUnsubscribes.forEach(unsub => unsub())
+    }
+  }
+
+  useEffect(() => {
+    const cleanup = setupListeners()
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [advocateName]) // Removed filters from dependency as we filter client-side now
 
   const fetchLatestRemark = async (clientId: string) => {
     try {
@@ -210,7 +249,12 @@ export function useClients(advocateName: string) {
 
   const updateRequestLetterStatus = async (clientId: string, checked: boolean) => {
     try {
-      setRequestLetterStates((prev) => ({ ...prev, [clientId]: checked }))
+      // Optimistic update
+      setClients((prevClients) =>
+        prevClients.map((client) =>
+          client.id === clientId ? { ...client, request_letter: checked } : client
+        )
+      )
 
       const clientRef = doc(db, "clients", clientId)
       await updateDoc(clientRef, { request_letter: checked })
@@ -218,7 +262,12 @@ export function useClients(advocateName: string) {
       toast.success(`Request letter status ${checked ? "enabled" : "disabled"}`)
     } catch (error) {
       console.error("Error updating request letter status:", error)
-      setRequestLetterStates((prev) => ({ ...prev, [clientId]: !checked }))
+      // Revert optimistic update
+      setClients((prevClients) =>
+        prevClients.map((client) =>
+          client.id === clientId ? { ...client, request_letter: !checked } : client
+        )
+      )
       toast.error("Failed to update request letter status")
     }
   }
@@ -344,7 +393,6 @@ export function useClients(advocateName: string) {
   return {
     clients,
     loading,
-    requestLetterStates,
     latestRemarks,
     updateClientStatus,
     updateRequestLetterStatus,
@@ -353,5 +401,6 @@ export function useClients(advocateName: string) {
     deleteAppStatus,
     fetchClientHistory,
     setClients,
+    facets,
   }
 }
