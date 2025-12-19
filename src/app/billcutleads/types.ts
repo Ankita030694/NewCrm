@@ -6,6 +6,13 @@ export type HistoryItem = {
   displayDate?: string; // Optional to match usage pattern
   leadId: string;
   assignedById: string;
+  assignmentChange?: boolean;
+  previousAssignee?: string;
+  newAssignee?: string;
+  timestamp?: any;
+  editor?: {
+    id: string;
+  };
 };
 
 export type Lead = {

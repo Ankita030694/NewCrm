@@ -16,6 +16,7 @@ import {
   startAfter,
   or,
   getCountFromServer,
+  onSnapshot,
   type DocumentSnapshot,
   getDoc,
   setDoc,
@@ -210,6 +211,10 @@ const BillCutLeadsPage = () => {
 
   // Add new state for bulk WhatsApp
   const [showBulkWhatsAppModal, setShowBulkWhatsAppModal] = useState(false)
+
+  // Real-time Listeners
+  const listenersRef = useRef<{ [key: string]: () => void }>({})
+  const historyListenerRef = useRef<(() => void) | null>(null)
 
   // Handle URL parameters on component mount
   useEffect(() => {
@@ -883,7 +888,171 @@ const BillCutLeadsPage = () => {
     return () => clearTimeout(timeoutId)
   }, [searchQuery, showMyLeads, performDatabaseSearch, handleSearchResults])
 
+  // 1. Collection Listener for New Leads (only when no search query and on first page)
+  useEffect(() => {
+    let collectionUnsubscribe: (() => void) | null = null;
+    
+    if (!searchQuery && !lastDoc) {
+        let q = query(collection(crmDb, "billcutLeads"));
+        
+        // Apply Filters (matching buildQuery logic)
+        if (activeTab === "callback") {
+            q = query(q, where("category", "==", "Callback"));
+        }
+        
+        if (statusFilter && statusFilter !== "all") {
+            if (statusFilter === "No Status") {
+                q = query(q, where("category", "in", ["", "-", "No Status"]));
+            } else {
+                q = query(q, where("category", "==", statusFilter));
+            }
+        }
+        
+        if (salesPersonFilter && salesPersonFilter !== "all") {
+            if (salesPersonFilter === "-") {
+                q = query(q, where("assigned_to", "in", ["", "-"]));
+            } else {
+                q = query(q, where("assigned_to", "==", salesPersonFilter));
+            }
+        }
+
+        if (showMyLeads && typeof window !== "undefined") {
+            const currentUserName = localStorage.getItem("userName")
+            if (currentUserName) {
+                q = query(q, where("assigned_to", "==", currentUserName))
+            }
+        }
+        
+        if (fromDate) {
+            const start = new Date(`${fromDate}T00:00:00.000Z`);
+            start.setTime(start.getTime() - (330 * 60 * 1000)); // IST Adjust
+            q = query(q, where("date", ">=", start.getTime()));
+        }
+        
+        if (toDate) {
+            const end = new Date(`${toDate}T23:59:59.999Z`);
+            end.setTime(end.getTime() - (330 * 60 * 1000)); // IST Adjust
+            q = query(q, where("date", "<=", end.getTime()));
+        }
+        
+        // Sorting & Limit (only for Page 1 real-time updates)
+        q = query(q, orderBy("date", "desc"), limit(LEADS_PER_PAGE));
+        
+        collectionUnsubscribe = onSnapshot(q, (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                const data = change.doc.data();
+                const id = change.doc.id;
+                const state = resolveLeadState(data);
+
+                const leadData: Lead = {
+                    id,
+                    name: data.name || "",
+                    email: data.email || "",
+                    phone: data.mobile || "",
+                    city: state,
+                    status: data.category || "No Status",
+                    source_database: "Bill Cut",
+                    assignedTo: data.assigned_to || "",
+                    monthlyIncome: data.income || "",
+                    salesNotes: data.sales_notes || "",
+                    lastModified: data.lastModified ? new Date(data.lastModified.seconds * 1000) : new Date(),
+                    date: data.date || data.synced_date?.seconds * 1000 || Date.now(),
+                    callbackInfo: null,
+                    debtRange: data.debt_range || 0,
+                    convertedAt: data.convertedAt || null,
+                };
+
+                if (change.type === "added") {
+                    setLeads(prev => {
+                        if (prev.find(l => l.id === id)) return prev;
+                        return [leadData, ...prev].slice(0, LEADS_PER_PAGE);
+                    });
+                    if (leadData.status === "Callback") {
+                        refreshLeadCallbackInfo(id);
+                    }
+                } else if (change.type === "modified") {
+                    setLeads(prev => prev.map(l => {
+                        if (l.id === id) {
+                            // Only update if relevant fields changed to avoid unnecessary re-renders
+                            if (l.status !== leadData.status || 
+                                l.assignedTo !== leadData.assignedTo || 
+                                l.salesNotes !== leadData.salesNotes) {
+                                return { ...l, ...leadData };
+                            }
+                        }
+                        return l;
+                    }));
+                    if (leadData.status === "Callback") {
+                        refreshLeadCallbackInfo(id);
+                    }
+                } else if (change.type === "removed") {
+                    setLeads(prev => prev.filter(l => l.id !== id));
+                }
+            });
+        });
+    }
+
+    return () => {
+        if (collectionUnsubscribe) collectionUnsubscribe();
+    }
+  }, [searchQuery, statusFilter, salesPersonFilter, showMyLeads, activeTab, fromDate, toDate, lastDoc])
+
+  // 2. Individual Document Listeners (for leads already in state)
+  useEffect(() => {
+    const currentIds = leads.map(l => l.id)
+    const activeIds = Object.keys(listenersRef.current)
+
+    // Unsubscribe from leads that are no longer in the list
+    activeIds.forEach(id => {
+        if (!currentIds.includes(id)) {
+            if (listenersRef.current[id]) {
+                listenersRef.current[id]()
+                delete listenersRef.current[id]
+            }
+        }
+    })
+
+    // Subscribe to new leads in the list
+    currentIds.forEach(id => {
+        if (!listenersRef.current[id]) {
+            listenersRef.current[id] = onSnapshot(doc(crmDb, "billcutLeads", id), (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    const data = docSnapshot.data()
+                    
+                    setLeads(prevLeads => prevLeads.map(l => {
+                        if (l.id === id) {
+                            const newStatus = data.category || "No Status"
+                            const newAssignedTo = data.assigned_to || ""
+                            const newSalesNotes = data.sales_notes || ""
+
+                            if (l.status !== newStatus || 
+                                l.assignedTo !== newAssignedTo || 
+                                l.salesNotes !== newSalesNotes) {
+                                
+                                return {
+                                    ...l,
+                                    status: newStatus,
+                                    assignedTo: newAssignedTo,
+                                    salesNotes: newSalesNotes,
+                                }
+                            }
+                        }
+                        return l
+                    }))
+                }
+            })
+        }
+    })
+
+    return () => {
+        // Cleanup individual listeners on unmount or when leads change
+        // We don't want to cleanup EVERYTHING here because it would resubscribe to everything on every lead change.
+        // The logic above already handles granular cleanup.
+    }
+  }, [leads])
+
   // Fetch team members
+
   useEffect(() => {
     const fetchTeamMembers = async () => {
       try {
@@ -1391,50 +1560,63 @@ const BillCutLeadsPage = () => {
   // Fetch notes history function
   const fetchNotesHistory = async (leadId: string) => {
     try {
+      // Cleanup previous listener if any
+      if (historyListenerRef.current) {
+        historyListenerRef.current();
+        historyListenerRef.current = null;
+      }
+
       const leadDocRef = doc(crmDb, "billcutLeads", leadId)
       const salesNotesRef = collection(leadDocRef, "salesNotes")
-      const querySnapshot = await getDocs(salesNotesRef)
+      const historyRef = collection(leadDocRef, "history")
 
-      const historyData: HistoryItem[] = querySnapshot.docs.map((doc) => {
-        const data = doc.data()
-        return {
-          id: doc.id,
-          leadId: leadId,
-          content: data.content,
-          createdAt: data.createdAt,
-          createdBy: data.createdBy,
-          createdById: data.createdById,
-          displayDate: data.displayDate,
-          assignedById: data.assignedById || data.createdById,
-        }
-      })
+      // We want to listen to both salesNotes and history? 
+      // The user said "history subcollection sales notes basically"
+      // In Billcut Leads, salesNotes seems to be for notes, and history for assignment changes.
+      // I'll set up a listener for history as requested.
+      
+      const q = query(historyRef, orderBy("timestamp", "desc"));
 
-      historyData.sort((a, b) => {
-        const getTimestamp = (date: any): number => {
-          if (date?.seconds) {
-            return date.seconds * 1000
+      historyListenerRef.current = onSnapshot(q, (querySnapshot) => {
+        const historyData: HistoryItem[] = querySnapshot.docs.map((doc) => {
+          const data = doc.data()
+          return {
+            id: doc.id,
+            leadId: leadId,
+            content: data.content || (data.assignmentChange ? `Assigned from ${data.previousAssignee} to ${data.newAssignee}` : ""),
+            createdAt: data.timestamp || data.createdAt,
+            createdBy: data.assignedById || data.createdBy,
+            createdById: data.editor?.id || data.createdById,
+            displayDate: data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleString() : data.displayDate,
+            assignedById: data.assignedById || data.createdById,
+            assignmentChange: data.assignmentChange,
+            previousAssignee: data.previousAssignee,
+            newAssignee: data.newAssignee,
+            timestamp: data.timestamp,
+            editor: data.editor,
           }
-          if (date instanceof Date) {
-            return date.getTime()
-          }
-          if (typeof date === "string") {
-            return new Date(date).getTime()
-          }
-          return 0
-        }
+        })
 
-        const dateA = getTimestamp(a.createdAt)
-        const dateB = getTimestamp(b.createdAt)
-        return dateB - dateA
-      })
+        // Also fetch salesNotes and merge? 
+        // For now, I'll stick to history as requested.
+        
+        setCurrentHistory(historyData)
+      });
 
-      setCurrentHistory(historyData)
       setShowHistoryModal(true)
     } catch (error) {
       console.error("Error fetching history: ", error)
       toast.error("Failed to load history")
     }
   }
+
+  // Cleanup history listener when modal closes
+  useEffect(() => {
+    if (!showHistoryModal && historyListenerRef.current) {
+      historyListenerRef.current();
+      historyListenerRef.current = null;
+    }
+  }, [showHistoryModal]);
 
   // Refresh callback information for a specific lead
   const refreshLeadCallbackInfo = async (leadId: string) => {

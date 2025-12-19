@@ -5,7 +5,7 @@ import { toast } from "react-toastify"
 import { onAuthStateChanged, type User as FirebaseUser } from "firebase/auth"
 import { auth, functions, db } from "@/firebase/firebase"
 import { httpsCallable } from "firebase/functions"
-import { doc, onSnapshot } from "firebase/firestore"
+import { doc, onSnapshot, collection, query, where, orderBy, limit, Timestamp } from "firebase/firestore"
 
 import LeadsHeader from "./components/AmaLeadsHeader"
 import LeadsFilters from "./components/AmaLeadsFilters"
@@ -243,11 +243,110 @@ const AmaLeadsPage = () => {
       }
   }, [])
 
+  // 1. Collection Listener for New Leads (only when no search query)
+  useEffect(() => {
+      let collectionUnsubscribe: (() => void) | null = null;
+      
+      if (!searchQuery) {
+          let q = query(collection(db, "ama_leads"));
+          
+          // Apply Filters (matching API logic)
+          if (activeTab === "callback") {
+              q = query(q, where("status", "==", "Callback"));
+          }
+          
+          if (statusFilter && statusFilter !== "all") {
+              if (statusFilter === "No Status") {
+                  q = query(q, where("status", "in", ["No Status", "–", "-", "", null]));
+              } else {
+                  q = query(q, where("status", "==", statusFilter));
+              }
+          }
+          
+          if (sourceFilter && sourceFilter !== "all") {
+              q = query(q, where("source", "==", sourceFilter));
+          }
+          
+          if (salesPersonFilter && salesPersonFilter !== "all") {
+              if (salesPersonFilter === "unassigned") {
+                  q = query(q, where("assigned_to", "in", ["–", "-", "", null]));
+              } else {
+                  q = query(q, where("assigned_to", "==", salesPersonFilter));
+              }
+          }
+          
+          if (fromDate) {
+              const start = new Date(`${fromDate}T00:00:00.000Z`);
+              start.setTime(start.getTime() - (330 * 60 * 1000)); // IST Adjust
+              q = query(q, where("synced_at", ">=", Timestamp.fromDate(start)));
+          }
+          
+          if (toDate) {
+              const end = new Date(`${toDate}T23:59:59.999Z`);
+              end.setTime(end.getTime() - (330 * 60 * 1000)); // IST Adjust
+              q = query(q, where("synced_at", "<=", Timestamp.fromDate(end)));
+          }
+          
+          // Sorting & Limit (only for Page 1 real-time updates)
+          if (meta.page === 1) {
+              const direction = sortConfig.direction === "ascending" ? "asc" : "desc";
+              q = query(q, orderBy(sortConfig.key, direction), limit(50));
+              
+              collectionUnsubscribe = onSnapshot(q, (snapshot) => {
+                  snapshot.docChanges().forEach((change) => {
+                      const data = change.doc.data();
+                      const id = change.doc.id;
+                      
+                      const serializeDate = (val: any) => {
+                          if (val instanceof Timestamp) return val.toDate().toISOString();
+                          return val;
+                      };
+
+                      const leadData: any = {
+                          id,
+                          ...data,
+                          date: serializeDate(data.date),
+                          synced_at: serializeDate(data.synced_at),
+                          convertedAt: serializeDate(data.convertedAt),
+                          mobile: String(data.mobile || data.phone || ""),
+                          assignedTo: data.assigned_to || data.assignedTo || "",
+                          assignedToId: data.assignedToId || data.assigned_to_id || "",
+                      };
+
+                      if (change.type === "added") {
+                          setLeads(prev => {
+                              if (prev.find(l => l.id === id)) return prev;
+                              return [leadData, ...prev].slice(0, 50);
+                          });
+                      } else if (change.type === "modified") {
+                          setLeads(prev => prev.map(l => {
+                              if (l.id === id) {
+                                  if (l.status !== leadData.status || 
+                                      l.assignedTo !== leadData.assignedTo || 
+                                      l.salesNotes !== leadData.salesNotes) {
+                                      return { ...l, ...leadData };
+                                  }
+                              }
+                              return l;
+                          }));
+                      } else if (change.type === "removed") {
+                          setLeads(prev => prev.filter(l => l.id !== id));
+                      }
+                  });
+              });
+          }
+      }
+
+      return () => {
+          if (collectionUnsubscribe) collectionUnsubscribe();
+      }
+  }, [searchQuery, statusFilter, sourceFilter, salesPersonFilter, activeTab, sortConfig, fromDate, toDate, meta.page])
+
+  // 2. Individual Document Listeners (for leads already in state)
   useEffect(() => {
       const currentIds = leads.map(l => l.id)
       const activeIds = Object.keys(listenersRef.current)
 
-      // 1. Unsubscribe from leads that are no longer in the list
       activeIds.forEach(id => {
           if (!currentIds.includes(id)) {
               if (listenersRef.current[id]) {
@@ -257,7 +356,6 @@ const AmaLeadsPage = () => {
           }
       })
 
-      // 2. Subscribe to new leads
       currentIds.forEach(id => {
           if (!listenersRef.current[id]) {
               listenersRef.current[id] = onSnapshot(doc(db, "ama_leads", id), (docSnapshot) => {
@@ -267,12 +365,10 @@ const AmaLeadsPage = () => {
                       setLeads(prevLeads => prevLeads.map(l => {
                           if (l.id === id) {
                               const newStatus = data.status
-                              // Handle both camelCase and snake_case for assignment
                               const newAssignedTo = data.assigned_to || data.assignedTo
                               const newAssignedToId = data.assigned_to_id || data.assignedToId
                               const newSalesNotes = data.salesNotes
 
-                              // Only update if relevant fields changed
                               if (l.status !== newStatus || 
                                   l.assignedTo !== newAssignedTo || 
                                   l.salesNotes !== newSalesNotes) {
@@ -283,7 +379,6 @@ const AmaLeadsPage = () => {
                                       assignedTo: newAssignedTo,
                                       assignedToId: newAssignedToId,
                                       salesNotes: newSalesNotes,
-                                      // Preserve other fields
                                   }
                               }
                           }
@@ -293,7 +388,10 @@ const AmaLeadsPage = () => {
               })
           }
       })
+
+      return () => {}
   }, [leads])
+
 
   const handleSort = (key: string) => {
     setSortConfig((prev) => ({
