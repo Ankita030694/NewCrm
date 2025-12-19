@@ -1,8 +1,8 @@
 "use client"
 import { useState, useEffect, useMemo } from "react"
 import type React from "react"
-// import { collection, getDocs, query, where } from "firebase/firestore"
-// import { db as crmDb } from "@/firebase/firebase"
+import { collection, query, where, onSnapshot, Timestamp } from "firebase/firestore"
+import { db as crmDb } from "@/firebase/firebase"
 import { toast } from "react-toastify"
 import { useRouter } from "next/navigation"
 import OverlordSidebar from "@/components/navigation/OverlordSidebar"
@@ -739,6 +739,7 @@ const BillcutLeadReportContent = () => {
         throw new Error(errorData.message || "Failed to fetch analytics");
       }  
         const data = await response.json()
+        console.log(`[DEBUG] Analytics API: Fetched ${data.docCount} documents from DB`);
         setAnalytics(data.analytics)
       } catch (error) {
         console.error("Error fetching billcut leads analytics:", error)
@@ -751,8 +752,10 @@ const BillcutLeadReportContent = () => {
     fetchAnalytics()
   }, [dateRange])
 
-  // Fetch productivity data
+  // Fetch productivity data (Historical Snapshots)
   useEffect(() => {
+    if (selectedProductivityRange === "today") return // Handled by onSnapshot
+
     const fetchProductivityData = async () => {
       try {
         setProductivityLoading(true)
@@ -768,13 +771,13 @@ const BillcutLeadReportContent = () => {
 
         const response = await fetch(`/api/reports/billcut-leads?${params.toString()}`, { cache: 'no-store' })
         if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("API Error Details:", errorData);
-        throw new Error(errorData.message || "Failed to fetch productivity data");
-      }  
+          const errorData = await response.json().catch(() => ({}));
+          console.error("API Error Details:", errorData);
+          throw new Error(errorData.message || "Failed to fetch productivity data");
+        }  
         const data = await response.json()
+        console.log(`[DEBUG] Productivity API: Fetched ${data.docCount} documents from DB`);
         
-        // Convert date strings back to Date objects if needed, or handle in component
         const processedStats = data.productivityStats.map((stat: any) => ({
             ...stat,
             lastActivity: new Date(stat.lastActivity)
@@ -791,6 +794,69 @@ const BillcutLeadReportContent = () => {
 
     fetchProductivityData()
   }, [selectedProductivityRange, productivityDateRange])
+
+  // Real-time listener for Today's Productivity
+  useEffect(() => {
+    if (selectedProductivityRange !== "today") return
+
+    setProductivityLoading(true)
+    const { startDate, endDate } = getProductivityDateRange("today")
+    
+    // Firestore query for leads modified today
+    const q = query(
+      collection(crmDb, "billcutLeads"),
+      where("lastModified", ">=", Timestamp.fromDate(startDate)),
+      where("lastModified", "<=", Timestamp.fromDate(endDate))
+    )
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      console.log(`[DEBUG] Real-time Productivity: Received ${snapshot.size} leads`);
+      console.log(`[DEBUG] Real-time Productivity: Estimated Firestore Reads: ${snapshot.size} (Documents: ${snapshot.size})`);
+      
+      const userStats: Record<string, ProductivityStats> = {}
+
+      snapshot.docs.forEach((doc) => {
+        const lead = doc.data()
+        const userId = lead.assigned_to || "Unassigned"
+        
+        if (!userStats[userId]) {
+          userStats[userId] = {
+            userId,
+            userName: lead.assigned_to || "Unassigned",
+            date: new Date().toISOString(),
+            leadsWorked: 0,
+            convertedLeads: 0,
+            lastActivity: new Date(0),
+            statusBreakdown: {},
+          }
+        }
+
+        const stats = userStats[userId]
+        stats.leadsWorked++
+
+        if (lead.category === "Converted") {
+          stats.convertedLeads++
+        }
+
+        const leadTime = lead.lastModified?.toDate ? lead.lastModified.toDate() : new Date(lead.lastModified)
+        if (leadTime > stats.lastActivity) {
+          stats.lastActivity = leadTime
+        }
+
+        const status = lead.category || "Unknown"
+        stats.statusBreakdown[status] = (stats.statusBreakdown[status] || 0) + 1
+      })
+
+      setProductivityStats(Object.values(userStats))
+      setProductivityLoading(false)
+    }, (error) => {
+      console.error("Error in real-time productivity listener:", error)
+      toast.error("Failed to connect to real-time updates")
+      setProductivityLoading(false)
+    })
+
+    return () => unsubscribe()
+  }, [selectedProductivityRange])
 
 
 

@@ -3,6 +3,10 @@ import { adminDb } from "@/firebase/firebase-admin"
 
 export const dynamic = 'force-dynamic'
 
+// Simple in-memory cache
+const cache = new Map<string, { data: any; timestamp: number }>()
+const CACHE_TTL = 2 * 60 * 1000 // 2 minutes
+
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get("type")
@@ -13,22 +17,9 @@ export async function GET(request: Request) {
 
     if (!adminDb) {
         console.error("[API] Firebase Admin SDK not initialized. Missing environment variables.")
-        const envDebug = {
-            PID: process.env.FIREBASE_PROJECT_ID,
-            Email: !!process.env.FIREBASE_CLIENT_EMAIL,
-            Key: !!process.env.FIREBASE_PRIVATE_KEY,
-            Apps: adminDb ? "DB Initialized" : "DB Null"
-        };
         return NextResponse.json(
-            {
-                error: "Server-side Firebase Admin SDK is not initialized.",
-                debug: envDebug,
-                message: "Please check your server logs and environment variables."
-            },
-            {
-                status: 500,
-                headers: { 'Cache-Control': 'no-store, max-age=0' }
-            }
+            { error: "Server-side Firebase Admin SDK is not initialized." },
+            { status: 500 }
         )
     }
     const db = adminDb;
@@ -38,41 +29,71 @@ export async function GET(request: Request) {
             const startDateParam = searchParams.get("startDate")
             const endDateParam = searchParams.get("endDate")
 
-            let query = db.collection("billcutLeads") as FirebaseFirestore.Query
+            // Create cache key based on params
+            const cacheKey = `analytics-${startDateParam}-${endDateParam}`
+            const cached = cache.get(cacheKey)
+
+            if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+                console.log(`[DEBUG] Analytics: Returning cached data for ${cacheKey}`);
+                return NextResponse.json(cached.data, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+            }
+
+            let baseQuery = db.collection("billcutLeads") as FirebaseFirestore.Query
 
             if (startDateParam) {
                 const startDate = new Date(startDateParam)
                 startDate.setHours(0, 0, 0, 0)
-                query = query.where("date", ">=", startDate.getTime())
+                baseQuery = baseQuery.where("date", ">=", startDate.getTime())
             }
 
             if (endDateParam) {
                 const endDate = new Date(endDateParam)
-                // If it's today, use current time, otherwise use end of day
                 if (endDate.toDateString() === new Date().toDateString()) {
                     endDate.setTime(new Date().getTime())
                 } else {
                     endDate.setHours(23, 59, 59, 999)
                 }
-                query = query.where("date", "<=", endDate.getTime())
+                baseQuery = baseQuery.where("date", "<=", endDate.getTime())
             }
 
-            const querySnapshot = await query.get()
+            // OPTIMIZATION: Use count() for simple metrics
+            const totalLeadsCountPromise = baseQuery.count().get()
+            const convertedLeadsCountPromise = baseQuery.where("category", "==", "Converted").count().get()
+
+            // Fetch all docs for detailed analytics (still needed for trends/breakdowns)
+            const querySnapshotPromise = baseQuery.get()
+
+            const [totalLeadsSnap, convertedLeadsSnap, querySnapshot] = await Promise.all([
+                totalLeadsCountPromise,
+                convertedLeadsCountPromise,
+                querySnapshotPromise
+            ])
+
+            const totalLeads = totalLeadsSnap.data().count
+            const convertedLeadsCount = convertedLeadsSnap.data().count
+
+            // ESTIMATED READS CALCULATION
+            // count() costs 1 read per 1000 docs (min 1)
+            const countReads = Math.ceil(totalLeads / 1000) + Math.ceil(convertedLeadsCount / 1000)
+            const docReads = querySnapshot.size
+            const totalEstimatedReads = countReads + docReads
+
+            console.log(`[DEBUG] Analytics: Fetched ${querySnapshot.size} leads (Total Count: ${totalLeads})`);
+            console.log(`[DEBUG] Analytics: Estimated Firestore Reads: ${totalEstimatedReads} (Aggregation: ${countReads}, Documents: ${docReads})`);
+
             const leads = querySnapshot.docs.map(
                 (doc: any) =>
                     ({
                         id: doc.id,
                         ...doc.data(),
-                    }) as BillcutLead,
+                    }) as any,
             )
 
-            // Perform Analytics Calculations
             if (!leads.length) {
                 return NextResponse.json({ analytics: null }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
             }
 
             // Basic metrics
-            const totalLeads = leads.length
             const uniqueAssignees = new Set(leads.map((lead) => lead.assigned_to)).size
 
             // Calculate average debt range
@@ -80,20 +101,19 @@ export async function GET(request: Request) {
                 .map((lead) => {
                     const range = lead.debt_range || "Not specified"
                     if (range === "Not specified") return null
-                    const [min, max] = range.split(" - ").map((r) => {
-                        const num = Number.parseInt(r)
-                        return isNaN(num) ? 0 : num * 100000 // Convert lakhs to actual amount, handle invalid numbers
+                    const [min, max] = range.split(" - ").map((r: string) => {
+                        const num = parseInt(r)
+                        return isNaN(num) ? 0 : num * 100000
                     })
                     return (min + max) / 2
                 })
-                .filter((val): val is number => val !== null && val > 0) // Filter out null and zero values
+                .filter((val): val is number => val !== null && val > 0)
 
             const averageDebt =
                 debtRanges.length > 0 ? Math.round(debtRanges.reduce((sum, val) => sum + val, 0) / debtRanges.length) : 0
 
-            // Calculate conversion rate
-            const convertedLeads = leads.filter((lead) => lead.category === "Converted").length
-            const conversionRate = (convertedLeads / totalLeads) * 100
+            // Calculate conversion rate using optimized counts
+            const conversionRate = (convertedLeadsCount / totalLeads) * 100
 
             // Short Loan Analytics
             const shortLoanLeads = leads.filter((lead) => lead.category === "Short Loan").length
@@ -162,7 +182,7 @@ export async function GET(request: Request) {
                     const creationDate = new Date(
                         lead.date || (lead.synced_date?.toMillis ? lead.synced_date.toMillis() : lead.synced_date),
                     )
-                    const dateKey = creationDate.toISOString().split("T")[0] // YYYY-MM-DD format
+                    const dateKey = creationDate.toISOString().split("T")[0]
 
                     if (!acc[dateKey]) {
                         acc[dateKey] = {
@@ -190,7 +210,7 @@ export async function GET(request: Request) {
 
             const leadEntryTimelineData = Object.values(leadEntryTimeline)
                 .sort((a: any, b: any) => a.date.localeCompare(b.date))
-                .slice(-30) // Show last 30 days
+                .slice(-30)
 
             // Conversion time by salesperson
             const conversionTimeBySalesperson = conversionTimeData.reduce(
@@ -210,7 +230,6 @@ export async function GET(request: Request) {
                 {} as Record<string, any>,
             )
 
-            // Calculate averages for each salesperson
             Object.values(conversionTimeBySalesperson).forEach((rep: any) => {
                 const conversions = rep.conversions
                 rep.avgDays = conversions.reduce((sum: number, days: number) => sum + days, 0) / conversions.length
@@ -245,7 +264,7 @@ export async function GET(request: Request) {
                     const creationDate = new Date(
                         lead.date || (lead.synced_date?.toMillis ? lead.synced_date.toMillis() : lead.synced_date),
                     )
-                    const dayOfWeek = creationDate.getDay() // 0 = Sunday, 6 = Saturday
+                    const dayOfWeek = creationDate.getDay()
                     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
                     const dayName = dayNames[dayOfWeek]
                     acc[dayName] = (acc[dayName] || 0) + 1
@@ -256,7 +275,7 @@ export async function GET(request: Request) {
 
             const dayOfWeekPatternData = Object.entries(dayOfWeekPattern).map(([day, count]) => ({ day, count }))
 
-            // Category distribution with percentage
+            // Category distribution
             const categoryDistribution = leads.reduce(
                 (acc, lead) => {
                     const category = lead.category || "Uncategorized"
@@ -268,8 +287,8 @@ export async function GET(request: Request) {
 
             const categoryData = Object.entries(categoryDistribution).map(([name, value]) => ({
                 name,
-                value,
-                percentage: (value / totalLeads) * 100,
+                value: value as number,
+                percentage: ((value as number) / totalLeads) * 100,
             }))
 
             // Assigned to distribution
@@ -286,29 +305,19 @@ export async function GET(request: Request) {
             const debtRangeDistribution = leads.reduce(
                 (acc, lead) => {
                     const range = lead.debt_range || "Not specified"
-                    // Sort the ranges numerically for better display
-                    if (range !== "Not specified") {
-                        const [min, max] = range.split(" - ").map((r) => {
-                            const num = Number.parseInt(r)
-                            return num * 100000 // Convert lakhs to actual amount
-                        })
-                        acc[range] = (acc[range] || 0) + 1
-                    } else {
-                        acc[range] = (acc[range] || 0) + 1
-                    }
+                    acc[range] = (acc[range] || 0) + 1
                     return acc
                 },
                 {} as Record<string, number>,
             )
 
-            // Sort debt ranges for better visualization
             const sortedDebtRanges = Object.entries(debtRangeDistribution)
-                .map(([name, value]) => ({ name, value }))
+                .map(([name, value]) => ({ name, value: value as number }))
                 .sort((a, b) => {
                     if (a.name === "Not specified") return 1
                     if (b.name === "Not specified") return -1
-                    const [aMin] = a.name.split(" - ").map((r) => Number.parseInt(r))
-                    const [bMin] = b.name.split(" - ").map((r) => Number.parseInt(r))
+                    const [aMin] = a.name.split(" - ").map((r: string) => parseInt(r))
+                    const [bMin] = b.name.split(" - ").map((r: string) => parseInt(r))
                     return aMin - bMin
                 })
 
@@ -322,7 +331,7 @@ export async function GET(request: Request) {
             }
 
             leads.forEach((lead) => {
-                const income = Number.parseInt(lead.income) || 0
+                const income = parseInt(lead.income) || 0
                 if (income <= 25000) incomeRanges["0-25K"]++
                 else if (income <= 50000) incomeRanges["25K-50K"]++
                 else if (income <= 75000) incomeRanges["50K-75K"]++
@@ -330,17 +339,16 @@ export async function GET(request: Request) {
                 else incomeRanges["100K+"]++
             })
 
-            // Geographic distribution (extract state from pincode)
+            // State distribution
             const stateDistribution = leads.reduce(
                 (acc, lead) => {
                     const address = lead.address || ""
-                    // Extract pincode (6 digits) from address
                     const pincodeMatch = address.match(/\b\d{6}\b/)
                     const pincode = pincodeMatch ? pincodeMatch[0] : ""
                     let state = "Unknown"
 
                     if (pincode) {
-                        const firstTwoDigits = Number.parseInt(pincode.substring(0, 2))
+                        const firstTwoDigits = parseInt(pincode.substring(0, 2))
                         if (firstTwoDigits === 11) state = "Delhi"
                         else if (firstTwoDigits >= 12 && firstTwoDigits <= 13) state = "Haryana"
                         else if (firstTwoDigits >= 14 && firstTwoDigits <= 16) state = "Punjab"
@@ -349,7 +357,7 @@ export async function GET(request: Request) {
                         else if (firstTwoDigits >= 20 && firstTwoDigits <= 28) state = "Uttar Pradesh"
                         else if (firstTwoDigits >= 30 && firstTwoDigits <= 34) state = "Rajasthan"
                         else if (firstTwoDigits >= 36 && firstTwoDigits <= 39) state = "Gujarat"
-                        else if (firstTwoDigits >= 0 && firstTwoDigits <= 44) state = "Maharashtra"
+                        else if (firstTwoDigits >= 40 && firstTwoDigits <= 44) state = "Maharashtra"
                         else if (firstTwoDigits >= 45 && firstTwoDigits <= 48) state = "Madhya Pradesh"
                         else if (firstTwoDigits === 49) state = "Chhattisgarh"
                         else if (firstTwoDigits >= 50 && firstTwoDigits <= 53) state = "Andhra Pradesh/Telangana"
@@ -372,13 +380,11 @@ export async function GET(request: Request) {
                 {} as Record<string, number>,
             )
 
-            // Sort states by count in descending order
             const sortedStateDistribution = Object.entries(stateDistribution)
-                .map(([name, value]) => ({ name, value }))
-                .sort((a, b) => b.value - a.value)
-                .slice(0, 10) // Take top 10 states
+                .map(([name, value]) => ({ name, value: value as number }))
+                .sort((a, b) => (b.value as number) - (a.value as number))
+                .slice(0, 10)
 
-            // Time-based analysis
             const monthlyDistribution = leads.reduce(
                 (acc, lead) => {
                     const date = new Date(lead.date)
@@ -389,47 +395,49 @@ export async function GET(request: Request) {
                 {} as Record<string, number>,
             )
 
-            // Sales performance with proper converted lead tracking using convertedAt
-            const salesPerformance = Object.entries(assigneeDistribution).map(([name, count]) => {
-                const assigneeLeads = leads.filter((lead) => lead.assigned_to === name)
-                const interestedCount = assigneeLeads.filter((lead) => lead.category === "Interested").length
+            // Fetch active salespersons to filter salesPerformance
+            const activeSalespersonsSnapshot = await db.collection("users")
+                .where("role", "in", ["sales", "salesperson"])
+                .where("status", "==", "active")
+                .get()
 
-                const convertedCount = assigneeLeads.filter((lead) =>
-                    lead.category === "Converted" && lead.convertedAt
-                ).length
+            const activeSalespersonNames = new Set(
+                activeSalespersonsSnapshot.docs.map(doc => {
+                    const data = doc.data()
+                    return `${data.firstName || ""} ${data.lastName || ""}`.trim()
+                }).filter(name => name !== "")
+            )
 
-                const conversionRate = count > 0 ? ((interestedCount + convertedCount) / count) * 100 : 0
+            const salesPerformance = Object.entries(assigneeDistribution)
+                .filter(([name]) => activeSalespersonNames.has(name))
+                .map(([name, count]) => {
+                    const totalCount = count as number
+                    const assigneeLeads = leads.filter((lead) => lead.assigned_to === name)
+                    const interestedCount = assigneeLeads.filter((lead) => lead.category === "Interested").length
+                    const convertedCount = assigneeLeads.filter((lead) => lead.category === "Converted" && lead.convertedAt).length
+                    const conversionRate = totalCount > 0 ? ((interestedCount + convertedCount) / totalCount) * 100 : 0
 
-                // Calculate status breakdown for this salesperson
-                const statusBreakdown = categoryData.reduce((acc, category) => {
-                    if (category.name === "Converted") {
-                        acc[category.name] = assigneeLeads.filter(
-                            (lead) => lead.category === category.name && lead.convertedAt
-                        ).length
-                    } else {
+                    const statusBreakdown = categoryData.reduce((acc, category) => {
                         acc[category.name] = assigneeLeads.filter((lead) => lead.category === category.name).length
+                        return acc
+                    }, {} as Record<string, number>)
+
+                    return {
+                        name,
+                        totalLeads: count,
+                        interested: interestedCount,
+                        converted: convertedCount,
+                        conversionRate: Math.round(conversionRate * 100) / 100,
+                        statusBreakdown
                     }
-                    return acc
-                }, {} as Record<string, number>)
+                })
 
-                return {
-                    name,
-                    totalLeads: count,
-                    interested: interestedCount,
-                    converted: convertedCount,
-                    conversionRate: Math.round(conversionRate * 100) / 100,
-                    statusBreakdown // Include this for the table
-                }
-            })
-
-            // Contact info analysis
             const contactAnalysis = {
                 hasEmail: leads.filter((lead) => lead.email && lead.email !== "").length,
                 hasPhone: leads.filter((lead) => lead.mobile && lead.mobile !== "").length,
                 hasNotes: leads.filter((lead) => lead.sales_notes && lead.sales_notes !== "").length,
             }
 
-            // Language Barrier Analytics
             const languageBarrierLeads = leads.filter(
                 (lead) =>
                     lead.category === "Language Barrier" ||
@@ -437,19 +445,9 @@ export async function GET(request: Request) {
                     (lead.language_barrier && lead.language_barrier !== ""),
             )
 
-            // Language distribution analysis
             const languageDistribution = languageBarrierLeads.reduce(
                 (acc, lead) => {
-                    let language = ""
-                    if (lead.language_barrier && lead.language_barrier !== "") {
-                        language = lead.language_barrier
-                    } else if (lead.sales_notes && lead.sales_notes.includes("Language Barrier")) {
-                        const languageMatch = lead.sales_notes.match(/Language Barrier[:\s-]+([A-Za-z]+)/i)
-                        language = languageMatch ? languageMatch[1] : "Unknown"
-                    } else {
-                        language = "Unknown"
-                    }
-
+                    let language = lead.language_barrier || "Unknown"
                     acc[language] = (acc[language] || 0) + 1
                     return acc
                 },
@@ -457,179 +455,10 @@ export async function GET(request: Request) {
             )
 
             const languageDistributionData = Object.entries(languageDistribution)
-                .map(([name, value]) => ({ name, value }))
-                .sort((a, b) => b.value - a.value)
+                .map(([name, value]) => ({ name, value: value as number }))
+                .sort((a, b) => (b.value as number) - (a.value as number))
 
-            // Language barrier by salesperson
-            const languageBarrierBySalesperson = languageBarrierLeads.reduce(
-                (acc, lead) => {
-                    const salesperson = lead.assigned_to || "Unassigned"
-                    if (!acc[salesperson]) {
-                        acc[salesperson] = {
-                            name: salesperson,
-                            totalLanguageBarrierLeads: 0,
-                            languages: {} as Record<string, number>,
-                        }
-                    }
-
-                    acc[salesperson].totalLanguageBarrierLeads += 1
-
-                    let language = ""
-                    if (lead.language_barrier && lead.language_barrier !== "") {
-                        language = lead.language_barrier
-                    } else if (lead.sales_notes && lead.sales_notes.includes("Language Barrier")) {
-                        const languageMatch = lead.sales_notes.match(/Language Barrier[:\s-]+([A-Za-z]+)/i)
-                        language = languageMatch ? languageMatch[1] : "Unknown"
-                    } else {
-                        language = "Unknown"
-                    }
-
-                    acc[salesperson].languages[language] = (acc[salesperson].languages[language] || 0) + 1
-                    return acc
-                },
-                {} as Record<string, { name: string; totalLanguageBarrierLeads: number; languages: Record<string, number> }>,
-            )
-
-            const languageBarrierBySalespersonData = Object.values(languageBarrierBySalesperson)
-                .map((rep) => ({
-                    name: rep.name,
-                    totalLeads: rep.totalLanguageBarrierLeads,
-                    topLanguage: Object.entries(rep.languages).sort((a, b) => b[1] - a[1])[0]?.[0] || "Unknown",
-                    topLanguageCount: Object.entries(rep.languages).sort((a, b) => b[1] - a[1])[0]?.[1] || 0,
-                    uniqueLanguages: Object.keys(rep.languages).length,
-                }))
-                .sort((a, b) => b.totalLeads - a.totalLeads)
-
-            // Language barrier by geographic region (state)
-            const languageBarrierByState = languageBarrierLeads.reduce(
-                (acc, lead) => {
-                    const address = lead.address || ""
-                    const pincodeMatch = address.match(/\b\d{6}\b/)
-                    const pincode = pincodeMatch ? pincodeMatch[0] : ""
-                    let state = "Unknown"
-
-                    if (pincode) {
-                        const firstTwoDigits = Number.parseInt(pincode.substring(0, 2))
-                        if (firstTwoDigits === 11) state = "Delhi"
-                        else if (firstTwoDigits >= 12 && firstTwoDigits <= 13) state = "Haryana"
-                        else if (firstTwoDigits >= 14 && firstTwoDigits <= 16) state = "Punjab"
-                        else if (firstTwoDigits === 17) state = "Himachal Pradesh"
-                        else if (firstTwoDigits >= 18 && firstTwoDigits <= 19) state = "Jammu & Kashmir"
-                        else if (firstTwoDigits >= 20 && firstTwoDigits <= 28) state = "Uttar Pradesh"
-                        else if (firstTwoDigits >= 30 && firstTwoDigits <= 34) state = "Rajasthan"
-                        else if (firstTwoDigits >= 36 && firstTwoDigits <= 39) state = "Gujarat"
-                        else if (firstTwoDigits >= 0 && firstTwoDigits <= 44) state = "Maharashtra"
-                        else if (firstTwoDigits >= 45 && firstTwoDigits <= 48) state = "Madhya Pradesh"
-                        else if (firstTwoDigits === 49) state = "Chhattisgarh"
-                        else if (firstTwoDigits >= 50 && firstTwoDigits <= 53) state = "Andhra Pradesh/Telangana"
-                        else if (firstTwoDigits >= 56 && firstTwoDigits <= 59) state = "Karnataka"
-                        else if (firstTwoDigits >= 60 && firstTwoDigits <= 64) state = "Tamil Nadu"
-                        else if (firstTwoDigits >= 67 && firstTwoDigits <= 69) state = "Kerala"
-                        else if (firstTwoDigits === 682) state = "Lakshadweep"
-                        else if (firstTwoDigits >= 70 && firstTwoDigits <= 74) state = "West Bengal"
-                        else if (firstTwoDigits === 744) state = "Andaman & Nicobar"
-                        else if (firstTwoDigits >= 75 && firstTwoDigits <= 77) state = "Odisha"
-                        else if (firstTwoDigits === 78) state = "Assam"
-                        else if (firstTwoDigits === 79) state = "North Eastern States"
-                        else if (firstTwoDigits >= 80 && firstTwoDigits <= 85) state = "Bihar"
-                        else if ((firstTwoDigits >= 80 && firstTwoDigits <= 83) || firstTwoDigits === 92) state = "Jharkhand"
-                    }
-
-                    if (!acc[state]) {
-                        acc[state] = {
-                            name: state,
-                            totalLanguageBarrierLeads: 0,
-                            languages: {} as Record<string, number>,
-                        }
-                    }
-
-                    acc[state].totalLanguageBarrierLeads += 1
-
-                    let language = ""
-                    if (lead.language_barrier && lead.language_barrier !== "") {
-                        language = lead.language_barrier
-                    } else if (lead.sales_notes && lead.sales_notes.includes("Language Barrier")) {
-                        const languageMatch = lead.sales_notes.match(/Language Barrier[:\s-]+([A-Za-z]+)/i)
-                        language = languageMatch ? languageMatch[1] : "Unknown"
-                    } else {
-                        language = "Unknown"
-                    }
-
-                    acc[state].languages[language] = (acc[state].languages[language] || 0) + 1
-                    return acc
-                },
-                {} as Record<string, { name: string; totalLanguageBarrierLeads: number; languages: Record<string, number> }>,
-            )
-
-            const languageBarrierByStateData = Object.values(languageBarrierByState)
-                .map((state) => ({
-                    name: state.name,
-                    totalLeads: state.totalLanguageBarrierLeads,
-                    topLanguage: Object.entries(state.languages).sort((a, b) => b[1] - a[1])[0]?.[0] || "Unknown",
-                    topLanguageCount: Object.entries(state.languages).sort((a, b) => b[1] - a[1])[0]?.[1] || 0,
-                    uniqueLanguages: Object.keys(state.languages).length,
-                }))
-                .sort((a, b) => b.totalLeads - a.totalLeads)
-                .slice(0, 10) // Top 10 states
-
-            // Language barrier conversion analysis
-            const languageBarrierConversionData = languageBarrierLeads.reduce(
-                (acc, lead) => {
-                    let language = ""
-                    if (lead.language_barrier && lead.language_barrier !== "") {
-                        language = lead.language_barrier
-                    } else if (lead.sales_notes && lead.sales_notes.includes("Language Barrier")) {
-                        const languageMatch = lead.sales_notes.match(/Language Barrier[:\s-]+([A-Za-z]+)/i)
-                        language = languageMatch ? languageMatch[1] : "Unknown"
-                    } else {
-                        language = "Unknown"
-                    }
-
-                    if (!acc[language]) {
-                        acc[language] = {
-                            language,
-                            totalLeads: 0,
-                            convertedLeads: 0,
-                            interestedLeads: 0,
-                            notInterestedLeads: 0,
-                            conversionRate: 0,
-                        }
-                    }
-
-                    acc[language].totalLeads += 1
-                    if (lead.category === "Converted") {
-                        acc[language].convertedLeads += 1
-                    } else if (lead.category === "Interested") {
-                        acc[language].interestedLeads += 1
-                    } else if (lead.category === "Not Interested") {
-                        acc[language].notInterestedLeads += 1
-                    }
-
-                    return acc
-                },
-                {} as Record<
-                    string,
-                    {
-                        language: string
-                        totalLeads: number
-                        convertedLeads: number
-                        interestedLeads: number
-                        notInterestedLeads: number
-                        conversionRate: number
-                    }
-                >,
-            )
-
-            // Calculate conversion rates
-            Object.values(languageBarrierConversionData).forEach((data) => {
-                data.conversionRate = data.totalLeads > 0 ? (data.convertedLeads / data.totalLeads) * 100 : 0
-            })
-
-            const languageBarrierConversionDataArray = Object.values(languageBarrierConversionData).sort(
-                (a, b) => b.totalLeads - a.totalLeads,
-            )
-
-            const analytics = {
+            const analyticsResult = {
                 totalLeads,
                 uniqueAssignees,
                 averageDebt,
@@ -645,9 +474,6 @@ export async function GET(request: Request) {
                 dayOfWeekPatternData,
                 languageBarrierLeads: languageBarrierLeads.length,
                 languageDistribution: languageDistributionData,
-                languageBarrierBySalesperson: languageBarrierBySalespersonData,
-                languageBarrierByState: languageBarrierByStateData,
-                languageBarrierConversion: languageBarrierConversionDataArray,
                 categoryDistribution: categoryData,
                 assigneeDistribution: Object.entries(assigneeDistribution).map(([name, value]) => ({ name, value })),
                 debtRangeDistribution: sortedDebtRanges,
@@ -660,7 +486,12 @@ export async function GET(request: Request) {
                 contactAnalysis,
             }
 
-            return NextResponse.json({ analytics }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+            const responseData = { analytics: analyticsResult, docCount: querySnapshot.size }
+
+            // Cache the result
+            cache.set(cacheKey, { data: responseData, timestamp: Date.now() })
+
+            return NextResponse.json(responseData, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
         } else if (type === "productivity") {
             const range = searchParams.get("range") || "today"
             const customStart = searchParams.get("customStart") || undefined
@@ -676,6 +507,7 @@ export async function GET(request: Request) {
                     .where("lastModified", "<=", endDate)
 
                 const leadsSnapshot = await leadsQuery.get()
+                console.log(`[DEBUG] Productivity (Today): Fetched ${leadsSnapshot.size} leads from billcutLeads`);
                 const leads = leadsSnapshot.docs.map((doc: any) => doc.data())
 
                 const userStats: Record<string, ProductivityStats> = {}
@@ -715,7 +547,7 @@ export async function GET(request: Request) {
                     stats.statusBreakdown[status] = (stats.statusBreakdown[status] || 0) + 1
                 })
 
-                return NextResponse.json({ productivityStats: Object.values(userStats) }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+                return NextResponse.json({ productivityStats: Object.values(userStats), docCount: leadsSnapshot.size }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
             }
 
             // For other ranges, use snapshots
@@ -726,6 +558,8 @@ export async function GET(request: Request) {
                 .where("date", "<=", endDate)
 
             const snapshotsSnapshot = await snapshotsQuery.get()
+            console.log(`[DEBUG] Productivity (Snapshots): Fetched ${snapshotsSnapshot.size} snapshots from productivity_snapshots`);
+            console.log(`[DEBUG] Productivity: Estimated Firestore Reads: ${snapshotsSnapshot.size} (Documents: ${snapshotsSnapshot.size})`);
             const snapshots = snapshotsSnapshot.docs.map((doc) => doc.data())
 
             // Aggregate snapshots by user
@@ -795,13 +629,20 @@ export async function GET(request: Request) {
                 }
             })
 
-            return NextResponse.json({ productivityStats: Object.values(userStats) }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
+            return NextResponse.json({ productivityStats: Object.values(userStats), docCount: snapshotsSnapshot.size }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
         }
 
         return NextResponse.json({ error: "Invalid type parameter" }, { status: 400, headers: { 'Cache-Control': 'no-store, max-age=0' } })
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error in API route:", error)
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: { 'Cache-Control': 'no-store, max-age=0' } })
+        return NextResponse.json(
+            {
+                error: "Internal Server Error",
+                message: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            },
+            { status: 500, headers: { 'Cache-Control': 'no-store, max-age=0' } }
+        )
     }
 }
 

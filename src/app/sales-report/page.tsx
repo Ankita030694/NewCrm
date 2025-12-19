@@ -149,6 +149,40 @@ const getStatusColor = (status: string) => {
   }
 }
 
+// Status badge color function (for table cells with borders)
+const getStatusBadgeColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case "interested":
+      return "bg-green-700 text-white border-green-700"
+    case "not interested":
+      return "bg-red-900 text-white border-red-700"
+    case "not answering":
+      return "bg-orange-900 text-white border-orange-700"
+    case "callback":
+      return "bg-yellow-900 text-white border-yellow-700"
+    case "converted":
+      return "bg-emerald-900 text-white border-emerald-700"
+    case "loan required":
+      return "bg-purple-900 text-white border-purple-700"
+    case "short loan":
+      return "bg-teal-900 text-white border-teal-700"
+    case "cibil issue":
+      return "bg-rose-900 text-white border-rose-700"
+    case "retargeting":
+      return "bg-cyan-900 text-white border-cyan-700"
+    case "closed lead":
+      return "bg-gray-500 text-white border-gray-700"
+    case "select status":
+      return "bg-gray-400 text-white border-gray-600"
+    case "language barrier":
+      return "bg-indigo-900 text-white border-indigo-700"
+    case "future potential":
+      return "bg-blue-900 text-white border-blue-700"
+    default:
+      return "bg-gray-400 text-white border-gray-600"
+  }
+}
+
 const SalesReportContent = () => {
   const [leads, setLeads] = useState<CrmLead[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -937,6 +971,60 @@ const SalesReportContent = () => {
   }, [selectedProductivityRange, productivityDateRange])
 
   // Helper function to get the assigned person consistently across data structures
+  // Helper function to navigate to ama leads page with filters
+  const navigateToLeadsWithFilters = (salesperson: string, status: string) => {
+    const params = new URLSearchParams()
+    
+    // Add salesperson filter
+    if (salesperson && salesperson !== "Unassigned") {
+      params.append("salespersonId", salesperson)
+    } else if (salesperson === "Unassigned") {
+      params.append("salespersonId", "unassigned")
+    }
+
+    // Add status filter - map to exact case-sensitive values expected by ama leads page
+    if (status && status !== "No Status") {
+      // Map status values to match the exact case-sensitive values in ama leads page
+      const statusMapping: { [key: string]: string } = {
+        interested: "Interested",
+        "not interested": "Not Interested",
+        "not answering": "Not Answering",
+        callback: "Callback",
+        converted: "Converted",
+        "loan required": "Loan Required",
+        "short loan": "Short Loan",
+        "cibil issue": "Cibil Issue",
+        retargeting: "Retargeting",
+        "closed lead": "Closed Lead",
+        "future potential": "Future Potential",
+        "language barrier": "Language Barrier",
+        "-": "No Status",
+      }
+      const mappedStatus = statusMapping[status.toLowerCase()] || status
+      params.append("status", mappedStatus)
+    } else if (status === "No Status") {
+      params.append("status", "No Status")
+    }
+
+    // Add date filters if they exist
+    if (dateRange.startDate) {
+      params.append("fromDate", dateRange.startDate)
+    }
+    if (dateRange.endDate) {
+      params.append("toDate", dateRange.endDate)
+    }
+
+    // Debug logging
+    console.log("Navigating to ama leads with filters:", {
+      originalSalesperson: salesperson,
+      originalStatus: status,
+      finalParams: params.toString(),
+    })
+
+    // Navigate to ama leads page with filters
+    router.push(`/ama_leads?${params.toString()}`)
+  }
+
   const getAssignedTo = (lead: CrmLead): string => {
     return lead.assigned_to || "Unassigned"
   }
@@ -1822,7 +1910,11 @@ const SalesReportContent = () => {
                             }`}
                           >
                             <div className="flex items-center">
-                              <span className="mr-2 px-2 py-1 rounded-md text-xs font-medium border">
+                              <span
+                                className={`mr-2 px-2 py-1 rounded-md text-xs font-medium border ${getStatusBadgeColor(category.name)} cursor-pointer hover:opacity-80 transition-opacity duration-200`}
+                                onClick={() => navigateToLeadsWithFilters(rep.name, category.name)}
+                                title={`Click to view ${category.name} leads for ${rep.name}`}
+                              >
                                 {statusBreakdown[category.name] || 0}
                               </span>
                               {rep.totalLeads > 0 && (

@@ -105,6 +105,33 @@ const AmaLeadsPage = () => {
 
   // --- Effects ---
 
+  // 0. Handle URL parameters on component mount
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const urlParams = new URLSearchParams(window.location.search)
+    const statusParam = urlParams.get("status")
+    const salesPersonParam = urlParams.get("salespersonId")
+    const fromDateParam = urlParams.get("fromDate")
+    const toDateParam = urlParams.get("toDate")
+
+    if (statusParam) {
+      setStatusFilter(statusParam)
+    }
+
+    if (salesPersonParam) {
+      setSalesPersonFilter(salesPersonParam)
+    }
+
+    if (fromDateParam) {
+      setFromDate(fromDateParam)
+    }
+
+    if (toDateParam) {
+      setToDate(toDateParam)
+    }
+  }, [])
+
   // 1. Auth Check
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {

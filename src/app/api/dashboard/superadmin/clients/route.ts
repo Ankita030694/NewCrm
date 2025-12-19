@@ -11,31 +11,18 @@ export async function GET(request: NextRequest) {
     try {
         const clientsRef = adminDb.collection("clients");
 
-        // 1. Optimized Counts (Low Cost)
-        const statuses = ['Active', 'Dropped', 'Not Responding', 'On Hold', 'Inactive'];
-        const countPromises = [
-            clientsRef.count().get(),
-            ...statuses.map(status => clientsRef.where('adv_status', '==', status).count().get()),
-            ...statuses.map(status => clientsRef.where('status', '==', status).count().get()) // Fallback field
-        ];
+        // 1. Optimized Total Count (Low Cost)
+        const totalCountSnapshot = await clientsRef.count().get();
+        const totalClients = totalCountSnapshot.data().count;
 
-        const countResults = await Promise.all(countPromises);
-        const totalClients = countResults[0].data().count;
+        // 2. Complex Distributions (Currently requires .get() - High Cost)
+        // Note: We calculate status distribution here to handle null/missing fields correctly
+        const snapshot = await clientsRef.get();
+        console.log(`[API DEBUG] Superadmin Clients: Read ${snapshot.size} documents for complex distributions.`);
 
         const statusDistribution: Record<string, number> = {
             Active: 0, Dropped: 0, 'Not Responding': 0, 'On Hold': 0, Inactive: 0
         };
-
-        statuses.forEach((status, i) => {
-            // Combine counts from both fields (adv_status and status)
-            // Note: This is a rough approximation if both fields are used inconsistently
-            statusDistribution[status] = countResults[i + 1].data().count + countResults[i + 1 + statuses.length].data().count;
-        });
-
-        // 2. Complex Distributions (Currently requires .get() - High Cost)
-        // TODO: Move these to a summary document or cloud function aggregation
-        const snapshot = await clientsRef.get();
-        console.log(`[API DEBUG] Superadmin Clients: Read ${snapshot.size} documents for complex distributions.`);
 
         const analytics = {
             totalClients: totalClients,
@@ -51,7 +38,21 @@ export async function GET(request: NextRequest) {
 
         snapshot.forEach((doc) => {
             const client = doc.data();
-            const status = client.adv_status || client.status || 'Inactive';
+
+            // Determine status based on user requirements:
+            // Inactive if adv_status is null, "Inactive", or does not exist.
+            let status = client.adv_status;
+            if (!status || status === 'Inactive') {
+                status = 'Inactive';
+            }
+
+            // Update global status distribution
+            if (statusDistribution[status] !== undefined) {
+                statusDistribution[status]++;
+            } else {
+                // Fallback for unexpected statuses if any
+                statusDistribution[status] = 1;
+            }
 
             // Advocate
             const advocate = client.alloc_adv || 'Unassigned';
