@@ -216,6 +216,7 @@ const BillCutLeadsPage = () => {
   // Real-time Listeners
   const listenersRef = useRef<{ [key: string]: () => void }>({})
   const historyListenerRef = useRef<(() => void) | null>(null)
+  const stickyLeadsRef = useRef<Set<string>>(new Set()) // Track leads that should stay visible even if they don't match filters
 
   // Handle URL parameters on component mount
   useEffect(() => {
@@ -896,6 +897,7 @@ const BillCutLeadsPage = () => {
       // Reset pagination state when filters change
       setLastDoc(null)
       setHasMoreLeads(true)
+      stickyLeadsRef.current.clear() // Clear sticky leads when filters change
       fetchBillcutLeads(false)
     }, 300) // Debounce filter changes
 
@@ -998,7 +1000,11 @@ const BillCutLeadsPage = () => {
                         const updatedLeadData = { ...leadData, salesNotes: latestNote };
                         setLeads(prev => {
                             if (prev.find(l => l.id === id)) return prev;
-                            return [updatedLeadData, ...prev].slice(0, LEADS_PER_PAGE);
+                            // Add new lead and sort by date (descending)
+                            const newLeads = [...prev, updatedLeadData].sort((a, b) => {
+                                return new Date(b.date).getTime() - new Date(a.date).getTime();
+                            });
+                            return newLeads.slice(0, LEADS_PER_PAGE);
                         });
                     });
                     
@@ -1023,7 +1029,10 @@ const BillCutLeadsPage = () => {
                         refreshLeadCallbackInfo(id);
                     }
                 } else if (change.type === "removed") {
-                    setLeads(prev => prev.filter(l => l.id !== id));
+                    // Only remove if it's not a sticky lead
+                    if (!stickyLeadsRef.current.has(id)) {
+                      setLeads(prev => prev.filter(l => l.id !== id));
+                    }
                 }
             });
         });
@@ -1125,8 +1134,33 @@ const BillCutLeadsPage = () => {
     fetchTeamMembers()
   }, [])
 
+
+
   // Optimistic update function
   const updateLeadOptimistic = useCallback((id: string, updates: Partial<Lead>) => {
+    // Mark lead as sticky if we're updating it
+    stickyLeadsRef.current.add(id)
+
+    // Handle count updates optimistically - OUTSIDE setLeads to avoid double execution
+    const lead = leads.find(l => l.id === id)
+    if (lead) {
+      if (updates.status && updates.status !== lead.status) {
+        // Check if the old status matched the current filter
+        const oldStatusMatches = statusFilter === "all" || lead.status === statusFilter
+        // Check if the new status matches the current filter
+        const newStatusMatches = statusFilter === "all" || updates.status === statusFilter
+
+        // If it matched before but doesn't match now, decrement count
+        if (oldStatusMatches && !newStatusMatches) {
+          setTotalFilteredCount(prev => Math.max(0, prev - 1))
+        }
+        // If it didn't match before but matches now, increment count
+        else if (!oldStatusMatches && newStatusMatches) {
+          setTotalFilteredCount(prev => prev + 1)
+        }
+      }
+    }
+
     const updateFunction = (prev: Lead[]) => 
       prev.map((lead) => {
         if (lead.id === id) {
@@ -1163,7 +1197,7 @@ const BillCutLeadsPage = () => {
         return prev
       })
     }
-  }, [searchQuery])
+  }, [searchQuery, statusFilter, leads])
 
   // Update lead with optimistic updates
   const updateLead = async (id: string, data: any) => {
