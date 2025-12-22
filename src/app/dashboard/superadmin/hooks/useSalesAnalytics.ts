@@ -93,8 +93,8 @@ export const useSalesAnalytics = ({
     let q = query(
       paymentsRef,
       where('status', '==', 'approved'),
-      where('timestamp', '>=', Timestamp.fromDate(startOfMonth)),
-      where('timestamp', '<=', Timestamp.fromDate(endOfMonth))
+      where('timestamp', '>=', startOfMonth.toISOString()),
+      where('timestamp', '<=', endOfMonth.toISOString())
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
