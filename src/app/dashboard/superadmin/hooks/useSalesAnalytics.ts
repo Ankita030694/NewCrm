@@ -54,9 +54,21 @@ export const useSalesAnalytics = ({
 
         const data = await response.json();
 
-        setSalesAnalytics(data.salesAnalytics);
+        // Use functional updates to avoid overwriting real-time data from onSnapshot
+        setSalesAnalytics(prev => ({
+          ...data.salesAnalytics,
+          // Preserve the real-time collected amount if it's already been updated
+          totalCollectedAmount: prev.totalCollectedAmount || data.salesAnalytics.totalCollectedAmount
+        }));
         setSalespeople(data.salespeople);
-        setIndividualSalesData(data.individualSalesData);
+        setIndividualSalesData(prev => {
+          if (!data.individualSalesData) return null;
+          return {
+            ...data.individualSalesData,
+            // Preserve real-time collected amount for individual data too
+            collectedAmount: prev?.collectedAmount || data.individualSalesData.collectedAmount
+          };
+        });
         setAllSalesTargets(data.allSalesTargets || {});
 
       } catch (error) {
@@ -70,8 +82,12 @@ export const useSalesAnalytics = ({
     fetchData();
 
     // Real-time listener for Sales Revenue (payments collection)
-    const startOfMonth = new Date(selectedAnalyticsYear || new Date().getFullYear(), selectedAnalyticsMonth || new Date().getMonth(), 1);
-    const endOfMonth = new Date(selectedAnalyticsYear || new Date().getFullYear(), (selectedAnalyticsMonth || new Date().getMonth()) + 1, 0, 23, 59, 59, 999);
+    // Fix: Use null check for month/year to handle January (0) correctly
+    const targetMonth = selectedAnalyticsMonth !== null ? selectedAnalyticsMonth : new Date().getMonth();
+    const targetYear = selectedAnalyticsYear !== null ? selectedAnalyticsYear : new Date().getFullYear();
+
+    const startOfMonth = new Date(targetYear, targetMonth, 1);
+    const endOfMonth = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59, 999);
 
     const paymentsRef = collection(db, 'payments');
     let q = query(
@@ -83,7 +99,6 @@ export const useSalesAnalytics = ({
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let totalCollected = 0;
-      const salespersonTargets: Record<string, number> = {};
 
       snapshot.forEach((doc) => {
         const payment = doc.data();
@@ -96,11 +111,6 @@ export const useSalesAnalytics = ({
           }
         } else {
           totalCollected += amount;
-        }
-
-        // Track per-salesperson collected amount for individualSalesData update
-        if (payment.salespersonId) {
-          salespersonTargets[payment.salespersonId] = (salespersonTargets[payment.salespersonId] || 0) + amount;
         }
       });
 

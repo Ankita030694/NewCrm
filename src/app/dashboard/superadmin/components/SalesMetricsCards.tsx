@@ -18,6 +18,7 @@ interface SalesMetricsCardsProps {
     totalCount: number;
   };
   opsPaymentsLoading?: boolean;
+  salesLoading?: boolean;
 }
 
 export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
@@ -27,7 +28,8 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
   selectedAnalyticsMonth,
   selectedAnalyticsYear,
   opsPaymentsAnalytics,
-  opsPaymentsLoading = false
+  opsPaymentsLoading = false,
+  salesLoading = false
 }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -37,7 +39,7 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
           <h3 className="text-lg font-semibold text-blue-600 dark:text-blue-300">
             {selectedSalesperson ? 'Revenue Collected' : 'Sales Revenue'}
           </h3>
-          <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+          <div className={`w-3 h-3 ${salesLoading ? 'bg-blue-400 animate-spin' : 'bg-green-400 animate-pulse'} rounded-full`}></div>
         </div>
         
         {/* Filter indicator */}
@@ -89,14 +91,16 @@ export const SalesMetricsCards: React.FC<SalesMetricsCardsProps> = ({
               </defs>
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-lg font-bold text-gray-900 dark:text-white transition-colors">{analyticsStats.revenueAchievementPercentage}%</span>
+              <span className="text-lg font-bold text-gray-900 dark:text-white transition-colors">
+                {salesLoading ? '...' : `${analyticsStats.revenueAchievementPercentage}%`}
+              </span>
             </div>
           </div>
           
           {/* Revenue Data */}
           <div className="flex-1">
             <div className="text-2xl font-bold text-green-500 dark:text-green-400 mb-1 transition-colors">
-              ₹{analyticsStats.totalCollectedAmount.toLocaleString('en-IN')}
+              {salesLoading ? 'Loading...' : `₹${analyticsStats.totalCollectedAmount.toLocaleString('en-IN')}`}
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400 transition-colors">
               of ₹{analyticsStats.totalTargetAmount.toLocaleString('en-IN')}

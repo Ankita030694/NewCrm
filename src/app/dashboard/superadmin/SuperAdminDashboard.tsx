@@ -165,7 +165,8 @@ const SuperAdminDashboard = React.memo(() => {
     salesAnalytics,
     salespeople,
     individualSalesData,
-    allSalesTargets
+    allSalesTargets,
+    isLoading: salesLoading
   } = useSalesAnalytics({
     selectedAnalyticsMonth,
     selectedAnalyticsYear,
@@ -388,6 +389,7 @@ const SuperAdminDashboard = React.memo(() => {
                   selectedAnalyticsYear={selectedAnalyticsYear}
                   opsPaymentsAnalytics={opsPaymentsAnalytics}
                   opsPaymentsLoading={opsPaymentsLoading}
+                  salesLoading={salesLoading}
                 />
 
                 {/* CRM Leads Analytics Section - Deferred loading */}
