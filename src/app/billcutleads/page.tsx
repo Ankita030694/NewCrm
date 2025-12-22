@@ -700,6 +700,61 @@ const BillCutLeadsPage = () => {
     }
   }, [])
 
+  // Helper to sort leads based on current filters and sorting options
+  const getSortedLeads = useCallback((leadsToSort: Lead[]) => {
+    const hasAdvancedDateFilters = (userRole === "admin" || userRole === "overlord") && 
+      (convertedFromDate || convertedToDate || lastModifiedFromDate || lastModifiedToDate)
+
+    let sorted = [...leadsToSort]
+
+    // 1. Debt Range Sort (if not advanced date filters)
+    if (debtRangeSort !== "none" && !hasAdvancedDateFilters) {
+      sorted.sort((a, b) => {
+        const debtA = Number.parseFloat(a.debtRange?.toString() || "0")
+        const debtB = Number.parseFloat(b.debtRange?.toString() || "0")
+        if (debtRangeSort === "low-to-high") return debtA - debtB
+        if (debtRangeSort === "high-to-low") return debtB - debtA
+        return 0
+      })
+    } 
+    // 2. Callback Sort (if activeTab is callback and not advanced date filters)
+    else if (activeTab === "callback" && !hasAdvancedDateFilters) {
+      sorted.sort((a, b) => {
+        const priorityA = getCallbackPriority(a)
+        const priorityB = getCallbackPriority(b)
+        
+        // If priorities are the same, sort by scheduled time (earliest first)
+        if (priorityA === priorityB && a.callbackInfo && b.callbackInfo && 
+            a.callbackInfo.scheduled_dt && b.callbackInfo.scheduled_dt) {
+          const timeA = new Date(a.callbackInfo.scheduled_dt).getTime()
+          const timeB = new Date(b.callbackInfo.scheduled_dt).getTime()
+          return timeA - timeB
+        }
+        
+        return priorityA - priorityB
+      })
+    }
+    // 3. Default Date Sort (or Advanced Date Sort)
+    else {
+      if (hasAdvancedDateFilters) {
+        if (convertedFromDate || convertedToDate) {
+          sorted.sort((a, b) => {
+            const dateA = a.convertedAt?.seconds ? a.convertedAt.seconds * 1000 : (a.convertedAt instanceof Date ? a.convertedAt.getTime() : 0)
+            const dateB = b.convertedAt?.seconds ? b.convertedAt.seconds * 1000 : (b.convertedAt instanceof Date ? b.convertedAt.getTime() : 0)
+            if (dateA !== dateB) return dateB - dateA
+            return new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+          })
+        } else {
+          sorted.sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime())
+        }
+      } else {
+        sorted.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      }
+    }
+
+    return sorted
+  }, [userRole, convertedFromDate, convertedToDate, lastModifiedFromDate, lastModifiedToDate, debtRangeSort, activeTab])
+
   // Fetch leads with server-side filtering and pagination (no client-side search logic)
   const fetchBillcutLeads = useCallback(
     async (isLoadMore = false) => {
@@ -791,40 +846,14 @@ const BillCutLeadsPage = () => {
           // Combine with previous leads if loading more
           let combinedLeads: Lead[]
           if (isLoadMore) {
-            combinedLeads = [...prevLeads, ...filteredLeads]
+            combinedLeads = [...prevLeads, ...fetchedLeads]
           } else {
-            combinedLeads = filteredLeads
+            // Preserve sticky leads that are not in the new batch
+            const stickyLeads = prevLeads.filter(l => stickyLeadsRef.current.has(l.id) && !fetchedLeads.find(fl => fl.id === l.id))
+            combinedLeads = [...stickyLeads, ...fetchedLeads]
           }
 
-          // Apply callback sorting to the entire combined list when on callback tab - only if Advanced Date Filters are not active
-          if (activeTab === "callback" && !hasAdvancedDateFilters) {
-            combinedLeads = [...combinedLeads].sort((a, b) => {
-              const priorityA = getCallbackPriority(a)
-              const priorityB = getCallbackPriority(b)
-              
-              // If priorities are the same, sort by scheduled time (earliest first)
-              if (priorityA === priorityB && a.callbackInfo && b.callbackInfo && 
-                  a.callbackInfo.scheduled_dt && b.callbackInfo.scheduled_dt) {
-                const timeA = new Date(a.callbackInfo.scheduled_dt).getTime()
-                const timeB = new Date(b.callbackInfo.scheduled_dt).getTime()
-                return timeA - timeB
-              }
-              
-              return priorityA - priorityB
-            })
-
-            // Debug logging to verify sorting
-            console.log("Callback sorting applied. First 10 leads:", 
-              combinedLeads.slice(0, 10).map(lead => ({
-                name: lead.name,
-                priority: getCallbackPriority(lead),
-                hasCallbackInfo: !!lead.callbackInfo,
-                scheduledDate: lead.callbackInfo?.scheduled_dt ? new Date(lead.callbackInfo.scheduled_dt).toLocaleDateString() : "No date"
-              }))
-            )
-          }
-
-          return combinedLeads
+          return getSortedLeads(combinedLeads)
         })
 
         // Update pagination state
@@ -966,9 +995,46 @@ const BillCutLeadsPage = () => {
             end.setTime(end.getTime() - (330 * 60 * 1000)); // IST Adjust
             q = query(q, where("date", "<=", end.getTime()));
         }
+
+        // Advanced Date Filters
+        if (userRole === "admin" || userRole === "overlord") {
+            if (convertedFromDate) {
+                const start = new Date(convertedFromDate);
+                start.setHours(0, 0, 0, 0);
+                q = query(q, where("convertedAt", ">=", start));
+            }
+            if (convertedToDate) {
+                const end = new Date(convertedToDate);
+                end.setHours(23, 59, 59, 999);
+                q = query(q, where("convertedAt", "<=", end));
+            }
+            if (lastModifiedFromDate) {
+                const start = new Date(lastModifiedFromDate);
+                start.setHours(0, 0, 0, 0);
+                q = query(q, where("lastModified", ">=", start));
+            }
+            if (lastModifiedToDate) {
+                const end = new Date(lastModifiedToDate);
+                end.setHours(23, 59, 59, 999);
+                q = query(q, where("lastModified", "<=", end));
+            }
+        }
         
         // Sorting & Limit (only for Page 1 real-time updates)
-        q = query(q, orderBy("date", "desc"), limit(LEADS_PER_PAGE));
+        const hasAdvancedDateFilters = (userRole === "admin" || userRole === "overlord") && 
+            (convertedFromDate || convertedToDate || lastModifiedFromDate || lastModifiedToDate)
+
+        if (hasAdvancedDateFilters) {
+            if (convertedFromDate || convertedToDate) {
+                q = query(q, orderBy("convertedAt", "desc"), orderBy("lastModified", "desc"));
+            } else {
+                q = query(q, orderBy("lastModified", "desc"));
+            }
+        } else {
+            q = query(q, orderBy("date", "desc"));
+        }
+
+        q = query(q, limit(LEADS_PER_PAGE));
         
         collectionUnsubscribe = onSnapshot(q, (snapshot) => {
             snapshot.docChanges().forEach((change) => {
@@ -1000,11 +1066,11 @@ const BillCutLeadsPage = () => {
                         const updatedLeadData = { ...leadData, salesNotes: latestNote };
                         setLeads(prev => {
                             if (prev.find(l => l.id === id)) return prev;
-                            // Add new lead and sort by date (descending)
-                            const newLeads = [...prev, updatedLeadData].sort((a, b) => {
-                                return new Date(b.date).getTime() - new Date(a.date).getTime();
-                            });
-                            return newLeads.slice(0, LEADS_PER_PAGE);
+                            const combined = [...prev, updatedLeadData]
+                            const sorted = getSortedLeads(combined)
+                            // Slice to LEADS_PER_PAGE but preserve sticky leads
+                            const stickyIds = stickyLeadsRef.current;
+                            return sorted.filter((l, index) => index < LEADS_PER_PAGE || stickyIds.has(l.id));
                         });
                     });
                     
@@ -1041,7 +1107,7 @@ const BillCutLeadsPage = () => {
     return () => {
         if (collectionUnsubscribe) collectionUnsubscribe();
     }
-  }, [searchQuery, statusFilter, salesPersonFilter, showMyLeads, activeTab, fromDate, toDate, page])
+  }, [searchQuery, statusFilter, salesPersonFilter, showMyLeads, activeTab, fromDate, toDate, page, debtRangeSort, convertedFromDate, convertedToDate, lastModifiedFromDate, lastModifiedToDate, getSortedLeads, userRole])
 
   // 2. Individual Document Listeners (for leads already in state)
   useEffect(() => {
