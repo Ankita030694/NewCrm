@@ -79,6 +79,57 @@ export async function POST(request: NextRequest) {
 
                 batch.update(docRef, updateData)
             })
+
+            // Meta CAPI Trigger Logic
+            if (status === 'Converted' || status === 'Qualified') {
+                // We need to fetch lead data to check source and get contact info
+                // This is done outside the batch update loop for efficiency
+                const triggerCapi = async () => {
+                    try {
+                        const leadSnaps = await Promise.all(leadIds.map(id => leadsRef.doc(id).get()))
+
+                        for (const snap of leadSnaps) {
+                            if (!snap.exists) continue
+
+                            const data = snap.data()
+                            if (!data) continue
+
+                            const source = (data.source || "").toLowerCase().trim()
+                            // Check if source is credsettle (handling variations)
+                            if (source.includes("credsettle")) {
+                                const email = data.email || ""
+                                const phone = data.phone || data.mobile || data.number || ""
+
+                                if (email || phone) {
+                                    console.log(`[CAPI] Triggering for lead ${snap.id} (Source: ${source})`)
+
+                                    // Fire and forget the fetch to avoid blocking the response
+                                    fetch("https://www.credsettle.com/api/meta/capi", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                            email: email,
+                                            phone: phone,
+                                            status: status,
+                                            leadId: snap.id
+                                        })
+                                    }).then(res => {
+                                        if (!res.ok) console.error(`[CAPI ERROR] Failed for ${snap.id}: ${res.statusText}`)
+                                        else console.log(`[CAPI SUCCESS] Sent for ${snap.id}`)
+                                    }).catch(err => {
+                                        console.error(`[CAPI ERROR] Fetch failed for ${snap.id}:`, err)
+                                    })
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.error("[CAPI ERROR] Error in trigger logic:", err)
+                    }
+                }
+
+                // Execute trigger logic
+                triggerCapi()
+            }
         } else if (action === "update_notes") {
             const { salesNotes } = payload
             // Allow empty string to clear notes
