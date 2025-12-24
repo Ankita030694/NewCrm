@@ -237,6 +237,20 @@ export default function ViewDetailsModal({
         {/* Additional Information */}
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-800">
+            <h3 className="font-semibold text-lg mb-3 text-green-400">Agreement & Requests</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="text-gray-400">Agreement Sent</div>
+                <div className="text-white">{client.sentAgreement ? 'Yes' : 'No'}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="text-gray-400">Request Letter</div>
+                <div className="text-white">{client.request_letter ? 'Yes' : 'No'}</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-800">
             <h3 className="font-semibold text-lg mb-3 text-yellow-400">Remarks</h3>
             <div className="bg-gray-950 p-3 rounded border border-gray-700 min-h-[100px] text-gray-300">
               {client.remarks || "No remarks available."}

@@ -1,12 +1,14 @@
 'use client'
 
-import { User } from 'lucide-react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { User, Search, ChevronDown, X } from 'lucide-react'
 import { FaRupeeSign } from 'react-icons/fa'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select'
 import { format } from 'date-fns'
+import { getBankData } from '../../data/bankData'
 
 interface Client {
   id: string
@@ -18,6 +20,8 @@ interface Client {
   city: string
   occupation: string
   aadharNumber: string
+  panNumber?: string
+  dob?: string
   assignedTo: string
   alloc_adv?: string
   alloc_adv_at?: any
@@ -47,9 +51,10 @@ interface Client {
   documentName?: string
   documentUploadedAt?: Date
   sentAgreement?: boolean
+  request_letter?: boolean
 }
 
-interface User {
+interface UserType {
   uid: string;
   firstName: string;
   lastName: string;
@@ -63,11 +68,11 @@ interface EditModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: () => Promise<void>
-  advocates: User[]
+  advocates: UserType[]
   allSources: string[]
   isSaving: boolean
   handleEditInputChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void
-  handleSelectChange: (name: string, value: string) => void
+  handleSelectChange: (name: string, value: string | boolean) => void
   handleBankChange: (bankId: string, field: string, value: string) => void
   handleAddBank: () => void
   handleRemoveBank: (bankId: string) => void
@@ -89,6 +94,169 @@ const formatTimestamp = (timestamp: any) => {
     return 'Invalid date'
   }
 }
+
+interface BankFormProps {
+  bank: any
+  onUpdate: (bankId: string, field: string, value: string) => void
+  onRemove: (bankId: string) => void
+}
+
+const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
+  const [bankData, setBankData] = useState<Record<string, any>>({});
+  const [isLoadingBanks, setIsLoadingBanks] = useState(true);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const loadBankData = async () => {
+      try {
+        const data = await getBankData();
+        setBankData(data);
+      } catch (error) {
+        console.error('Error loading bank data:', error);
+      } finally {
+        setIsLoadingBanks(false);
+      }
+    };
+    loadBankData();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const bankNames = useMemo(() => {
+    return Object.keys(bankData).sort((a, b) => a.localeCompare(b));
+  }, [bankData]);
+
+  const filteredBanks = useMemo(() => {
+    return bankNames.filter(name => 
+      name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [bankNames, searchTerm]);
+
+  const getBankLabelText = (fieldType: string, loanType: string) => {
+    if (fieldType === 'accountNumber') {
+      return loanType === 'Credit Card' ? 'Card Number' : 'Loan/Account Number';
+    } else if (fieldType === 'loanAmount') {
+      return loanType === 'Credit Card' ? 'Outstanding Amount' : 'Loan Amount';
+    }
+    return '';
+  };
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 relative">
+      <button
+        onClick={() => onRemove(bank.id)}
+        className="absolute top-2 right-2 h-6 w-6 rounded-full bg-red-900/50 hover:bg-red-800 text-red-300 flex items-center justify-center"
+        title="Remove bank"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm text-gray-400 block mb-1">Loan Type</label>
+          <Select 
+            value={bank.loanType} 
+            onValueChange={(value) => onUpdate(bank.id, 'loanType', value)}
+          >
+            <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-900 text-white border-gray-700">
+              <SelectItem value="Personal Loan">Personal Loan</SelectItem>
+              <SelectItem value="Credit Card">Credit Card</SelectItem>
+              <SelectItem value="Business Loan">Business Loan</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div ref={dropdownRef} className="relative">
+          <label className="text-sm text-gray-400 block mb-1">Bank Name</label>
+          <div 
+            className="mt-1 block w-full bg-gray-950 border border-gray-700 rounded-md shadow-sm py-2 px-3 text-white cursor-pointer flex justify-between items-center"
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          >
+            <span className={bank.bankName ? 'text-white' : 'text-gray-400'}>
+              {bank.bankName || "Select Bank"}
+            </span>
+            <ChevronDown className="h-4 w-4 text-gray-400" />
+          </div>
+
+          {isDropdownOpen && (
+            <div className="absolute z-10 mt-1 w-full bg-gray-800 border border-gray-700 rounded-md shadow-lg max-h-60 flex flex-col">
+              <div className="p-2 border-b border-gray-700 sticky top-0 bg-gray-800 z-20">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search bank..."
+                    className="w-full bg-gray-950 border border-gray-700 rounded-md py-1.5 pl-8 pr-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="overflow-y-auto flex-1">
+                {isLoadingBanks ? (
+                  <div className="px-3 py-2 text-sm text-gray-400 text-center">Loading banks...</div>
+                ) : filteredBanks.length > 0 ? (
+                  filteredBanks.map((bankName) => (
+                    <div
+                      key={bankName}
+                      className={`px-3 py-2 cursor-pointer hover:bg-gray-700 text-sm ${bank.bankName === bankName ? 'bg-blue-900 text-blue-100' : 'text-gray-200'}`}
+                      onClick={() => {
+                        onUpdate(bank.id, 'bankName', bankName);
+                        setIsDropdownOpen(false);
+                        setSearchTerm('');
+                      }}
+                    >
+                      {bankName}
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-sm text-gray-400 text-center">No banks found</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm text-gray-400 block mb-1">
+            {getBankLabelText('accountNumber', bank.loanType)}
+          </label>
+          <Input 
+            value={bank.accountNumber}
+            onChange={(e) => onUpdate(bank.id, 'accountNumber', e.target.value)}
+            className="bg-gray-950 border-gray-700 text-white"
+          />
+        </div>
+        <div>
+          <label className="text-sm text-gray-400 block mb-1">
+            {getBankLabelText('loanAmount', bank.loanType)}
+          </label>
+          <Input 
+            value={bank.loanAmount}
+            onChange={(e) => onUpdate(bank.id, 'loanAmount', e.target.value)}
+            placeholder="₹"
+            className="bg-gray-950 border-gray-700 text-white"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function EditModal({
   client,
@@ -129,7 +297,7 @@ export default function EditModal({
             onClick={onClose}
             className="rounded-full h-8 w-8 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
           >
-            ✕
+            <X className="h-4 w-4" />
           </button>
         </div>
         
@@ -140,8 +308,8 @@ export default function EditModal({
               <User className="h-5 w-5 mr-2" />
               Personal Information
             </h3>
-            <div className="space-y-4">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
                 <label className="text-sm text-gray-400 block mb-1">Name</label>
                 <Input 
                   name="name"
@@ -160,7 +328,7 @@ export default function EditModal({
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 block mb-1">Alternate Phone</label>
+                <label className="text-sm text-gray-400 block mb-1">Alt Phone</label>
                 <Input 
                   name="altPhone"
                   value={client.altPhone}
@@ -168,7 +336,7 @@ export default function EditModal({
                   className="bg-gray-950 border-gray-700 text-white"
                 />
               </div>
-              <div>
+              <div className="sm:col-span-2">
                 <label className="text-sm text-gray-400 block mb-1">Email</label>
                 <Input 
                   name="email"
@@ -187,16 +355,17 @@ export default function EditModal({
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 block mb-1">Occupation</label>
+                <label className="text-sm text-gray-400 block mb-1">DOB</label>
                 <Input 
-                  name="occupation"
-                  value={client.occupation}
+                  name="dob"
+                  type="date"
+                  value={client.dob || ''}
                   onChange={handleEditInputChange}
                   className="bg-gray-950 border-gray-700 text-white"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 block mb-1">Aadhar Number</label>
+                <label className="text-sm text-gray-400 block mb-1">Aadhar</label>
                 <Input 
                   name="aadharNumber"
                   value={client.aadharNumber}
@@ -205,165 +374,186 @@ export default function EditModal({
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-400 block mb-1">Assigned To</label>
+                <label className="text-sm text-gray-400 block mb-1">PAN</label>
                 <Input 
-                  name="assignedTo"
-                  value={client.assignedTo}
+                  name="panNumber"
+                  value={client.panNumber || ''}
                   onChange={handleEditInputChange}
                   className="bg-gray-950 border-gray-700 text-white"
                 />
               </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Primary Allocated Advocate</label>
-                <Select 
-                  defaultValue={client.alloc_adv || "unassigned"}
-                  onValueChange={(value) => handleSelectChange('alloc_adv', value)}
-                >
-                  <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
-                    <SelectValue placeholder="Select primary advocate" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-900 text-white border-gray-700">
-                    <SelectGroup>
-                      <SelectLabel>Advocates</SelectLabel>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {advocates.map(advocate => (
-                        <SelectItem 
-                          key={advocate.uid} 
-                          value={`${advocate.firstName} ${advocate.lastName}`.trim()}
-                        >
-                          {advocate.firstName} {advocate.lastName}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Secondary Allocated Advocate</label>
-                <Select 
-                  defaultValue={client.alloc_adv_secondary || "unassigned"}
-                  onValueChange={(value) => handleSelectChange('alloc_adv_secondary', value)}
-                >
-                  <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
-                    <SelectValue placeholder="Select secondary advocate" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-900 text-white border-gray-700">
-                    <SelectGroup>
-                      <SelectLabel>Advocates</SelectLabel>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
-                      {advocates.map(advocate => (
-                        <SelectItem 
-                          key={advocate.uid} 
-                          value={`${advocate.firstName} ${advocate.lastName}`.trim()}
-                        >
-                          {advocate.firstName} {advocate.lastName}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Status</label>
-                <Select 
-                  defaultValue={client.adv_status || "Inactive"}
-                  onValueChange={(value) => handleSelectChange('adv_status', value)}
-                >
-                  <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-900 text-white border-gray-700">
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Dropped">Dropped</SelectItem>
-                    <SelectItem value="Not Responding">Not Responding</SelectItem>
-                    <SelectItem value="On Hold">On Hold</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="sm:col-span-2">
+                <label className="text-sm text-gray-400 block mb-1">Occupation</label>
+                <Input 
+                  name="occupation"
+                  value={client.occupation}
+                  onChange={handleEditInputChange}
+                  className="bg-gray-950 border-gray-700 text-white"
+                />
               </div>
             </div>
           </div>
           
-          {/* Financial Information */}
-          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-800">
-            <h3 className="font-semibold text-lg mb-4 text-green-400 flex items-center">
-              <FaRupeeSign className="h-4 w-4 mr-2" />
-              Financial Information
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Monthly Income</label>
-                <Input 
-                  name="monthlyIncome"
-                  value={client.monthlyIncome || ''}
-                  onChange={handleEditInputChange}
-                  className="bg-gray-950 border-gray-700 text-white"
-                />
+          {/* Assignment & Financial */}
+          <div className="space-y-6">
+            <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-800">
+              <h3 className="font-semibold text-lg mb-4 text-purple-400 flex items-center">
+                <User className="h-5 w-5 mr-2" />
+                Assignment & Status
+              </h3>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-gray-400 block mb-1">Assigned To</label>
+                    <Input 
+                      name="assignedTo"
+                      value={client.assignedTo}
+                      onChange={handleEditInputChange}
+                      className="bg-gray-950 border-gray-700 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-gray-400 block mb-1">Status</label>
+                    <Select 
+                      defaultValue={client.adv_status || "Inactive"}
+                      onValueChange={(value) => handleSelectChange('adv_status', value)}
+                    >
+                      <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-900 text-white border-gray-700">
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Dropped">Dropped</SelectItem>
+                        <SelectItem value="Not Responding">Not Responding</SelectItem>
+                        <SelectItem value="On Hold">On Hold</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Primary Advocate</label>
+                  <Select 
+                    defaultValue={client.alloc_adv || "unassigned"}
+                    onValueChange={(value) => handleSelectChange('alloc_adv', value)}
+                  >
+                    <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
+                      <SelectValue placeholder="Select primary advocate" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-900 text-white border-gray-700">
+                      <SelectGroup>
+                        <SelectLabel>Advocates</SelectLabel>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {advocates.map(advocate => (
+                          <SelectItem 
+                            key={advocate.uid} 
+                            value={`${advocate.firstName} ${advocate.lastName}`.trim()}
+                          >
+                            {advocate.firstName} {advocate.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Secondary Advocate</label>
+                  <Select 
+                    defaultValue={client.alloc_adv_secondary || "unassigned"}
+                    onValueChange={(value) => handleSelectChange('alloc_adv_secondary', value)}
+                  >
+                    <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
+                      <SelectValue placeholder="Select secondary advocate" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-900 text-white border-gray-700">
+                      <SelectGroup>
+                        <SelectLabel>Advocates</SelectLabel>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {advocates.map(advocate => (
+                          <SelectItem 
+                            key={advocate.uid} 
+                            value={`${advocate.firstName} ${advocate.lastName}`.trim()}
+                          >
+                            {advocate.firstName} {advocate.lastName}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Monthly Fees</label>
-                <Input 
-                  name="monthlyFees"
-                  value={client.monthlyFees || ''}
-                  onChange={handleEditInputChange}
-                  className="bg-gray-950 border-gray-700 text-white"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Credit Card Dues</label>
-                <Input 
-                  name="creditCardDues"
-                  value={client.creditCardDues || ''}
-                  onChange={handleEditInputChange}
-                  className="bg-gray-950 border-gray-700 text-white"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Personal Loan Dues</label>
-                <Input 
-                  name="personalLoanDues"
-                  value={client.personalLoanDues || ''}
-                  onChange={handleEditInputChange}
-                  className="bg-gray-950 border-gray-700 text-white"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Tenure (months)</label>
-                <Input 
-                  name="tenure"
-                  value={client.tenure || ''}
-                  onChange={handleEditInputChange}
-                  className="bg-gray-950 border-gray-700 text-white"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Start Date</label>
-                <Input 
-                  name="startDate"
-                  value={client.startDate || ''}
-                  onChange={handleEditInputChange}
-                  className="bg-gray-950 border-gray-700 text-white"
-                  placeholder="YYYY-MM-DD"
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-400 block mb-1">Source</label>
-                <Select 
-                  value={client.source_database || 'none'} 
-                  onValueChange={(value) => handleSelectChange('source_database', value === 'none' ? '' : value)}
-                >
-                  <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-900 text-white border-gray-700">
-                    <SelectItem value="none">Select source</SelectItem>
-                    {allSources.map(source => (
-                      <SelectItem key={source} value={source}>
-                        {formatSourceName(source)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            </div>
+
+            <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-800">
+              <h3 className="font-semibold text-lg mb-4 text-green-400 flex items-center">
+                <FaRupeeSign className="h-4 w-4 mr-2" />
+                Financials
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Income</label>
+                  <Input 
+                    name="monthlyIncome"
+                    value={client.monthlyIncome || ''}
+                    onChange={handleEditInputChange}
+                    className="bg-gray-950 border-gray-700 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Fees</label>
+                  <Input 
+                    name="monthlyFees"
+                    value={client.monthlyFees || ''}
+                    onChange={handleEditInputChange}
+                    className="bg-gray-950 border-gray-700 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">CC Dues</label>
+                  <Input 
+                    name="creditCardDues"
+                    value={client.creditCardDues || ''}
+                    onChange={handleEditInputChange}
+                    className="bg-gray-950 border-gray-700 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">PL Dues</label>
+                  <Input 
+                    name="personalLoanDues"
+                    value={client.personalLoanDues || ''}
+                    onChange={handleEditInputChange}
+                    className="bg-gray-950 border-gray-700 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Tenure</label>
+                  <Input 
+                    name="tenure"
+                    value={client.tenure || ''}
+                    onChange={handleEditInputChange}
+                    className="bg-gray-950 border-gray-700 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-400 block mb-1">Source</label>
+                  <Select 
+                    value={client.source_database || 'none'} 
+                    onValueChange={(value) => handleSelectChange('source_database', value === 'none' ? '' : value)}
+                  >
+                    <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
+                      <SelectValue placeholder="Source" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-900 text-white border-gray-700">
+                      <SelectItem value="none">Select source</SelectItem>
+                      {allSources.map(source => (
+                        <SelectItem key={source} value={source}>
+                          {formatSourceName(source)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </div>
@@ -393,106 +583,15 @@ export default function EditModal({
           ) : (
             <div className="space-y-4">
               {client.banks.map((bank) => (
-                <div 
+                <BankForm 
                   key={bank.id}
-                  className="bg-gray-900 border border-gray-800 rounded-lg p-4 relative"
-                >
-                  <button
-                    onClick={() => handleRemoveBank(bank.id)}
-                    className="absolute top-2 right-2 h-6 w-6 rounded-full bg-red-900/50 hover:bg-red-800 text-red-300 flex items-center justify-center"
-                    title="Remove bank"
-                  >
-                    ✕
-                  </button>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm text-gray-400 block mb-1">Bank Name</label>
-                      <Input 
-                        value={bank.bankName}
-                        onChange={(e) => handleBankChange(bank.id, 'bankName', e.target.value)}
-                        className="bg-gray-950 border-gray-700 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm text-gray-400 block mb-1">Account Number</label>
-                      <Input 
-                        value={bank.accountNumber}
-                        onChange={(e) => handleBankChange(bank.id, 'accountNumber', e.target.value)}
-                        className="bg-gray-950 border-gray-700 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm text-gray-400 block mb-1">Loan Type</label>
-                      <Select 
-                        value={bank.loanType} 
-                        onValueChange={(value) => handleBankChange(bank.id, 'loanType', value)}
-                      >
-                        <SelectTrigger className="bg-gray-950 border-gray-700 text-white">
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 text-white border-gray-700">
-                          <SelectItem value="Personal Loan">Personal Loan</SelectItem>
-                          <SelectItem value="Credit Card">Credit Card</SelectItem>
-                          <SelectItem value="Home Loan">Home Loan</SelectItem>
-                          <SelectItem value="Auto Loan">Auto Loan</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm text-gray-400 block mb-1">Loan Amount</label>
-                      <Input 
-                        value={bank.loanAmount}
-                        onChange={(e) => handleBankChange(bank.id, 'loanAmount', e.target.value)}
-                        className="bg-gray-950 border-gray-700 text-white"
-                      />
-                    </div>
-                  </div>
-                </div>
+                  bank={bank}
+                  onUpdate={handleBankChange}
+                  onRemove={handleRemoveBank}
+                />
               ))}
             </div>
           )}
-        </div>
-        
-        {/* Additional Information */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-800">
-            <h3 className="font-semibold text-lg mb-3 text-green-400">Agreement Status</h3>
-            <div className="flex items-center space-x-3">
-              <input
-                type="checkbox"
-                id="sentAgreement"
-                name="sentAgreement"
-                checked={client.sentAgreement || false}
-                onChange={(e) => handleSelectChange('sentAgreement', e.target.checked.toString())}
-                className="h-4 w-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500 focus:ring-2"
-              />
-              <label htmlFor="sentAgreement" className="text-sm text-gray-300">
-                Agreement Sent
-              </label>
-            </div>
-          </div>
-          
-          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-800">
-            <h3 className="font-semibold text-lg mb-3 text-yellow-400">Remarks</h3>
-            <Textarea 
-              name="remarks"
-              value={client.remarks || ''}
-              onChange={handleEditInputChange}
-              className="bg-gray-950 border-gray-700 text-white min-h-[100px]"
-            />
-          </div>
-          
-          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-800">
-            <h3 className="font-semibold text-lg mb-3 text-yellow-400">Sales Notes</h3>
-            <Textarea 
-              name="salesNotes"
-              value={client.salesNotes || ''}
-              onChange={handleEditInputChange}
-              className="bg-gray-950 border-gray-700 text-white min-h-[100px]"
-            />
-          </div>
         </div>
 
         {/* Document Upload Section */}
@@ -502,66 +601,61 @@ export default function EditModal({
             Document Management
           </h3>
           
-          {client.documentUrl ? (
-            <div className="mb-4 p-3 bg-gray-900 rounded-lg border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white font-medium">{client.documentName || 'Document'}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Uploaded: {client.documentUploadedAt ? 
-                      formatTimestamp(client.documentUploadedAt) : 'Unknown date'}
-                  </p>
-                </div>
-                <div className="flex gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              {client.documentUrl ? (
+                <div className="p-3 bg-gray-900 rounded-lg border border-gray-800 h-full flex flex-col justify-between">
+                  <div>
+                    <p className="text-white font-medium truncate">{client.documentName || 'Document'}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Uploaded: {client.documentUploadedAt ? 
+                        formatTimestamp(client.documentUploadedAt) : 'Unknown date'}
+                    </p>
+                  </div>
                   <Button
                     onClick={() => openDocumentViewer(client.documentUrl || "", client.documentName || "Document")}
                     size="sm"
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-blue-600 hover:bg-blue-700 mt-3 w-full"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 mr-1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     View Document
                   </Button>
                 </div>
+              ) : (
+                <div className="p-3 bg-gray-900 rounded-lg border border-gray-800 border-dashed h-full flex items-center justify-center">
+                  <p className="text-gray-400 text-sm">No document uploaded</p>
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm text-gray-400 block mb-1">Upload New</label>
+                <Input 
+                  id="file-upload"
+                  type="file"
+                  accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleFileChange}
+                  className="bg-gray-950 border-gray-700 text-white text-xs"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleFileUpload}
+                  disabled={!fileUpload || uploading}
+                  className="bg-purple-600 hover:bg-purple-700 text-white flex-1"
+                  size="sm"
+                >
+                  {uploading ? 'Uploading...' : 'Upload'}
+                </Button>
+                <Button
+                  onClick={testUpload}
+                  className="bg-gray-700 hover:bg-gray-600 text-xs"
+                  size="sm"
+                >
+                  Test
+                </Button>
               </div>
             </div>
-          ) : (
-            <p className="text-gray-400 mb-4">No document has been uploaded for this client yet.</p>
-          )}
-          
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
-              <label className="text-sm text-gray-400 block mb-1">Upload Word Document</label>
-              <Input 
-                id="file-upload"
-                type="file"
-                accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                onChange={handleFileChange}
-                className="bg-gray-950 border-gray-700 text-white"
-              />
-            </div>
-            <Button
-              onClick={handleFileUpload}
-              disabled={!fileUpload || uploading}
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-            >
-              {uploading ? (
-                <div className="flex items-center">
-                  <div className="h-4 w-4 border-2 border-t-transparent border-white rounded-full animate-spin mr-2"></div>
-                  Uploading...
-                </div>
-              ) : 'Upload Document'}
-            </Button>
-          </div>
-          
-          {/* Test Upload Button for Debugging */}
-          <div className="mt-3">
-            <Button
-              onClick={testUpload}
-              className="bg-gray-600 hover:bg-gray-700"
-              size="sm"
-            >
-              Test Upload (Debug)
-            </Button>
           </div>
         </div>
 
@@ -576,15 +670,10 @@ export default function EditModal({
           </Button>
           <Button
             onClick={onSave}
-            className="bg-amber-600 hover:bg-amber-700 text-white"
+            className="bg-amber-600 hover:bg-amber-700 text-white px-8"
             disabled={isSaving}
           >
-            {isSaving ? 
-              <div className="flex items-center">
-                <div className="h-4 w-4 border-2 border-t-transparent border-white rounded-full animate-spin mr-2"></div>
-                Saving...
-              </div>
-              : 'Save Changes'}
+            {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
         </div>
       </div>

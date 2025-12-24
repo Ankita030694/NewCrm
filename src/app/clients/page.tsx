@@ -833,7 +833,7 @@ function ClientsPageWithParams() {
     }
   }
 
-  const handleSelectChange = (name: string, value: string) => {
+  const handleSelectChange = (name: string, value: string | boolean) => {
     if (editingClient) {
       setEditingClient({
         ...editingClient,
