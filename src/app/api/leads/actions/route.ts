@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
                                         body: JSON.stringify({
                                             email: email,
                                             phone: phone,
+                                            eventName: 'QualifiedLead',
                                             status: status,
                                             leadId: snap.id
                                         })
