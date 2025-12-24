@@ -234,12 +234,6 @@ export function useClients(advocateName: string) {
         await updateDoc(clientRef, { adv_status: newStatus })
       }
 
-      setClients((prevClients) =>
-        prevClients.map((client) =>
-          client.id === clientId ? { ...client, adv_status: newStatus === "Inactive" ? undefined : newStatus } : client,
-        ),
-      )
-
       toast.success(`Client status updated to ${newStatus}`)
     } catch (error) {
       console.error("Error updating client status:", error)
@@ -249,25 +243,9 @@ export function useClients(advocateName: string) {
 
   const updateRequestLetterStatus = async (clientId: string, checked: boolean) => {
     try {
-      // Optimistic update
-      setClients((prevClients) =>
-        prevClients.map((client) =>
-          client.id === clientId ? { ...client, request_letter: checked } : client
-        )
-      )
-
-      const clientRef = doc(db, "clients", clientId)
-      await updateDoc(clientRef, { request_letter: checked })
-
       toast.success(`Request letter status ${checked ? "enabled" : "disabled"}`)
     } catch (error) {
       console.error("Error updating request letter status:", error)
-      // Revert optimistic update
-      setClients((prevClients) =>
-        prevClients.map((client) =>
-          client.id === clientId ? { ...client, request_letter: !checked } : client
-        )
-      )
       toast.error("Failed to update request letter status")
     }
   }
@@ -329,17 +307,6 @@ export function useClients(advocateName: string) {
         client_app_status: arrayUnion(newStatus)
       })
 
-      // Update local state
-      setClients((prevClients) =>
-        prevClients.map((client) => {
-          if (client.id === clientId) {
-            const updatedStatus = [...(client.client_app_status || []), newStatus]
-            return { ...client, client_app_status: updatedStatus }
-          }
-          return client
-        })
-      )
-
       toast.success("App Status saved successfully")
     } catch (error) {
       console.error("Error saving app status:", error)
@@ -355,19 +322,6 @@ export function useClients(advocateName: string) {
       await updateDoc(clientRef, {
         client_app_status: arrayRemove(statusItem)
       })
-
-      // Update local state
-      setClients((prevClients) =>
-        prevClients.map((client) => {
-          if (client.id === clientId) {
-            const updatedStatus = (client.client_app_status || []).filter(
-              (item) => item.index !== statusItem.index || item.createdAt !== statusItem.createdAt
-            )
-            return { ...client, client_app_status: updatedStatus }
-          }
-          return client
-        })
-      )
 
       toast.success("Status deleted successfully")
     } catch (error) {
