@@ -243,6 +243,8 @@ export function useClients(advocateName: string) {
 
   const updateRequestLetterStatus = async (clientId: string, checked: boolean) => {
     try {
+      const clientRef = doc(db, "clients", clientId)
+      await updateDoc(clientRef, { request_letter: checked })
       toast.success(`Request letter status ${checked ? "enabled" : "disabled"}`)
     } catch (error) {
       console.error("Error updating request letter status:", error)

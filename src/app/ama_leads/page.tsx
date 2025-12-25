@@ -188,6 +188,22 @@ const AmaLeadsPage = () => {
 
   // --- Handlers ---
 
+  const refreshCurrentView = () => {
+    fetchLeads({
+      page: meta.page,
+      limit: 50,
+      search: searchQuery,
+      status: statusFilter,
+      source: sourceFilter,
+      salespersonId: salesPersonFilter,
+      tab: activeTab,
+      sort: sortConfig.key,
+      order: sortConfig.direction === "ascending" ? "asc" : "desc",
+      startDate: fromDate,
+      endDate: toDate,
+    })
+  }
+
   const handleLoadMore = () => {
     if (meta.page < meta.totalPages && !isLoading) {
       fetchLeads({
@@ -502,7 +518,7 @@ const AmaLeadsPage = () => {
         setShowBulkAssignment(false)
         setSelectedLeads([])
         // Refetch to get updated data
-        fetchLeads({ page: 1 }) 
+        refreshCurrentView() 
     }
   }
 
@@ -513,7 +529,7 @@ const AmaLeadsPage = () => {
       if (success) {
           toast.success("Leads unassigned")
           setSelectedLeads([])
-          fetchLeads({ page: 1 })
+          refreshCurrentView()
       }
   }
 
@@ -722,7 +738,7 @@ const AmaLeadsPage = () => {
             leadName={callbackLeadName}
             onSuccess={async () => {
                 await updateLead(callbackLeadId, { status: "Callback" })
-                fetchLeads({ page: 1 }) // Refresh data
+                refreshCurrentView() // Refresh data
                 setShowCallbackModal(false)
             }}
         />
@@ -736,7 +752,7 @@ const AmaLeadsPage = () => {
               leadName={languageBarrierLeadName}
               onSuccess={async (language) => {
                   await updateLead(languageBarrierLeadId, { status: "Language Barrier", language })
-                  fetchLeads({ page: 1 })
+                  refreshCurrentView()
                   setShowLanguageBarrierModal(false)
               }}
           />
