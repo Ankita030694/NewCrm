@@ -86,23 +86,68 @@ export async function getAdminDashboardData(month: string, year: number): Promis
             throw new Error('Firebase Admin SDK not initialized');
         }
 
-        // 1. Fetch Users (Optimized: Only active sales and advocates)
-        console.time('getAdminDashboardData:Users');
-        const usersRef = db.collection('users');
-        const usersSnap = await usersRef.where('status', '==', 'active').get();
-        console.timeEnd('getAdminDashboardData:Users');
+        const monthDocId = `${month}_${year}`;
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const targetMonth = monthNames.indexOf(month);
+        const startOfMonth = new Date(year, targetMonth, 1);
+        const endOfMonth = new Date(year, targetMonth + 1, 0, 23, 59, 59, 999);
+        const startOfMonthStr = startOfMonth.toISOString();
+        const endOfMonthStr = endOfMonth.toISOString();
 
+        // Prepare Queries (Start them all at once)
+        console.time('getAdminDashboardData:FetchAll');
+
+        // 1. Users Query
+        const usersPromise = db.collection('users').where('status', '==', 'active').get();
+
+        // 2. Payments Query (Parallel Timestamp & String)
+        const paymentsRef = db.collection('payments');
+        const paymentsPromise = Promise.all([
+            paymentsRef
+                .where('status', '==', 'approved')
+                .where('timestamp', '>=', startOfMonth)
+                .where('timestamp', '<=', endOfMonth)
+                .get(),
+            paymentsRef
+                .where('status', '==', 'approved')
+                .where('timestamp', '>=', startOfMonthStr)
+                .where('timestamp', '<=', endOfMonthStr)
+                .get()
+        ]);
+
+        // 3. Targets Query (Conditional logic wrapped in async function)
+        const targetsPromise = (async () => {
+            const monthlyDocRef = db.collection('targets').doc(monthDocId);
+            const monthlyDocSnap = await monthlyDocRef.get();
+
+            if (monthlyDocSnap.exists) {
+                const salesTargetsSnap = await monthlyDocRef.collection('sales_targets').get();
+                return { type: 'monthly', doc: monthlyDocSnap, subDocs: salesTargetsSnap };
+            } else {
+                const targetsSnap = await db.collection('targets').get();
+                return { type: 'legacy', docs: targetsSnap };
+            }
+        })();
+
+        // Await all queries
+        const [usersSnap, [timestampSnap, stringSnap], targetsResult] = await Promise.all([
+            usersPromise,
+            paymentsPromise,
+            targetsPromise
+        ]);
+        console.timeEnd('getAdminDashboardData:FetchAll');
+
+        // --- Process Users ---
+        console.time('getAdminDashboardData:ProcessUsers');
         let sales = 0;
         let advocates = 0;
         const salesUsersList: SalesUser[] = [];
 
         usersSnap.forEach((doc) => {
             const userData = doc.data();
-
             if (userData.role === 'sales') {
                 sales++;
                 const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
-
                 salesUsersList.push({
                     id: doc.id,
                     uid: userData.uid,
@@ -124,103 +169,53 @@ export async function getAdminDashboardData(month: string, year: number): Promis
             }
             if (userData.role === 'advocate') advocates++;
         });
+        console.timeEnd('getAdminDashboardData:ProcessUsers');
 
-        // 2. Fetch Targets & Payments
-        const monthDocId = `${month}_${year}`;
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const targetMonth = monthNames.indexOf(month);
-
-        // Fetch payments for revenue calculation (Optimized: Only approved payments for the selected month)
+        // --- Process Payments ---
+        console.time('getAdminDashboardData:ProcessPayments');
         let individualPayments: { [userId: string]: number } = {};
         let hasPaymentData = false;
 
-        try {
-            const startOfMonth = new Date(year, targetMonth, 1);
-            const endOfMonth = new Date(year, targetMonth + 1, 0, 23, 59, 59, 999);
+        const processPaymentDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
+            const payment = doc.data();
+            const amount = parseFloat(payment.amount) || 0;
+            hasPaymentData = true;
 
-            // Format dates for string comparison (ISO format)
-            const startOfMonthStr = startOfMonth.toISOString();
-            const endOfMonthStr = endOfMonth.toISOString();
+            if (payment.userId || payment.assignedTo || payment.salesperson) {
+                const userId = payment.userId || payment.assignedTo || payment.salesperson;
+                individualPayments[userId] = (individualPayments[userId] || 0) + amount;
+            }
+        };
 
-            const paymentsRef = db.collection('payments');
+        const processedIds = new Set<string>();
+        timestampSnap.forEach(doc => {
+            if (!processedIds.has(doc.id)) {
+                processPaymentDoc(doc);
+                processedIds.add(doc.id);
+            }
+        });
+        stringSnap.forEach(doc => {
+            if (!processedIds.has(doc.id)) {
+                processPaymentDoc(doc);
+                processedIds.add(doc.id);
+            }
+        });
+        console.timeEnd('getAdminDashboardData:ProcessPayments');
 
-            console.time('getAdminDashboardData:Payments');
-            // Run parallel queries to handle both Timestamp/Date objects and ISO strings
-            const [timestampSnap, stringSnap] = await Promise.all([
-                // Query for Timestamp/Date fields
-                paymentsRef
-                    .where('status', '==', 'approved')
-                    .where('timestamp', '>=', startOfMonth)
-                    .where('timestamp', '<=', endOfMonth)
-                    .get(),
-                // Query for String fields
-                paymentsRef
-                    .where('status', '==', 'approved')
-                    .where('timestamp', '>=', startOfMonthStr)
-                    .where('timestamp', '<=', endOfMonthStr)
-                    .get()
-            ]);
-            console.timeEnd('getAdminDashboardData:Payments');
-
-            const processPaymentDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
-                const payment = doc.data();
-                const amount = parseFloat(payment.amount) || 0;
-                hasPaymentData = true;
-
-                if (payment.userId || payment.assignedTo || payment.salesperson) {
-                    const userId = payment.userId || payment.assignedTo || payment.salesperson;
-                    individualPayments[userId] = (individualPayments[userId] || 0) + amount;
-                }
-            };
-
-            // Use a Set to deduplicate if any docs overlap (unlikely but safe)
-            const processedIds = new Set<string>();
-
-            timestampSnap.forEach(doc => {
-                if (!processedIds.has(doc.id)) {
-                    processPaymentDoc(doc);
-                    processedIds.add(doc.id);
-                }
-            });
-
-            stringSnap.forEach(doc => {
-                if (!processedIds.has(doc.id)) {
-                    processPaymentDoc(doc);
-                    processedIds.add(doc.id);
-                }
-            });
-
-        } catch (error) {
-            console.error('Error fetching payments:', error);
-        }
-
-        // Fetch Targets
-        console.time('getAdminDashboardData:Targets');
-        const monthlyDocRef = db.collection('targets').doc(monthDocId);
-        const monthlyDocSnap = await monthlyDocRef.get();
-
+        // --- Process Targets ---
+        console.time('getAdminDashboardData:ProcessTargets');
         const targetsData: TargetData[] = [];
 
-        if (monthlyDocSnap.exists) {
-            const salesTargetsRef = monthlyDocRef.collection('sales_targets');
-            const salesTargetsSnap = await salesTargetsRef.get();
-
-            salesTargetsSnap.forEach(doc => {
+        if (targetsResult.type === 'monthly' && targetsResult.subDocs) {
+            targetsResult.subDocs.forEach(doc => {
                 const data = doc.data();
                 let collectedAmount = data.amountCollected || 0;
 
                 if (hasPaymentData) {
-                    const userIdentifiers = [
-                        data.userId,
-                        data.userName,
-                        doc.id
-                    ].filter(Boolean);
-
-                    let foundPayment = false;
+                    const userIdentifiers = [data.userId, data.userName, doc.id].filter(Boolean);
                     for (const identifier of userIdentifiers) {
                         if (individualPayments[identifier]) {
                             collectedAmount = individualPayments[identifier];
-                            foundPayment = true;
                             break;
                         }
                     }
@@ -236,28 +231,17 @@ export async function getAdminDashboardData(month: string, year: number): Promis
                     convertedLeadsTarget: data.convertedLeadsTarget || 0
                 });
             });
-        } else {
-            // Fallback to legacy targets
-            const targetsRef = db.collection('targets');
-            const targetsSnap = await targetsRef.get();
-
-            targetsSnap.forEach(doc => {
+        } else if (targetsResult.type === 'legacy' && targetsResult.docs) {
+            targetsResult.docs.forEach(doc => {
                 const data = doc.data();
                 if (data.month && data.year) return; // Skip monthly docs
 
                 let collectedAmount = data.amountCollected || 0;
                 if (hasPaymentData) {
-                    const userIdentifiers = [
-                        data.userId,
-                        data.userName,
-                        doc.id
-                    ].filter(Boolean);
-
-                    let foundPayment = false;
+                    const userIdentifiers = [data.userId, data.userName, doc.id].filter(Boolean);
                     for (const identifier of userIdentifiers) {
                         if (individualPayments[identifier]) {
                             collectedAmount = individualPayments[identifier];
-                            foundPayment = true;
                             break;
                         }
                     }
@@ -270,7 +254,7 @@ export async function getAdminDashboardData(month: string, year: number): Promis
                 });
             });
         }
-        console.timeEnd('getAdminDashboardData:Targets');
+        console.timeEnd('getAdminDashboardData:ProcessTargets');
 
         console.timeEnd('getAdminDashboardData:Total');
         return {
