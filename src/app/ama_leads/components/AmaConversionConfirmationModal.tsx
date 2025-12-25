@@ -21,7 +21,7 @@ const AmaConversionConfirmationModal: React.FC<AmaConversionConfirmationModalPro
   leadName,
   isLoading = false,
 }) => {
-  const [testEventCode, setTestEventCode] = useState("TEST76912")
+  const [testEventCode, setTestEventCode] = useState("")
 
   if (!isOpen) return null
 

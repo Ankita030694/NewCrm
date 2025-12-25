@@ -98,11 +98,11 @@ export async function POST(request: NextRequest) {
                             const source = (data.source || "").toLowerCase().trim()
                             // Check if source is credsettle (handling variations)
                             if (source.includes("credsettle")) {
-                                const email = data.email || ""
-                                const phone = data.phone || data.mobile || data.number || ""
+                                const email = String(data.email || "")
+                                const phone = String(data.phone || data.mobile || data.number || "")
 
                                 if (email || phone) {
-                                    console.log(`[CAPI] Triggering for lead ${snap.id} (Source: ${source})`)
+                                    console.log(`[CAPI] Triggering for lead ${snap.id} (Source: ${source}) with testEventCode: ${testEventCode}`)
 
                                     // Fire and forget the fetch to avoid blocking the response
                                     fetch("https://www.credsettle.com/api/meta/capi", {
@@ -116,13 +116,21 @@ export async function POST(request: NextRequest) {
                                             leadId: snap.id,
                                             testEventCode: testEventCode
                                         })
-                                    }).then(res => {
-                                        if (!res.ok) console.error(`[CAPI ERROR] Failed for ${snap.id}: ${res.statusText}`)
-                                        else console.log(`[CAPI SUCCESS] Sent for ${snap.id}`)
+                                    }).then(async res => {
+                                        const resText = await res.text()
+                                        if (!res.ok) {
+                                            console.error(`[CAPI ERROR] Failed for ${snap.id}: ${res.status} ${res.statusText} - ${resText}`)
+                                        } else {
+                                            console.log(`[CAPI SUCCESS] Sent for ${snap.id}: ${res.status} - ${resText}`)
+                                        }
                                     }).catch(err => {
                                         console.error(`[CAPI ERROR] Fetch failed for ${snap.id}:`, err)
                                     })
+                                } else {
+                                    console.log(`[CAPI SKIP] Lead ${snap.id} has no email or phone`)
                                 }
+                            } else {
+                                console.log(`[CAPI SKIP] Lead ${snap.id} source is not credsettle: "${source}"`)
                             }
                         }
                     } catch (err) {
