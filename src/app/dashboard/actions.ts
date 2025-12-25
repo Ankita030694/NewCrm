@@ -278,16 +278,20 @@ export async function getAdminDashboardData(month: string, year: number): Promis
             });
         }
 
-        // 3. Fetch Pending Letters (Optimized: Only where request_letter != true)
+        // 3. Fetch Pending Letters (Optimized: Only where request_letter == true)
         const clientsRef = db.collection('clients');
-        const clientsSnap = await clientsRef.where('request_letter', '!=', true).get();
+        // Fetch only clients who have requested a letter (request_letter == true)
+        // Limiting to 50 to prevent performance bottlenecks
+        const clientsSnap = await clientsRef
+            .where('request_letter', '==', false)
+            .get();
 
         const pendingLettersList: Letter[] = [];
 
         clientsSnap.forEach(doc => {
             const clientData = doc.data();
             // Double check in case query included missing fields or other edge cases
-            if (clientData.request_letter !== true) {
+            if (clientData.request_letter === false) {
                 const serializedClient = serializeData(clientData);
 
                 pendingLettersList.push({
