@@ -15,7 +15,7 @@ import {
 } from 'recharts'
 
 // Import server action and types
-import { getAdminDashboardData, getDashboardHistory, SalesUser, TargetData, Letter, HistoryData } from './actions'
+import { getAdminDashboardData, getDashboardHistory, SalesUser, TargetData, HistoryData } from './actions'
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState({
@@ -28,7 +28,6 @@ const AdminDashboard = () => {
   // Data state
   const [salesUsers, setSalesUsers] = useState<SalesUser[]>([])
   const [targetData, setTargetData] = useState<TargetData[]>([])
-  const [pendingLetters, setPendingLetters] = useState<Letter[]>([])
   const [historyData, setHistoryData] = useState<HistoryData[]>([])
   
   // Month/Year filter state
@@ -51,7 +50,6 @@ const AdminDashboard = () => {
       
       setSalesUsers(data.salesUsers);
       setTargetData(data.targetData);
-      setPendingLetters(data.pendingLetters);
       setStats(data.stats);
       setHistoryData(history);
 
@@ -348,75 +346,7 @@ const AdminDashboard = () => {
         </Card>
       </div>
       
-      {/* Pending Letters Section */}
-      <div className="mt-8">
-        <h2 className="text-xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
-          Pending Client Letters
-        </h2>
-        
-        <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl hover:shadow-indigo-500/10 transition-all duration-300">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-gray-100">Clients Requiring Letters</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {pendingLetters.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-700">
-                  <thead className="bg-gray-800">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                        Client Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                        Source
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                        Assigned Advocate
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700">
-                    {pendingLetters.map((letter) => (
-                      <tr key={letter.id} className="hover:bg-gray-750 transition-colors duration-150">
-                        <td className="px-6 py-4 whitespace-nowrap font-medium text-white">
-                          {letter.clientName}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-400">
-                          {letter.source_database}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-gray-400">
-                          {letter.advocateName}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Link 
-                            href={`/clients`}
-                            className="text-indigo-400 hover:text-indigo-300 transition-colors"
-                          >
-                            View Client
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <p>No pending letters at this time</p>
-              </div>
-            )}
-            
-            <div className="mt-4 text-right">
-              <Link href="/admin/clients" className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
-                View all clients →
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+
     </div>
   )
 }

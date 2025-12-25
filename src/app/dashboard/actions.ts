@@ -27,22 +27,9 @@ export interface TargetData {
     [key: string]: any;
 }
 
-export interface Letter {
-    id: string;
-    clientName: string;
-    letterType?: string;
-    status?: string;
-    createdAt?: any;
-    bankName?: string;
-    dueDate?: string;
-    advocateName?: string;
-    source_database?: string;
-}
-
 export interface DashboardData {
     salesUsers: SalesUser[];
     targetData: TargetData[];
-    pendingLetters: Letter[];
     stats: {
         totalUsers: number;
         totalSales: number;
@@ -278,37 +265,9 @@ export async function getAdminDashboardData(month: string, year: number): Promis
             });
         }
 
-        // 3. Fetch Pending Letters (Optimized: Only where request_letter == true)
-        const clientsRef = db.collection('clients');
-        // Fetch only clients who have requested a letter (request_letter == true)
-        // Limiting to 50 to prevent performance bottlenecks
-        const clientsSnap = await clientsRef
-            .where('request_letter', '==', false)
-            .get();
-
-        const pendingLettersList: Letter[] = [];
-
-        clientsSnap.forEach(doc => {
-            const clientData = doc.data();
-            // Double check in case query included missing fields or other edge cases
-            if (clientData.request_letter === false) {
-                const serializedClient = serializeData(clientData);
-
-                pendingLettersList.push({
-                    id: doc.id,
-                    clientName: serializedClient.name,
-                    bankName: serializedClient.bank || 'Not specified',
-                    dueDate: serializedClient.nextFollowUp || serializedClient.lastFollowUp,
-                    advocateName: serializedClient.alloc_adv || 'Unassigned',
-                    source_database: serializedClient.source_database || 'Not specified'
-                });
-            }
-        });
-
         return {
             salesUsers: serializeData(salesUsersList),
             targetData: serializeData(targetsData),
-            pendingLetters: pendingLettersList,
             stats: {
                 totalUsers: salesUsersList.length,
                 totalSales: sales,
