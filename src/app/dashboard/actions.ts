@@ -148,37 +148,56 @@ export async function getAdminDashboardData(month: string, year: number): Promis
             const startOfMonth = new Date(year, targetMonth, 1);
             const endOfMonth = new Date(year, targetMonth + 1, 0, 23, 59, 59, 999);
 
+            // Format dates for string comparison (ISO format)
+            const startOfMonthStr = startOfMonth.toISOString();
+            const endOfMonthStr = endOfMonth.toISOString();
+
             const paymentsRef = db.collection('payments');
 
-            const paymentsSnap = await paymentsRef
-                .where('status', '==', 'approved')
-                .get();
+            // Run parallel queries to handle both Timestamp/Date objects and ISO strings
+            const [timestampSnap, stringSnap] = await Promise.all([
+                // Query for Timestamp/Date fields
+                paymentsRef
+                    .where('status', '==', 'approved')
+                    .where('timestamp', '>=', startOfMonth)
+                    .where('timestamp', '<=', endOfMonth)
+                    .get(),
+                // Query for String fields
+                paymentsRef
+                    .where('status', '==', 'approved')
+                    .where('timestamp', '>=', startOfMonthStr)
+                    .where('timestamp', '<=', endOfMonthStr)
+                    .get()
+            ]);
 
-            paymentsSnap.forEach((doc) => {
+            const processPaymentDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
                 const payment = doc.data();
-                if (payment.timestamp) {
-                    let paymentDate: Date;
-                    if (typeof payment.timestamp === 'string') {
-                        paymentDate = new Date(payment.timestamp);
-                    } else if (payment.timestamp.toDate) {
-                        paymentDate = payment.timestamp.toDate();
-                    } else if (payment.timestamp._seconds) {
-                        paymentDate = new Date(payment.timestamp._seconds * 1000);
-                    } else {
-                        paymentDate = new Date(payment.timestamp);
-                    }
+                const amount = parseFloat(payment.amount) || 0;
+                hasPaymentData = true;
 
-                    if (paymentDate >= startOfMonth && paymentDate <= endOfMonth) {
-                        const amount = parseFloat(payment.amount) || 0;
-                        hasPaymentData = true;
+                if (payment.userId || payment.assignedTo || payment.salesperson) {
+                    const userId = payment.userId || payment.assignedTo || payment.salesperson;
+                    individualPayments[userId] = (individualPayments[userId] || 0) + amount;
+                }
+            };
 
-                        if (payment.userId || payment.assignedTo || payment.salesperson) {
-                            const userId = payment.userId || payment.assignedTo || payment.salesperson;
-                            individualPayments[userId] = (individualPayments[userId] || 0) + amount;
-                        }
-                    }
+            // Use a Set to deduplicate if any docs overlap (unlikely but safe)
+            const processedIds = new Set<string>();
+
+            timestampSnap.forEach(doc => {
+                if (!processedIds.has(doc.id)) {
+                    processPaymentDoc(doc);
+                    processedIds.add(doc.id);
                 }
             });
+
+            stringSnap.forEach(doc => {
+                if (!processedIds.has(doc.id)) {
+                    processPaymentDoc(doc);
+                    processedIds.add(doc.id);
+                }
+            });
+
         } catch (error) {
             console.error('Error fetching payments:', error);
         }
@@ -282,8 +301,6 @@ export async function getAdminDashboardData(month: string, year: number): Promis
             }
         });
 
-
-
         return {
             salesUsers: serializeData(salesUsersList),
             targetData: serializeData(targetsData),
@@ -308,6 +325,10 @@ export async function getDashboardHistory(endMonth: string, endYear: number): Pr
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
         // Fetch ALL approved payments
+        // NOTE: This is still heavy if there are millions of payments. 
+        // For "All Time" history, we need all payments. 
+        // Optimization: We could cache this or use aggregation queries if Firestore supports it (count/sum).
+        // But for now, we keep it as is for payments, but optimize TARGETS below.
         const paymentsRef = db.collection('payments');
         const paymentsSnap = await paymentsRef
             .where('status', '==', 'approved')
@@ -340,15 +361,45 @@ export async function getDashboardHistory(endMonth: string, endYear: number): Pr
             }
         });
 
-        // Fetch ALL targets
+        // Fetch ALL targets in ONE query (Optimized from N+1)
         const targetsRef = db.collection('targets');
         const targetsSnap = await targetsRef.get();
 
-        // Collect all month keys from targets collection too
+        const targetsByMonth: { [key: string]: number } = {};
+
+        // Process all targets in memory
+        // This avoids N+1 queries.
+        // We need to fetch subcollections for monthly targets.
+        // Wait, fetching subcollections for ALL docs is still N+1 if we iterate.
+        // BUT, we can use a Collection Group query if 'sales_targets' is a subcollection!
+        // Let's try to fetch all 'sales_targets' across the DB.
+
+        const salesTargetsGroupSnap = await db.collectionGroup('sales_targets').get();
+
+        salesTargetsGroupSnap.forEach(doc => {
+            // The parent doc ID should be the monthKey (e.g. Jan_2025)
+            // But for collection group queries, we need to check the ref.parent.parent.id
+            const parentDoc = doc.ref.parent.parent;
+            if (parentDoc) {
+                const monthKey = parentDoc.id;
+                const amount = doc.data().amountCollectedTarget || 0;
+                targetsByMonth[monthKey] = (targetsByMonth[monthKey] || 0) + amount;
+                allMonthsSet.add(monthKey);
+            }
+        });
+
+        // Also handle legacy targets stored directly on the doc (if any)
         targetsSnap.forEach(doc => {
-            // Assuming doc.id is like "Jan_2025"
-            if (doc.id.includes('_')) {
-                allMonthsSet.add(doc.id);
+            const monthKey = doc.id;
+            if (monthKey.includes('_')) {
+                // If we didn't find any sales_targets for this month, check the doc itself
+                if (!targetsByMonth[monthKey]) {
+                    const data = doc.data();
+                    if (data.amountCollectedTarget) {
+                        targetsByMonth[monthKey] = data.amountCollectedTarget;
+                        allMonthsSet.add(monthKey);
+                    }
+                }
             }
         });
 
@@ -368,33 +419,12 @@ export async function getDashboardHistory(endMonth: string, endYear: number): Pr
             const [month, yearStr] = monthKey.split('_');
             const year = parseInt(yearStr);
 
-            // Get target for this month
-            let totalTarget = 0;
-
-            const targetDocRef = db.collection('targets').doc(monthKey);
-            const targetDocSnap = await targetDocRef.get();
-
-            if (targetDocSnap.exists) {
-                const salesTargetsSnap = await targetDocRef.collection('sales_targets').get();
-                if (!salesTargetsSnap.empty) {
-                    salesTargetsSnap.forEach(doc => {
-                        totalTarget += (doc.data().amountCollectedTarget || 0);
-                    });
-                } else {
-                    // Fallback if target is stored directly on the doc (legacy structure check)
-                    const data = targetDocSnap.data();
-                    if (data && data.amountCollectedTarget) {
-                        totalTarget = data.amountCollectedTarget;
-                    }
-                }
-            }
-
             historyData.push({
                 month: month,
                 year: year,
                 fullLabel: `${month} ${year}`,
                 collected: paymentsByMonth[monthKey] || 0,
-                target: totalTarget
+                target: targetsByMonth[monthKey] || 0
             });
         }
 
