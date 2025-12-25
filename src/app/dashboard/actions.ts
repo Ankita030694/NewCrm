@@ -301,9 +301,12 @@ export async function getDashboardHistory(endMonth: string, endYear: number): Pr
         // Optimization: We could cache this or use aggregation queries if Firestore supports it (count/sum).
         // But for now, we keep it as is for payments, but optimize TARGETS below.
         const paymentsRef = db.collection('payments');
+
+        console.time('getDashboardHistory:Payments');
         const paymentsSnap = await paymentsRef
             .where('status', '==', 'approved')
             .get();
+        console.timeEnd('getDashboardHistory:Payments');
 
         // Aggregate payments by month
         const paymentsByMonth: { [key: string]: number } = {};
@@ -334,7 +337,9 @@ export async function getDashboardHistory(endMonth: string, endYear: number): Pr
 
         // Fetch ALL targets in ONE query
         const targetsRef = db.collection('targets');
+        console.time('getDashboardHistory:Targets');
         const targetsSnap = await targetsRef.get();
+        console.timeEnd('getDashboardHistory:Targets');
 
         const targetsByMonth: { [key: string]: number } = {};
 
