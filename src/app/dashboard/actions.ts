@@ -365,44 +365,29 @@ export async function getDashboardHistory(endMonth: string, endYear: number): Pr
             }
         });
 
-        // Fetch ALL targets in ONE query (Optimized from N+1)
+        // Fetch ALL targets in ONE query
         const targetsRef = db.collection('targets');
         const targetsSnap = await targetsRef.get();
 
         const targetsByMonth: { [key: string]: number } = {};
 
-        // Process all targets in memory
-        // This avoids N+1 queries.
-        // We need to fetch subcollections for monthly targets.
-        // Wait, fetching subcollections for ALL docs is still N+1 if we iterate.
-        // BUT, we can use a Collection Group query if 'sales_targets' is a subcollection!
-        // Let's try to fetch all 'sales_targets' across the DB.
-
-        const salesTargetsGroupSnap = await db.collectionGroup('sales_targets').get();
-
-        salesTargetsGroupSnap.forEach(doc => {
-            // The parent doc ID should be the monthKey (e.g. Jan_2025)
-            // But for collection group queries, we need to check the ref.parent.parent.id
-            const parentDoc = doc.ref.parent.parent;
-            if (parentDoc) {
-                const monthKey = parentDoc.id;
-                const amount = doc.data().amountCollectedTarget || 0;
-                targetsByMonth[monthKey] = (targetsByMonth[monthKey] || 0) + amount;
-                allMonthsSet.add(monthKey);
-            }
-        });
-
-        // Also handle legacy targets stored directly on the doc (if any)
+        // Optimization: Use the pre-calculated 'total' field in the monthly document
+        // This avoids fetching all subcollections or using collectionGroup queries.
         targetsSnap.forEach(doc => {
             const monthKey = doc.id;
+            // Ensure it's a monthly doc (e.g., "Jan_2025")
             if (monthKey.includes('_')) {
-                // If we didn't find any sales_targets for this month, check the doc itself
-                if (!targetsByMonth[monthKey]) {
-                    const data = doc.data();
-                    if (data.amountCollectedTarget) {
-                        targetsByMonth[monthKey] = data.amountCollectedTarget;
-                        allMonthsSet.add(monthKey);
-                    }
+                const data = doc.data();
+
+                // Check for the new 'total' string field (e.g., "27,49,999")
+                if (data.total) {
+                    // Remove commas and convert to number
+                    const cleanTotal = String(data.total).replace(/,/g, '');
+                    targetsByMonth[monthKey] = parseFloat(cleanTotal) || 0;
+                }
+                // Fallback to legacy field if 'total' is missing
+                else if (data.amountCollectedTarget) {
+                    targetsByMonth[monthKey] = data.amountCollectedTarget;
                 }
             }
         });
