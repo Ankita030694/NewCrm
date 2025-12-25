@@ -405,3 +405,75 @@ export async function getDashboardHistory(endMonth: string, endYear: number): Pr
         return [];
     }
 }
+
+export async function getOpsRevenueHistory(): Promise<HistoryData[]> {
+    try {
+        if (!db) throw new Error('Firebase Admin SDK not initialized');
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        // Fetch ALL approved ops payments
+        const opsPaymentsRef = db.collection('ops_payments');
+        const opsPaymentsSnap = await opsPaymentsRef
+            .where('status', '==', 'approved')
+            .get();
+
+        // Aggregate payments by month
+        const paymentsByMonth: { [key: string]: number } = {};
+        const allMonthsSet = new Set<string>();
+
+        opsPaymentsSnap.forEach(doc => {
+            const payment = doc.data();
+            if (payment.timestamp) {
+                let paymentDate: Date;
+                if (typeof payment.timestamp === 'string') {
+                    paymentDate = new Date(payment.timestamp);
+                } else if (payment.timestamp.toDate) {
+                    paymentDate = payment.timestamp.toDate();
+                } else if (payment.timestamp._seconds) {
+                    paymentDate = new Date(payment.timestamp._seconds * 1000);
+                } else {
+                    paymentDate = new Date(payment.timestamp);
+                }
+
+                if (!isNaN(paymentDate.getTime())) {
+                    const monthKey = `${monthNames[paymentDate.getMonth()]}_${paymentDate.getFullYear()}`;
+                    const amount = parseFloat(payment.amount) || 0;
+                    paymentsByMonth[monthKey] = (paymentsByMonth[monthKey] || 0) + amount;
+                    allMonthsSet.add(monthKey);
+                }
+            }
+        });
+
+        const sortedMonths = Array.from(allMonthsSet).sort((a, b) => {
+            const [monthA, yearA] = a.split('_');
+            const [monthB, yearB] = b.split('_');
+
+            if (parseInt(yearA) !== parseInt(yearB)) {
+                return parseInt(yearA) - parseInt(yearB);
+            }
+            return monthNames.indexOf(monthA) - monthNames.indexOf(monthB);
+        });
+
+        const historyData: HistoryData[] = [];
+
+        for (const monthKey of sortedMonths) {
+            const [month, yearStr] = monthKey.split('_');
+            const year = parseInt(yearStr);
+
+            historyData.push({
+                month: month,
+                year: year,
+                fullLabel: `${month} ${year}`,
+                collected: paymentsByMonth[monthKey] || 0,
+                target: 0 // Ops revenue might not have a target in the same way, or we'd need to fetch it if it exists. Assuming 0 for now as per request "ops revenue"
+            });
+        }
+
+        return historyData;
+
+    } catch (error) {
+        console.error('Error fetching ops revenue history:', error);
+        return [];
+    }
+}

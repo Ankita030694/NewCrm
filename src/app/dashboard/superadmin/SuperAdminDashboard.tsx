@@ -2,6 +2,17 @@
 
 import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
+import { getDashboardHistory, getOpsRevenueHistory, HistoryData } from '../actions';
 
 // Lazy load Chart.js and heavy components
 const LazyCharts = lazy(() => import('./components/LazyCharts'));
@@ -115,6 +126,39 @@ const SuperAdminDashboard = React.memo(() => {
   // Lazy loading state
   const [showClientAnalytics, setShowClientAnalytics] = useState(false);
   const [showCharts, setShowCharts] = useState(false);
+
+  // History Data State
+  const [historyData, setHistoryData] = useState<HistoryData[]>([]);
+  const [opsHistoryData, setOpsHistoryData] = useState<HistoryData[]>([]);
+
+  // Fetch history data on mount
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const [history, opsHistory] = await Promise.all([
+          getDashboardHistory('Dec', new Date().getFullYear()), // Month/Year params are ignored for all-time now
+          getOpsRevenueHistory()
+        ]);
+        setHistoryData(history);
+        setOpsHistoryData(opsHistory);
+      } catch (error) {
+        console.error("Error fetching history data:", error);
+      }
+    };
+    fetchHistory();
+  }, []);
+
+  // Helper function for Indian number formatting
+  const formatIndianCurrency = (value: number) => {
+    if (value >= 10000000) {
+      return `₹${(value / 10000000).toFixed(0)}Cr`;
+    } else if (value >= 100000) {
+      return `₹${(value / 100000).toFixed(0)}L`;
+    } else if (value >= 1000) {
+      return `₹${(value / 1000).toFixed(0)}k`;
+    }
+    return `₹${value}`;
+  };
 
   // Cache keys for different data types
   const salesAnalyticsCacheKey = useMemo(() => 
@@ -391,6 +435,101 @@ const SuperAdminDashboard = React.memo(() => {
                   opsPaymentsLoading={opsPaymentsLoading}
                   salesLoading={salesLoading}
                 />
+
+                {/* History Charts Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                  {/* Collection Trends Chart */}
+                  <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-gray-900 dark:text-white text-base">Collection Trends (All Time)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={historyData}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <XAxis 
+                              dataKey="fullLabel" 
+                              stroke="#9CA3AF" 
+                              tick={{ fill: '#9CA3AF' }} 
+                            />
+                            <YAxis 
+                              stroke="#9CA3AF" 
+                              tick={{ fill: '#9CA3AF' }}
+                              tickFormatter={formatIndianCurrency}
+                            />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
+                              itemStyle={{ color: '#F3F4F6' }}
+                              formatter={(value: number) => [value.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }), '']}
+                            />
+                            <Legend />
+                            <Line 
+                              type="monotone" 
+                              dataKey="target" 
+                              name="Collection Target" 
+                              stroke="#818cf8" 
+                              activeDot={{ r: 8 }} 
+                              strokeWidth={2} 
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="collected" 
+                              name="Collected Amount" 
+                              stroke="#34d399" 
+                              strokeWidth={2} 
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Ops Revenue Trends Chart */}
+                  <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-gray-900 dark:text-white text-base">Ops Revenue Trends (All Time)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={opsHistoryData}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <XAxis 
+                              dataKey="fullLabel" 
+                              stroke="#9CA3AF" 
+                              tick={{ fill: '#9CA3AF' }} 
+                            />
+                            <YAxis 
+                              stroke="#9CA3AF" 
+                              tick={{ fill: '#9CA3AF' }}
+                              tickFormatter={formatIndianCurrency}
+                            />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
+                              itemStyle={{ color: '#F3F4F6' }}
+                              formatter={(value: number) => [value.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }), '']}
+                            />
+                            <Legend />
+                            <Line 
+                              type="monotone" 
+                              dataKey="collected" 
+                              name="Ops Revenue" 
+                              stroke="#f59e0b" 
+                              strokeWidth={2} 
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
                 {/* CRM Leads Analytics Section - Deferred loading */}
                 <div className="mt-4 flex flex-col lg:flex-row gap-3">
