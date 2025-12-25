@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { collection, query, where, getDocs, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, collectionGroup } from "firebase/firestore";
 import { db } from "@/firebase/firebase";
 import { 
   Card, 
@@ -133,23 +133,13 @@ export default function SalesDashboard() {
   const [billcutAnalytics, setBillcutAnalytics] = useState<LeadAnalytics | null>(null);
   const [allBillcutLeads, setAllBillcutLeads] = useState<any[]>([]);
 
-  // Create a mapping of status to color based on your application's color scheme
-  const statusColors = useMemo(() => ({
-    'Interested': '#059669', // green-600
-    'Not Interested': '#dc2626', // red-600
-    'Not Answering': '#ea580c', // orange-600
-    'Callback': '#ca8a04', // yellow-600
-    'Converted': '#10b981', // emerald-500
-    'Loan Required': '#9333ea', // purple-600
-    'Short Loan': '#0d9488', // teal-600
-    'Cibil Issue': '#e11d48', // rose-600
-    'Closed Lead': '#4b5563', // gray-600
-    'No Status': '#6366f1', // indigo-500
-    'Unknown': '#6366f1', // indigo-500 (fallback)
-  }), []);
+
 
   // Add state for tasks
   const [assignedTasks, setAssignedTasks] = useState<Task[]>([]);
+
+  // Add state for target trend
+  const [targetTrendData, setTargetTrendData] = useState<any[]>([]);
 
   // Add state for analytics source selection
   const [analyticsSource, setAnalyticsSource] = useState<'AMA' | 'Billcut'>('AMA');
@@ -265,8 +255,8 @@ export default function SalesDashboard() {
       
       // Query all leads assigned to the current user (AMA leads)
       const leadsQuery = query(
-        collection(db, "crm_leads"),
-        where("assignedTo", "==", userName)
+        collection(db, "ama_leads"),
+        where("assigned_to", "==", userName)
       );
       
       // Query all Billcut leads assigned to the current user
@@ -288,9 +278,13 @@ export default function SalesDashboard() {
       leadsSnapshot.forEach(doc => {
         const leadData = doc.data();
         
-        // Get month from timestamp
+        // Get month from synced_at (preferred) or date or timestamp
         let date;
-        if (leadData.timestamp) {
+        if (leadData.synced_at) {
+          date = leadData.synced_at.toDate ? leadData.synced_at.toDate() : new Date(leadData.synced_at);
+        } else if (leadData.date) {
+          date = new Date(leadData.date);
+        } else if (leadData.timestamp) {
           date = leadData.timestamp.toDate ? leadData.timestamp.toDate() : new Date(leadData.timestamp);
         } else {
           date = new Date(); // Fallback
@@ -370,101 +364,59 @@ export default function SalesDashboard() {
       const cachedTargets = salesTargetsCache.get<TargetData>(targetsCacheKey);
       if (cachedTargets) {
         setTargetData(cachedTargets);
-        targetsLoaded.current = true;
-        salesPerfMonitor.end('targets-data-load');
-        return;
+        // We still need to fetch trend data even if current month is cached
       }
       
-      // Create the monthly document ID
-      const monthDocId = `${currentMonth}_${currentYear}`;
+      // Query all targets for this user using collectionGroup
+      const allTargetsQuery = query(
+        collectionGroup(db, "sales_targets"),
+        where("userName", "==", userName)
+      );
       
-      // First get the monthly document to see if it exists
-      const monthlyDocRef = doc(db, "targets", monthDocId);
-      const monthlyDocSnap = await getDoc(monthlyDocRef);
+      const querySnapshot = await getDocs(allTargetsQuery);
       
-      let targetDataFound: TargetData | null = null;
-      
-      if (monthlyDocSnap.exists()) {
+      if (!querySnapshot.empty) {
+        const trendData: any[] = [];
+        let currentMonthTarget: TargetData | null = null;
         
-        // Query the subcollection for this user
-        const salesTargetsQuery = query(
-          collection(db, "targets", monthDocId, "sales_targets"),
-          where("userName", "==", userName)
-        );
+        querySnapshot.forEach(doc => {
+          const data = doc.data() as TargetData;
+          // The parent document ID of "sales_targets" subcollection is "Month_Year"
+          const monthYearId = doc.ref.parent.parent?.id;
+          
+          if (monthYearId) {
+            const [month, year] = monthYearId.split('_');
+            trendData.push({
+              name: month,
+              year: parseInt(year),
+              target: data.amountCollectedTarget || 0,
+              collected: data.amountCollected || 0,
+              monthIndex: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(month)
+            });
+            
+            if (month === currentMonth && parseInt(year) === currentYear) {
+              currentMonthTarget = data;
+            }
+          }
+        });
         
-        const querySnapshot = await getDocs(salesTargetsQuery);
+        // Sort trend data chronologically
+        trendData.sort((a, b) => {
+          if (a.year !== b.year) return a.year - b.year;
+          return a.monthIndex - b.monthIndex;
+        });
         
-        if (!querySnapshot.empty) {
-          // Found user's target in subcollection
-          const targetDoc = querySnapshot.docs[0];
-          targetDataFound = targetDoc.data() as TargetData;
+        setTargetTrendData(trendData);
+        
+        if (currentMonthTarget) {
+          setTargetData(currentMonthTarget);
+          salesTargetsCache.set(targetsCacheKey, currentMonthTarget);
         } else {
-          
-          // Try finding by userId instead if userName doesn't match
-          const salesTargetsAltQuery = collection(db, "targets", monthDocId, "sales_targets");
-          const altQuerySnapshot = await getDocs(salesTargetsAltQuery);
-          
-          // Loop through all targets
-          altQuerySnapshot.forEach(doc => {
-            const data = doc.data();
-            // Check if this looks like the right user (case-insensitive comparison)
-            if (data.userName && 
-                data.userName.toLowerCase().includes(userName.toLowerCase())) {
-              targetDataFound = data as TargetData;
-            }
-          });
+          setTargetData(null);
         }
       } else {
-        console.log(`Monthly document ${monthDocId} does not exist`);
-        
-        // Try checking previous month if we're early in current month
-        if (new Date().getDate() <= 5) {
-          const prevMonthIndex = new Date().getMonth() === 0 ? 11 : new Date().getMonth() - 1;
-          const prevMonth = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][prevMonthIndex];
-          const prevYear = new Date().getMonth() === 0 ? currentYear - 1 : currentYear;
-          
-          
-          const prevMonthDocRef = doc(db, "targets", `${prevMonth}_${prevYear}`);
-          const prevMonthDocSnap = await getDoc(prevMonthDocRef);
-          
-          if (prevMonthDocSnap.exists()) {
-            // Query the subcollection for this user in previous month
-            const prevSalesTargetsQuery = query(
-              collection(db, "targets", `${prevMonth}_${prevYear}`, "sales_targets"),
-              where("userName", "==", userName)
-            );
-            
-            const prevQuerySnapshot = await getDocs(prevSalesTargetsQuery);
-            
-            if (!prevQuerySnapshot.empty) {
-              const prevTargetDoc = prevQuerySnapshot.docs[0];
-              targetDataFound = prevTargetDoc.data() as TargetData;
-            }
-          }
-        }
-        
-        // As a fallback, check for old-style targets only if no target found yet
-        if (!targetDataFound) {
-          const legacyTargetsQuery = query(
-            collection(db, "targets"),
-            where("userName", "==", userName)
-          );
-          
-          const legacyQuerySnapshot = await getDocs(legacyTargetsQuery);
-          
-          if (!legacyQuerySnapshot.empty) {
-            const legacyDoc = legacyQuerySnapshot.docs[0];
-            targetDataFound = legacyDoc.data() as TargetData;
-          }
-        }
-      }
-      
-      // Cache and set the target data if found
-      if (targetDataFound) {
-        salesTargetsCache.set(targetsCacheKey, targetDataFound);
-        setTargetData(targetDataFound);
-      } else {
-        console.log("No target found for this user at all");
+        setTargetTrendData([]);
+        setTargetData(null);
       }
       
       targetsLoaded.current = true;
@@ -508,21 +460,35 @@ export default function SalesDashboard() {
         return;
       }
       
-      // Query leads assigned to the current user
-      const leadsQuery = query(
-        collection(db, "crm_leads"),
-        where("assignedTo", "==", userName)
+      // Query leads assigned to the current user from both collections
+      const amaLeadsQuery = query(
+        collection(db, "ama_leads"),
+        where("assigned_to", "==", userName)
       );
       
-      const querySnapshot = await getDocs(leadsQuery);
+      const billcutLeadsQuery = query(
+        collection(db, "billcutLeads"),
+        where("assigned_to", "==", userName)
+      );
       
-      if (!querySnapshot.empty) {
-        // Store all leads for analytics
-        const allLeadsData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        
+      const [amaSnapshot, billcutSnapshot] = await Promise.all([
+        getDocs(amaLeadsQuery),
+        getDocs(billcutLeadsQuery)
+      ]);
+      
+      const allLeadsData: any[] = [];
+      
+      // Process AMA Leads
+      amaSnapshot.forEach(doc => {
+        allLeadsData.push({ id: doc.id, ...doc.data(), source_type: 'ama' });
+      });
+      
+      // Process Billcut Leads
+      billcutSnapshot.forEach(doc => {
+        allLeadsData.push({ id: doc.id, ...doc.data(), source_type: 'billcut' });
+      });
+      
+      if (allLeadsData.length > 0) {
         // Count total leads and converted leads for the selected month
         let totalCount = 0;
         let convertedCount = 0;
@@ -534,15 +500,27 @@ export default function SalesDashboard() {
         const monthlyData: { [key: string]: { total: number, converted: number } } = {};
         
         // Process each lead document
-        querySnapshot.forEach((doc) => {
-          const leadData = doc.data();
-          
-          // Get date from timestamp
+        allLeadsData.forEach((leadData) => {
+          // Get date from appropriate fields based on source
           let date;
-          if (leadData.timestamp) {
-            date = leadData.timestamp.toDate ? leadData.timestamp.toDate() : new Date(leadData.timestamp);
-          } else {
-            date = new Date(); // Fallback
+          if (leadData.source_type === 'ama') {
+            if (leadData.synced_at) {
+              date = leadData.synced_at.toDate ? leadData.synced_at.toDate() : new Date(leadData.synced_at);
+            } else if (leadData.date) {
+              date = new Date(leadData.date);
+            } else if (leadData.timestamp) {
+              date = leadData.timestamp.toDate ? leadData.timestamp.toDate() : new Date(leadData.timestamp);
+            } else {
+              date = new Date();
+            }
+          } else { // billcut
+            if (leadData.synced_date) {
+              date = leadData.synced_date.toDate ? leadData.synced_date.toDate() : new Date(leadData.synced_date);
+            } else if (leadData.date) {
+              date = new Date(leadData.date);
+            } else {
+              date = new Date();
+            }
           }
           
           const leadMonth = date.toLocaleString('default', { month: 'short' });
@@ -556,7 +534,13 @@ export default function SalesDashboard() {
           // Always add to monthly chart data regardless of filter
           monthlyData[leadMonth].total += 1;
           
-          const isConverted = leadData.convertedToClient === true || leadData.status === "Converted";
+          // Conversion logic based on source
+          let isConverted = false;
+          if (leadData.source_type === 'ama') {
+            isConverted = leadData.status === "Converted";
+          } else {
+            isConverted = leadData.category === "Converted" || leadData.status === "Converted";
+          }
           
           if (isConverted) {
             monthlyData[leadMonth].converted += 1;
@@ -571,7 +555,7 @@ export default function SalesDashboard() {
             }
             
             // Track status counts for current month
-            const status = leadData.status || "Unknown";
+            const status = leadData.status || leadData.category || "Unknown";
             if (!statusCounts[status]) {
               statusCounts[status] = 0;
             }
@@ -673,8 +657,8 @@ export default function SalesDashboard() {
     let leadsNeedingWork = 0;
 
     leads.forEach(lead => {
-      const status = lead.status || 'No Status';
-      const source = lead.source_database || 'Unknown';
+      const status = lead.status || lead.category || 'No Status';
+      const source = lead.source_database || lead.source || 'Unknown';
       const city = lead.city || lead.City || 'Unknown';
       
       // Count statuses
@@ -683,7 +667,8 @@ export default function SalesDashboard() {
       cityCounts[city] = (cityCounts[city] || 0) + 1;
       
       // Count specific statuses
-      if (status === 'Converted' || lead.convertedToClient === true) {
+      const isConverted = status === 'Converted' || lead.convertedToClient === true;
+      if (isConverted) {
         convertedLeads++;
       }
       if (status === 'Callback') {
@@ -716,20 +701,33 @@ export default function SalesDashboard() {
       
       // Monthly trend
       let date;
-      if (lead.timestamp) {
-        date = lead.timestamp.toDate ? lead.timestamp.toDate() : new Date(lead.timestamp);
-      } else {
-        date = new Date();
+      if (lead.source_type === 'ama') {
+        if (lead.synced_at) {
+          date = lead.synced_at.toDate ? lead.synced_at.toDate() : new Date(lead.synced_at);
+        } else if (lead.date) {
+          date = new Date(lead.date);
+        } else if (lead.timestamp) {
+          date = lead.timestamp.toDate ? lead.timestamp.toDate() : new Date(lead.timestamp);
+        } else {
+          date = new Date();
+        }
+      } else { // billcut
+        if (lead.synced_date) {
+          date = lead.synced_date.toDate ? lead.synced_date.toDate() : new Date(lead.synced_date);
+        } else if (lead.date) {
+          date = new Date(lead.date);
+        } else {
+          date = new Date();
+        }
       }
       
       const monthKey = date.toLocaleString('default', { month: 'short' });
       if (!monthlyTrend[monthKey]) {
         monthlyTrend[monthKey] = { total: 0, converted: 0 };
       }
-      monthlyTrend[monthKey].total++;
-      
-      if (status === 'Converted' || lead.convertedToClient === true) {
-        monthlyTrend[monthKey].converted++;
+      monthlyTrend[monthKey].total += 1;
+      if (isConverted) {
+        monthlyTrend[monthKey].converted += 1;
       }
     });
 
@@ -1310,422 +1308,10 @@ export default function SalesDashboard() {
         </div>
 
         {/* Comprehensive Analytics Section */}
-        {(leadAnalytics || billcutAnalytics) && (
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-100">
-                Lead Analytics Overview
-                <span className="text-sm text-gray-400 ml-2">
-                  ({analyticsSource})
-                </span>
-              </h2>
-              
-              {/* Analytics Source Selector */}
-              <div className="flex items-center space-x-2">
-                <label htmlFor="analyticsSource" className="text-sm text-gray-400">
-                  Data Source:
-                </label>
-                <select
-                  id="analyticsSource"
-                  className="bg-gray-800 border border-gray-700 text-white rounded-md px-3 py-2 text-sm"
-                  value={analyticsSource}
-                  onChange={(e) => setAnalyticsSource(e.target.value as 'AMA' | 'Billcut')}
-                >
-                  <option value="AMA" disabled={!leadAnalytics}>AMA</option>
-                  <option value="Billcut" disabled={!billcutAnalytics}>Billcut</option>
-                </select>
-              </div>
-            </div>
-            
-            {/* Key Metrics Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-              <Card className="border-0 bg-gradient-to-br from-red-800 to-red-900 shadow-xl">
-                <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-red-400">
-                    {analyticsSource === 'AMA' ? (leadAnalytics?.leadsNeedingWork || 0) : (billcutAnalytics?.leadsNeedingWork || 0)}
-                  </div>
-                  <p className="text-sm text-gray-300">Need To Work On</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-0 bg-gradient-to-br from-yellow-800 to-yellow-900 shadow-xl">
-                <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-yellow-400">
-                    {analyticsSource === 'AMA' ? (leadAnalytics?.callbackLeads || 0) : (billcutAnalytics?.callbackLeads || 0)}
-                  </div>
-                  <p className="text-sm text-gray-300">Callbacks</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-0 bg-gradient-to-br from-green-800 to-green-900 shadow-xl">
-                <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-green-400">
-                    {analyticsSource === 'AMA' ? (leadAnalytics?.interestedLeads || 0) : (billcutAnalytics?.interestedLeads || 0)}
-                  </div>
-                  <p className="text-sm text-gray-300">Interested</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-0 bg-gradient-to-br from-emerald-800 to-emerald-900 shadow-xl">
-                <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-emerald-400">
-                    {analyticsSource === 'AMA' ? (leadAnalytics?.convertedLeads || 0) : (billcutAnalytics?.convertedLeads || 0)}
-                  </div>
-                  <p className="text-sm text-gray-300">Converted</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-0 bg-gradient-to-br from-purple-800 to-purple-900 shadow-xl">
-                <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-purple-400">
-                    {analyticsSource === 'AMA' ? (leadAnalytics?.loanRequiredLeads || 0) : (billcutAnalytics?.loanRequiredLeads || 0)}
-                  </div>
-                  <p className="text-sm text-gray-300">Loan Required</p>
-                </CardContent>
-              </Card>
-              
-              <Card className="border-0 bg-gradient-to-br from-blue-800 to-blue-900 shadow-xl">
-                <CardContent className="p-4">
-                  <div className="text-2xl font-bold text-blue-400">
-                    {analyticsSource === 'AMA' ? (leadAnalytics?.conversionRate || 0) : (billcutAnalytics?.conversionRate || 0)}%
-                  </div>
-                  <p className="text-sm text-gray-300">Conversion Rate</p>
-                </CardContent>
-              </Card>
-            </div>
 
-            {/* Status Distribution Table */}
-            <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl mb-6">
-              <CardHeader>
-                <CardTitle className="text-gray-100">Lead Status Distribution</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-700">
-                    <thead>
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Count
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Percentage
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Progress
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-700">
-                      {(analyticsSource === 'AMA' ? (leadAnalytics?.statusDistribution || []) : (billcutAnalytics?.statusDistribution || [])).map((item, index) => (
-                        <tr key={index} className="hover:bg-gray-750 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div 
-                                className="w-3 h-3 rounded-full mr-3"
-                                style={{ backgroundColor: statusColors[(item.status || 'Unknown') as keyof typeof statusColors] || statusColors['Unknown'] }}
-                              ></div>
-                              <span className="text-sm font-medium text-gray-200">{item.status || 'Unknown'}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                            {item.count}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                            {item.percentage}%
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="w-full bg-gray-700 rounded-full h-2">
-                              <div 
-                                className="h-2 rounded-full transition-all duration-300"
-                                style={{ 
-                                  width: `${item.percentage}%`,
-                                  backgroundColor: statusColors[(item.status || 'Unknown') as keyof typeof statusColors] || statusColors['Unknown']
-                                }}
-                              ></div>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-
-           
-          </div>
-        )}
 
         {/* Additional Analytics Sections */}
-        {(leadAnalytics || billcutAnalytics) && (
-          <div className="mb-8">
-            {/* Performance Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl">
-                <CardHeader>
-                  <CardTitle className="text-gray-100">Performance Metrics</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Total Leads</span>
-                      <span className="text-lg font-bold text-blue-400">
-                        {analyticsSource === 'AMA' ? (leadAnalytics?.totalLeads || 0) : (billcutAnalytics?.totalLeads || 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Conversion Rate</span>
-                      <span className="text-lg font-bold text-green-400">
-                        {analyticsSource === 'AMA' ? (leadAnalytics?.conversionRate || 0) : (billcutAnalytics?.conversionRate || 0)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Active Pipeline</span>
-                      <span className="text-lg font-bold text-yellow-400">
-                        {analyticsSource === 'AMA' 
-                          ? ((leadAnalytics?.interestedLeads || 0) + (leadAnalytics?.callbackLeads || 0) + (leadAnalytics?.leadsNeedingWork || 0))
-                          : ((billcutAnalytics?.interestedLeads || 0) + (billcutAnalytics?.callbackLeads || 0) + (billcutAnalytics?.leadsNeedingWork || 0))
-                        }
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Success Rate</span>
-                      <span className="text-lg font-bold text-purple-400">
-                        {(() => {
-                          const totalLeads = analyticsSource === 'AMA' ? (leadAnalytics?.totalLeads || 0) : (billcutAnalytics?.totalLeads || 0);
-                          const convertedLeads = analyticsSource === 'AMA' ? (leadAnalytics?.convertedLeads || 0) : (billcutAnalytics?.convertedLeads || 0);
-                          const interestedLeads = analyticsSource === 'AMA' ? (leadAnalytics?.interestedLeads || 0) : (billcutAnalytics?.interestedLeads || 0);
-                          return totalLeads > 0 ? Math.round(((convertedLeads + interestedLeads) / totalLeads) * 100) : 0;
-                        })()}%
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
 
-              <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl">
-                <CardHeader>
-                  <CardTitle className="text-gray-100">Lead Quality Analysis</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">High Quality</span>
-                      <span className="text-lg font-bold text-emerald-400">
-                        {analyticsSource === 'AMA' 
-                          ? ((leadAnalytics?.interestedLeads || 0) + (leadAnalytics?.convertedLeads || 0))
-                          : ((billcutAnalytics?.interestedLeads || 0) + (billcutAnalytics?.convertedLeads || 0))
-                        }
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Needs Follow-up</span>
-                      <span className="text-lg font-bold text-orange-400">
-                        {analyticsSource === 'AMA' 
-                          ? ((leadAnalytics?.callbackLeads || 0) + (leadAnalytics?.leadsNeedingWork || 0))
-                          : ((billcutAnalytics?.callbackLeads || 0) + (billcutAnalytics?.leadsNeedingWork || 0))
-                        }
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Requires Action</span>
-                      <span className="text-lg font-bold text-red-400">
-                        {analyticsSource === 'AMA' 
-                          ? ((leadAnalytics?.loanRequiredLeads || 0) + (leadAnalytics?.cibilIssueLeads || 0))
-                          : ((billcutAnalytics?.loanRequiredLeads || 0) + (billcutAnalytics?.cibilIssueLeads || 0))
-                        }
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Closed/Rejected</span>
-                      <span className="text-lg font-bold text-gray-400">
-                        {analyticsSource === 'AMA' 
-                          ? ((leadAnalytics?.notInterestedLeads || 0) + (leadAnalytics?.closedLeads || 0))
-                          : ((billcutAnalytics?.notInterestedLeads || 0) + (billcutAnalytics?.closedLeads || 0))
-                        }
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl">
-                <CardHeader>
-                  <CardTitle className="text-gray-100">Workload Overview</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Immediate Action</span>
-                      <span className="text-lg font-bold text-red-400">
-                        {analyticsSource === 'AMA' ? (leadAnalytics?.leadsNeedingWork || 0) : (billcutAnalytics?.leadsNeedingWork || 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Scheduled Callbacks</span>
-                      <span className="text-lg font-bold text-yellow-400">
-                        {analyticsSource === 'AMA' ? (leadAnalytics?.callbackLeads || 0) : (billcutAnalytics?.callbackLeads || 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">In Progress</span>
-                      <span className="text-lg font-bold text-blue-400">
-                        {analyticsSource === 'AMA' ? (leadAnalytics?.interestedLeads || 0) : (billcutAnalytics?.interestedLeads || 0)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-300">Completed</span>
-                      <span className="text-lg font-bold text-green-400">
-                        {analyticsSource === 'AMA' ? (leadAnalytics?.convertedLeads || 0) : (billcutAnalytics?.convertedLeads || 0)}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Callback Details Section */}
-            <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl mb-6">
-              <CardHeader>
-                <CardTitle className="text-gray-100">Callback Management</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-200 mb-4">Callback Statistics</h4>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center p-3 bg-gray-750 rounded-lg">
-                        <span className="text-sm text-gray-300">Total Callbacks</span>
-                        <span className="text-xl font-bold text-yellow-400">
-                          {analyticsSource === 'AMA' ? (leadAnalytics?.callbackLeads || 0) : (billcutAnalytics?.callbackLeads || 0)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center p-3 bg-gray-750 rounded-lg">
-                        <span className="text-sm text-gray-300">Callback Rate</span>
-                        <span className="text-xl font-bold text-blue-400">
-                          {(() => {
-                            const totalLeads = analyticsSource === 'AMA' ? (leadAnalytics?.totalLeads || 0) : (billcutAnalytics?.totalLeads || 0);
-                            const callbackLeads = analyticsSource === 'AMA' ? (leadAnalytics?.callbackLeads || 0) : (billcutAnalytics?.callbackLeads || 0);
-                            return totalLeads > 0 ? Math.round((callbackLeads / totalLeads) * 100) : 0;
-                          })()}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center p-3 bg-gray-750 rounded-lg">
-                        <span className="text-sm text-gray-300">Pending Follow-ups</span>
-                        <span className="text-xl font-bold text-orange-400">
-                          {analyticsSource === 'AMA' 
-                            ? ((leadAnalytics?.callbackLeads || 0) + (leadAnalytics?.leadsNeedingWork || 0))
-                            : ((billcutAnalytics?.callbackLeads || 0) + (billcutAnalytics?.leadsNeedingWork || 0))
-                          }
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-200 mb-4">Quick Actions</h4>
-                    <div className="space-y-3">
-                      <div className="w-full p-3 bg-yellow-600/20 border border-yellow-500/30 text-yellow-300 rounded-lg font-medium">
-                        View All Callbacks ({analyticsSource === 'AMA' ? (leadAnalytics?.callbackLeads || 0) : (billcutAnalytics?.callbackLeads || 0)})
-                      </div>
-                      <div className="w-full p-3 bg-red-600/20 border border-red-500/30 text-red-300 rounded-lg font-medium">
-                        Leads Needing Work ({analyticsSource === 'AMA' ? (leadAnalytics?.leadsNeedingWork || 0) : (billcutAnalytics?.leadsNeedingWork || 0)})
-                      </div>
-                      <div className="w-full p-3 bg-green-600/20 border border-green-500/30 text-green-300 rounded-lg font-medium">
-                        High Priority Leads ({analyticsSource === 'AMA' ? (leadAnalytics?.interestedLeads || 0) : (billcutAnalytics?.interestedLeads || 0)})
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Lead Source Performance */}
-            <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl mb-6">
-              <CardHeader>
-                <CardTitle className="text-gray-100">Lead Source Performance</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-700">
-                    <thead>
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Source
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Total Leads
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Converted
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Conversion Rate
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                          Quality Score
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-700">
-                      {(analyticsSource === 'AMA' ? (leadAnalytics?.sourceDistribution || []) : (billcutAnalytics?.sourceDistribution || [])).slice(0, 5).map((item, index) => {
-                        const sourceLeads = analyticsSource === 'AMA' 
-                          ? (allLeads.filter(lead => (lead.source_database || 'Unknown') === item.source))
-                          : (allBillcutLeads.filter(lead => 'Bill Cut Campaign' === item.source));
-                        const convertedCount = sourceLeads.filter(lead => 
-                          analyticsSource === 'AMA' 
-                            ? (lead.status === 'Converted' || lead.convertedToClient === true)
-                            : (lead.category === 'Converted')
-                        ).length;
-                        const interestedCount = sourceLeads.filter(lead => 
-                          analyticsSource === 'AMA' 
-                            ? lead.status === 'Interested'
-                            : lead.category === 'Interested'
-                        ).length;
-                        const conversionRate = item.count > 0 ? Math.round((convertedCount / item.count) * 100) : 0;
-                        const qualityScore = item.count > 0 ? Math.round(((convertedCount + interestedCount) / item.count) * 100) : 0;
-                        
-                        return (
-                          <tr key={index} className="hover:bg-gray-750 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="text-sm font-medium text-gray-200">{item.source}</span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {item.count}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {convertedCount}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                conversionRate >= 20 ? 'bg-green-900 text-green-200' :
-                                conversionRate >= 10 ? 'bg-yellow-900 text-yellow-200' :
-                                'bg-red-900 text-red-200'
-                              }`}>
-                                {conversionRate}%
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                qualityScore >= 50 ? 'bg-green-900 text-green-200' :
-                                qualityScore >= 30 ? 'bg-yellow-900 text-yellow-200' :
-                                'bg-red-900 text-red-200'
-                              }`}>
-                                {qualityScore}%
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
 
         {/* Tasks Section */}
         <div className="mb-8">
@@ -1782,7 +1368,7 @@ export default function SalesDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl hover:shadow-emerald-500/10 transition-all duration-300">
             <CardHeader className="pb-2">
-              <CardTitle className="text-gray-100">Lead Conversion Trend ({currentMonth} {currentYear})</CardTitle>
+              <CardTitle className="text-gray-100">Lead Conversion Trend</CardTitle>
             </CardHeader>
             <CardContent className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -1816,30 +1402,31 @@ export default function SalesDashboard() {
             </CardContent>
           </Card>
 
-          {/* Monthly Trend Chart */}
-          {leadAnalytics && (
+          {/* Target vs Collected Amount Chart */}
+          {targetData && (
             <Card className="border-0 bg-gradient-to-br from-gray-800 to-gray-900 shadow-purple-500/10 transition-all duration-300">
               <CardHeader className="pb-2">
-                <CardTitle className="text-gray-100">Monthly Lead Trend</CardTitle>
-                </CardHeader>
-                <CardContent className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={leadAnalytics.monthlyTrend}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
-                      <XAxis dataKey="month" stroke={chartColors.text} />
-                      <YAxis stroke={chartColors.text} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#e5e5e5' }}
-                        itemStyle={{ color: '#e5e5e5' }}
-                      />
-                      <Legend wrapperStyle={{ color: chartColors.text }} />
-                      <Bar dataKey="total" fill={chartColors.primary} name="Total Leads" />
-                      <Bar dataKey="converted" fill={chartColors.secondary} name="Converted" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            )}
+                <CardTitle className="text-gray-100">Target vs Collected Amount</CardTitle>
+              </CardHeader>
+              <CardContent className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={targetTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} />
+                    <XAxis dataKey="name" stroke={chartColors.text} />
+                    <YAxis stroke={chartColors.text} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#e5e5e5' }}
+                      itemStyle={{ color: '#e5e5e5' }}
+                      formatter={(value: number) => `₹${value.toLocaleString()}`}
+                    />
+                    <Legend wrapperStyle={{ color: chartColors.text }} />
+                    <Bar dataKey="target" fill={chartColors.primary} name="Target Amount" />
+                    <Bar dataKey="collected" fill={chartColors.secondary} name="Collected Amount" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </div>
         
         <div className="mt-6 text-center text-xs text-gray-600">
