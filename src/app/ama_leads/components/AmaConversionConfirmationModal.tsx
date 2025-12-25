@@ -2,10 +2,12 @@
 
 import type React from "react"
 
+import { useState } from "react"
+
 interface AmaConversionConfirmationModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: (testEventCode?: string) => void
   leadId: string
   leadName: string
   isLoading?: boolean
@@ -19,12 +21,13 @@ const AmaConversionConfirmationModal: React.FC<AmaConversionConfirmationModalPro
   leadName,
   isLoading = false,
 }) => {
+  const [testEventCode, setTestEventCode] = useState("TEST76912")
 
   if (!isOpen) return null
 
   const handleConfirm = () => {
     if (isLoading) return
-    onConfirm()
+    onConfirm(testEventCode)
   }
 
   const handleClose = () => {
@@ -63,7 +66,26 @@ const AmaConversionConfirmationModal: React.FC<AmaConversionConfirmationModalPro
           <p className="text-[#5A4C33] font-medium">
             Lead: <span className="text-[#D2A02A]">{leadName}</span>
           </p>
-          <div className="mt-3 p-3 bg-[#F8F5EC] rounded-lg border border-[#5A4C33]/10">
+          
+          <div className="mt-4">
+            <label htmlFor="testEventCode" className="block text-sm font-medium text-[#5A4C33]/70 mb-1">
+              Meta Test Event Code (Optional)
+            </label>
+            <input
+              id="testEventCode"
+              type="text"
+              value={testEventCode}
+              onChange={(e) => setTestEventCode(e.target.value)}
+              placeholder="e.g. TEST12345"
+              className="w-full px-3 py-2 bg-[#F8F5EC] border border-[#5A4C33]/20 rounded-lg text-[#5A4C33] focus:outline-none focus:ring-2 focus:ring-[#D2A02A]/50 transition-all duration-200"
+              disabled={isLoading}
+            />
+            <p className="text-[10px] text-[#5A4C33]/50 mt-1">
+              Required only for testing conversion events in Meta Events Manager.
+            </p>
+          </div>
+
+          <div className="mt-4 p-3 bg-[#F8F5EC] rounded-lg border border-[#5A4C33]/10">
             <p className="text-sm text-[#5A4C33]/70">
               <strong>Note:</strong> This action will:
             </p>

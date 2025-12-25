@@ -434,7 +434,7 @@ const AmaLeadsPage = () => {
           payload = { salesNotes: data.salesNotes }
       } else if ('status' in data) {
           action = "update_status"
-          payload = { status: data.status, language: data.language }
+          payload = { status: data.status, language: data.language, testEventCode: data.testEventCode }
       } else if ('assignedTo' in data) {
           action = "assign"
           payload = { assignedTo: data.assignedTo, assignedToId: data.assignedToId }
@@ -764,8 +764,8 @@ const AmaLeadsPage = () => {
               onClose={() => setShowConversionModal(false)}
               leadId={conversionLeadId}
               leadName={conversionLeadName}
-              onConfirm={async () => {
-                  await updateLead(conversionLeadId, { status: "Converted" })
+              onConfirm={async (testEventCode) => {
+                  await updateLead(conversionLeadId, { status: "Converted", testEventCode })
                   setShowConversionModal(false)
               }}
           />

@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
 
             // Meta CAPI Trigger Logic
             if (status === 'Converted' || status === 'Qualified') {
+                const { testEventCode } = payload
                 // We need to fetch lead data to check source and get contact info
                 // This is done outside the batch update loop for efficiency
                 const triggerCapi = async () => {
@@ -112,7 +113,8 @@ export async function POST(request: NextRequest) {
                                             phone: phone,
                                             eventName: 'QualifiedLead',
                                             status: status,
-                                            leadId: snap.id
+                                            leadId: snap.id,
+                                            testEventCode: testEventCode
                                         })
                                     }).then(res => {
                                         if (!res.ok) console.error(`[CAPI ERROR] Failed for ${snap.id}: ${res.statusText}`)
