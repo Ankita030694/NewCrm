@@ -81,13 +81,16 @@ const serializeData = (data: any): any => {
 
 export async function getAdminDashboardData(month: string, year: number): Promise<DashboardData> {
     try {
+        console.time('getAdminDashboardData:Total');
         if (!db) {
             throw new Error('Firebase Admin SDK not initialized');
         }
 
         // 1. Fetch Users (Optimized: Only active sales and advocates)
+        console.time('getAdminDashboardData:Users');
         const usersRef = db.collection('users');
         const usersSnap = await usersRef.where('status', '==', 'active').get();
+        console.timeEnd('getAdminDashboardData:Users');
 
         let sales = 0;
         let advocates = 0;
@@ -141,6 +144,7 @@ export async function getAdminDashboardData(month: string, year: number): Promis
 
             const paymentsRef = db.collection('payments');
 
+            console.time('getAdminDashboardData:Payments');
             // Run parallel queries to handle both Timestamp/Date objects and ISO strings
             const [timestampSnap, stringSnap] = await Promise.all([
                 // Query for Timestamp/Date fields
@@ -156,6 +160,7 @@ export async function getAdminDashboardData(month: string, year: number): Promis
                     .where('timestamp', '<=', endOfMonthStr)
                     .get()
             ]);
+            console.timeEnd('getAdminDashboardData:Payments');
 
             const processPaymentDoc = (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
                 const payment = doc.data();
@@ -190,6 +195,7 @@ export async function getAdminDashboardData(month: string, year: number): Promis
         }
 
         // Fetch Targets
+        console.time('getAdminDashboardData:Targets');
         const monthlyDocRef = db.collection('targets').doc(monthDocId);
         const monthlyDocSnap = await monthlyDocRef.get();
 
@@ -264,7 +270,9 @@ export async function getAdminDashboardData(month: string, year: number): Promis
                 });
             });
         }
+        console.timeEnd('getAdminDashboardData:Targets');
 
+        console.timeEnd('getAdminDashboardData:Total');
         return {
             salesUsers: serializeData(salesUsersList),
             targetData: serializeData(targetsData),
