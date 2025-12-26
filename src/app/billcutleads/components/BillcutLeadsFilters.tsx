@@ -517,18 +517,18 @@ const BillcutLeadsFiltersOptimized = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           {/* Status Filter */}
           <div className="space-y-1">
-            <label className="block text-xs text-gray-400">Status</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Status</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-blue-500 focus:border-blue-400 rounded-lg transition-all duration-200"
+              className="block w-full pl-3 pr-10 py-2.5 text-sm border border-gray-700 bg-[#0b1437] text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 rounded-xl transition-all duration-200 shadow-sm hover:border-gray-600"
             >
-              <option value="all">All Status</option>
-              <option value="No Status">No Status</option>
+              <option value="all" className="bg-[#0b1437]">All Status</option>
+              <option value="No Status" className="bg-[#0b1437]">No Status</option>
               {statusOptions
                 .filter((status) => status !== "No Status")
                 .map((status) => (
-                  <option key={status} value={status}>
+                  <option key={status} value={status} className="bg-[#0b1437]">
                     {status}
                   </option>
                 ))}
@@ -537,29 +537,29 @@ const BillcutLeadsFiltersOptimized = ({
 
           {/* Salesperson Filter */}
           <div className="space-y-1">
-            <label className="block text-xs text-gray-400">Salesperson</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Salesperson</label>
             <div className="relative">
               <select
                 value={salesPersonFilter}
                 onChange={(e) => setSalesPersonFilter && setSalesPersonFilter(e.target.value)}
-                className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-blue-500 focus:border-blue-400 rounded-lg transition-all duration-200"
+                className="block w-full pl-3 pr-10 py-2.5 text-sm border border-gray-700 bg-[#0b1437] text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 rounded-xl transition-all duration-200 shadow-sm hover:border-gray-600 appearance-none"
               >
-                <option value="all">All Salesperson</option>
-                <option value="-">Unassigned</option>
+                <option value="all" className="bg-[#0b1437]">All Salesperson</option>
+                <option value="-" className="bg-[#0b1437]">Unassigned</option>
                 {isLoading ? (
-                  <option value="" disabled>
+                  <option value="" disabled className="bg-[#0b1437]">
                     Loading...
                   </option>
                 ) : (
                   salesTeamMembers.map((user) => (
-                    <option key={user.id} value={user.name}>
+                    <option key={user.id} value={user.name} className="bg-[#0b1437]">
                       {user.name}
                     </option>
                   ))
                 )}
               </select>
-              <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                <FaUserTie className="h-4 w-4 text-gray-400" />
+              <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-gray-400">
+                <FaUserTie className="h-4 w-4" />
               </div>
             </div>
           </div>
@@ -589,15 +589,15 @@ const BillcutLeadsFiltersOptimized = ({
 
           {/* Debt Range Filter */}
           <div className="space-y-1">
-            <label className="block text-xs text-gray-400">Debt Range</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Debt Range</label>
             <select
               value={debtRangeSort}
               onChange={(e) => setDebtRangeSort(e.target.value as "none" | "low-to-high" | "high-to-low")}
-              className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-blue-500 focus:border-blue-400 rounded-lg transition-all duration-200"
+              className="block w-full pl-3 pr-10 py-2.5 text-sm border border-gray-700 bg-[#0b1437] text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 rounded-xl transition-all duration-200 shadow-sm hover:border-gray-600"
             >
-              <option value="none">No Sort</option>
-              <option value="low-to-high">Low to High</option>
-              <option value="high-to-low">High to Low</option>
+              <option value="none" className="bg-[#0b1437]">No Sort</option>
+              <option value="low-to-high" className="bg-[#0b1437]">Low to High</option>
+              <option value="high-to-low" className="bg-[#0b1437]">High to Low</option>
             </select>
           </div>
 
@@ -643,49 +643,49 @@ const BillcutLeadsFiltersOptimized = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Converted Date Range */}
               <div className="space-y-1">
-                <label className="block text-xs text-emerald-400">Converted From</label>
+                <label className="block text-xs font-medium text-emerald-400 mb-1">Converted From</label>
                 <input
                   type="date"
                   value={convertedFromDate}
                   onChange={(e) => setConvertedFromDate(e.target.value)}
                   max={convertedToDate || getCurrentDate}
-                  className="block w-full pl-3 pr-3 py-2 text-sm border border-emerald-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-emerald-500 focus:border-emerald-400 rounded-lg transition-all duration-200"
+                  className="block w-full pl-3 pr-3 py-2.5 text-sm border border-emerald-600/50 bg-[#0b1437] text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 rounded-xl transition-all duration-200 shadow-sm"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs text-emerald-400">Converted To</label>
+                <label className="block text-xs font-medium text-emerald-400 mb-1">Converted To</label>
                 <input
                   type="date"
                   value={convertedToDate}
                   onChange={(e) => setConvertedToDate(e.target.value)}
                   min={convertedFromDate}
                   max={getCurrentDate}
-                  className="block w-full pl-3 pr-3 py-2 text-sm border border-emerald-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-emerald-500 focus:border-emerald-400 rounded-lg transition-all duration-200"
+                  className="block w-full pl-3 pr-3 py-2.5 text-sm border border-emerald-600/50 bg-[#0b1437] text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 rounded-xl transition-all duration-200 shadow-sm"
                 />
               </div>
 
               {/* Last Modified Date Range */}
               <div className="space-y-1">
-                <label className="block text-xs text-blue-400">Last Modified From</label>
+                <label className="block text-xs font-medium text-blue-400 mb-1">Last Modified From</label>
                 <input
                   type="date"
                   value={lastModifiedFromDate}
                   onChange={(e) => setLastModifiedFromDate(e.target.value)}
                   max={lastModifiedToDate || getCurrentDate}
-                  className="block w-full pl-3 pr-3 py-2 text-sm border border-blue-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-blue-500 focus:border-blue-400 rounded-lg transition-all duration-200"
+                  className="block w-full pl-3 pr-3 py-2.5 text-sm border border-blue-600/50 bg-[#0b1437] text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 rounded-xl transition-all duration-200 shadow-sm"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs text-blue-400">Last Modified To</label>
+                <label className="block text-xs font-medium text-blue-400 mb-1">Last Modified To</label>
                 <input
                   type="date"
                   value={lastModifiedToDate}
                   onChange={(e) => setLastModifiedToDate(e.target.value)}
                   min={lastModifiedFromDate}
                   max={getCurrentDate}
-                  className="block w-full pl-3 pr-3 py-2 text-sm border border-blue-600/50 bg-gray-700/50 text-gray-200 focus:outline-none focus:ring-blue-500 focus:border-blue-400 rounded-lg transition-all duration-200"
+                  className="block w-full pl-3 pr-3 py-2.5 text-sm border border-blue-600/50 bg-[#0b1437] text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 rounded-xl transition-all duration-200 shadow-sm"
                 />
               </div>
             </div>
