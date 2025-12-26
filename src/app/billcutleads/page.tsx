@@ -533,8 +533,8 @@ const BillCutLeadsPage = () => {
         }
       }
 
-      // Salesperson filter
-      if (salesPersonFilter !== "all") {
+      // Salesperson filter - Only apply if My Leads is NOT active
+      if (!showMyLeads && salesPersonFilter !== "all") {
         if (salesPersonFilter === "-") {
           constraints.push(where("assigned_to", "in", ["", "-"]))
         } else {
@@ -542,7 +542,7 @@ const BillCutLeadsPage = () => {
         }
       }
 
-      // My Leads filter
+      // My Leads filter - Takes precedence over Salesperson filter
       if (showMyLeads && typeof window !== "undefined") {
         const currentUserName = localStorage.getItem("userName")
         if (currentUserName) {
@@ -643,8 +643,8 @@ const BillCutLeadsPage = () => {
       }
     }
 
-    // Salesperson filter
-    if (salesPersonFilter !== "all") {
+    // Salesperson filter - Only apply if My Leads is NOT active
+    if (!showMyLeads && salesPersonFilter !== "all") {
       if (salesPersonFilter === "-") {
         constraints.push(where("assigned_to", "in", ["", "-"]))
       } else {
@@ -652,7 +652,7 @@ const BillCutLeadsPage = () => {
       }
     }
 
-    // My Leads filter
+    // My Leads filter - Takes precedence over Salesperson filter
     if (showMyLeads && typeof window !== "undefined") {
       const currentUserName = localStorage.getItem("userName")
       if (currentUserName) {
@@ -676,8 +676,21 @@ const BillCutLeadsPage = () => {
       const totalCount = countSnapshot.data().count
       console.log(`[DEBUG] fetchTotalCount (Optimized): Read ~${Math.ceil(totalCount / 1000)} documents worth of reads (Total: ${totalCount})`)
       setTotalFilteredCount(totalCount)
-    } catch (error) {
-      console.error("Error fetching total count:", error) 
+    } catch (error: any) {
+      console.error("Error fetching total count:", error)
+      
+      // Check for missing index error
+      if (error.code === 'failed-precondition' && error.message.includes('index')) {
+        toast.error(
+          <div>
+            <p>Missing Index Error</p>
+            <p className="text-xs mt-1">This filter combination requires a new index.</p>
+            <p className="text-xs mt-1">Please check the console for the index creation link.</p>
+          </div>,
+          { autoClose: 10000 }
+        )
+      }
+      
       setTotalFilteredCount(0)
     }
   }, [buildCountQuery])
@@ -882,9 +895,22 @@ const BillCutLeadsPage = () => {
         } else {
           setEditingLeads((prev) => ({ ...prev, ...initialEditingState }))
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching billcut leads: ", error)
-        toast.error("Failed to load billcut leads")
+        
+        // Check for missing index error
+        if (error.code === 'failed-precondition' && error.message.includes('index')) {
+          toast.error(
+            <div>
+              <p>Missing Index Error</p>
+              <p className="text-xs mt-1">This filter combination requires a new index.</p>
+              <p className="text-xs mt-1">Please check the console for the index creation link.</p>
+            </div>,
+            { autoClose: 10000 }
+          )
+        } else {
+          toast.error("Failed to load billcut leads")
+        }
       } finally {
         setIsLoading(false)
         setIsLoadingMore(false)
