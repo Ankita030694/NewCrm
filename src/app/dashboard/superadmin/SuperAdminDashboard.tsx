@@ -310,6 +310,47 @@ const SuperAdminDashboard = React.memo(() => {
     window.location.reload();
   }, [clearAllCache]);
 
+  // Combined Revenue History calculation
+  const combinedHistoryData = useMemo(() => {
+    const combinedMap = new Map();
+
+    // CRM History
+    historyData.forEach(item => {
+      combinedMap.set(item.fullLabel, {
+        fullLabel: item.fullLabel,
+        crmCollected: item.collected,
+        opsRevenue: 0,
+        totalRevenue: item.collected,
+        month: item.month,
+        year: item.year
+      });
+    });
+
+    // Ops History
+    opsHistoryData.forEach(item => {
+      if (combinedMap.has(item.fullLabel)) {
+        const existing = combinedMap.get(item.fullLabel);
+        existing.opsRevenue = item.collected;
+        existing.totalRevenue = existing.crmCollected + item.collected;
+      } else {
+        combinedMap.set(item.fullLabel, {
+          fullLabel: item.fullLabel,
+          crmCollected: 0,
+          opsRevenue: item.collected,
+          totalRevenue: item.collected,
+          month: item.month,
+          year: item.year
+        });
+      }
+    });
+
+    return Array.from(combinedMap.values()).sort((a: any, b: any) => {
+      if (a.year !== b.year) return a.year - b.year;
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return months.indexOf(a.month) - months.indexOf(b.month);
+    });
+  }, [historyData, opsHistoryData]);
+
   // Memoized analytics stats calculation
   const analyticsStats = useMemo((): AnalyticsStats => {
     if (selectedSalesperson && individualSalesData) {
@@ -437,7 +478,7 @@ const SuperAdminDashboard = React.memo(() => {
                 />
 
                 {/* History Charts Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
                   {/* Collection Trends Chart */}
                   <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
                     <CardHeader className="pb-2">
@@ -523,6 +564,49 @@ const SuperAdminDashboard = React.memo(() => {
                               name="Ops Revenue" 
                               stroke="#f59e0b" 
                               strokeWidth={2} 
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Total Revenue Trends Chart */}
+                  <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-gray-900 dark:text-white text-base">Total Revenue Trends (All Time)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={combinedHistoryData}
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <XAxis 
+                              dataKey="fullLabel" 
+                              stroke="#9CA3AF" 
+                              tick={{ fill: '#9CA3AF' }} 
+                            />
+                            <YAxis 
+                              stroke="#9CA3AF" 
+                              tick={{ fill: '#9CA3AF' }}
+                              tickFormatter={formatIndianCurrency}
+                            />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
+                              itemStyle={{ color: '#F3F4F6' }}
+                              formatter={(value: number) => [value.toLocaleString('en-IN', { maximumFractionDigits: 0, style: 'currency', currency: 'INR' }), '']}
+                            />
+                            <Legend />
+                            <Line 
+                              type="monotone" 
+                              dataKey="totalRevenue" 
+                              name="Total Revenue" 
+                              stroke="#ec4899" 
+                              strokeWidth={3} 
+                              activeDot={{ r: 8 }} 
                             />
                           </LineChart>
                         </ResponsiveContainer>
