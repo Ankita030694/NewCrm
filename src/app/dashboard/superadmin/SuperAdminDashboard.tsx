@@ -482,7 +482,7 @@ const SuperAdminDashboard = React.memo(() => {
                   {/* Collection Trends Chart */}
                   <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-gray-900 dark:text-white text-base">Collection Trends (All Time)</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white text-base">Sales Revenue</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="h-[300px] w-full">
@@ -532,7 +532,7 @@ const SuperAdminDashboard = React.memo(() => {
                   {/* Ops Revenue Trends Chart */}
                   <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-gray-900 dark:text-white text-base">Ops Revenue Trends (All Time)</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white text-base">Ops Revenue</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="h-[300px] w-full">
@@ -574,7 +574,7 @@ const SuperAdminDashboard = React.memo(() => {
                   {/* Total Revenue Trends Chart */}
                   <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-gray-900 dark:text-white text-base">Total Revenue Trends (All Time)</CardTitle>
+                      <CardTitle className="text-gray-900 dark:text-white text-base">Total Revenue</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="h-[300px] w-full">
