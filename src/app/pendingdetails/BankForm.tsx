@@ -37,16 +37,6 @@ const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label htmlFor={`bank-${bank.id}-name`} className="block text-sm font-medium text-gray-400 mb-1">Bank Name</label>
-          <input
-            id={`bank-${bank.id}-name`}
-            type="text"
-            value={bank.bankName}
-            onChange={(e) => onUpdate(bank.id, 'bankName', e.target.value)}
-            className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          />
-        </div>
-        <div>
           <label htmlFor={`bank-${bank.id}-loanType`} className="block text-sm font-medium text-gray-400 mb-1">Loan Type</label>
           <select
             id={`bank-${bank.id}-loanType`}
@@ -63,6 +53,16 @@ const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
             <option value="Gold Loan">Gold Loan</option>
             <option value="Other">Other</option>
           </select>
+        </div>
+        <div>
+          <label htmlFor={`bank-${bank.id}-name`} className="block text-sm font-medium text-gray-400 mb-1">Bank Name</label>
+          <input
+            id={`bank-${bank.id}-name`}
+            type="text"
+            value={bank.bankName}
+            onChange={(e) => onUpdate(bank.id, 'bankName', e.target.value)}
+            className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
         </div>
         <div>
           <label 

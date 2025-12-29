@@ -1188,22 +1188,6 @@ const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
       </button>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Loan Type - Moved to be first */}
-        <div>
-          <label htmlFor={`bank-${bank.id}-loanType`} className="block text-sm font-medium text-gray-400 mb-1">Loan Type</label>
-          <select
-            id={`bank-${bank.id}-loanType`}
-            value={bank.loanType}
-            onChange={(e) => onUpdate(bank.id, 'loanType', e.target.value)}
-            className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">Select type</option>
-            <option value="Personal Loan">Personal Loan</option>
-            <option value="Credit Card">Credit Card</option>
-            <option value="Business Loan">Business Loan</option>
-          </select>
-        </div>
-
         {/* Bank Name - Custom Dropdown with Search */}
         <div ref={dropdownRef} className="relative">
           <label htmlFor={`bank-${bank.id}-name`} className="block text-sm font-medium text-gray-400 mb-1">Bank Name</label>
@@ -1263,6 +1247,22 @@ const BankForm = ({ bank, onUpdate, onRemove }: BankFormProps) => {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Loan Type - Moved to be second */}
+        <div>
+          <label htmlFor={`bank-${bank.id}-loanType`} className="block text-sm font-medium text-gray-400 mb-1">Loan Type</label>
+          <select
+            id={`bank-${bank.id}-loanType`}
+            value={bank.loanType}
+            onChange={(e) => onUpdate(bank.id, 'loanType', e.target.value)}
+            className="mt-1 block w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Select type</option>
+            <option value="Personal Loan">Personal Loan</option>
+            <option value="Credit Card">Credit Card</option>
+            <option value="Business Loan">Business Loan</option>
+          </select>
         </div>
 
         <div>
