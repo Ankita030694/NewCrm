@@ -45,10 +45,21 @@ export async function GET(request: Request) {
                     "salesNotes"
                 ) as FirebaseFirestore.Query
 
+            // Add separate conversion query
+            let conversionQuery = db.collection("ama_leads")
+                .where("status", "==", "Converted")
+                .select(
+                    "status",
+                    "assigned_to",
+                    "assignedTo",
+                    "convertedAt"
+                ) as FirebaseFirestore.Query
+
             if (startDateParam) {
                 const startDate = new Date(startDateParam)
                 startDate.setHours(0, 0, 0, 0)
                 query = query.where("date", ">=", startDate.getTime())
+                conversionQuery = conversionQuery.where("convertedAt", ">=", startDate)
             }
 
             if (endDateParam) {
@@ -59,26 +70,37 @@ export async function GET(request: Request) {
                     endDate.setHours(23, 59, 59, 999)
                 }
                 query = query.where("date", "<=", endDate.getTime())
+                conversionQuery = conversionQuery.where("convertedAt", "<=", endDate)
             }
 
-            const querySnapshot = await query.get()
-            const totalLeads = querySnapshot.size
+            // Fetch both queries
+            const [querySnapshot, conversionSnapshot] = await Promise.all([
+                query.get(),
+                conversionQuery.get()
+            ])
 
-            if (totalLeads === 0) {
-                return NextResponse.json({ analytics: null, estimatedReads: 1 })
+            const totalLeads = querySnapshot.size
+            const convertedLeadsCount = conversionSnapshot.size
+
+            if (totalLeads === 0 && convertedLeadsCount === 0) {
+                return NextResponse.json({ analytics: null, estimatedReads: 2 })
             }
 
             const leads = querySnapshot.docs.map((doc: any) => doc.data())
+            const convertedLeadsList = conversionSnapshot.docs.map((doc: any) => doc.data())
 
             // 1. Category Distribution
             const categoryDistribution: Record<string, number> = {}
-            let convertedLeadsCount = 0
 
+            // Map statuses from created leads
             leads.forEach((lead: any) => {
                 const status = lead.status === "–" ? "No Status" : (lead.status || "No Status")
                 categoryDistribution[status] = (categoryDistribution[status] || 0) + 1
-                if (status === "Converted") convertedLeadsCount++
             })
+
+            // Overlay correct Converted count based on conversion date
+            // Note: This replaces the "Converted" count derived from creation date logic
+            categoryDistribution["Converted"] = convertedLeadsCount
 
             const categoryData = Object.entries(categoryDistribution).map(([name, value]) => ({
                 name,
@@ -103,6 +125,8 @@ export async function GET(request: Request) {
 
             // Aggregate salesperson data in memory
             const spStats: Record<string, any> = {}
+
+            // First pass: Process created leads for total leads and non-conversion statuses
             leads.forEach((lead: any) => {
                 const name = (lead.assigned_to || lead.assignedTo || "Unassigned").trim()
                 if (activeSalespersonNames.has(name)) {
@@ -119,8 +143,25 @@ export async function GET(request: Request) {
                     stats.totalLeads++
                     const status = lead.status === "–" ? "No Status" : (lead.status || "No Status")
                     if (status === "Interested") stats.interested++
-                    if (status === "Converted") stats.converted++
+                    // We don't count converted here for the `converted` metric, but we keep it in statusBreakdown for breakdown of leads CREATED in this period
                     stats.statusBreakdown[status] = (stats.statusBreakdown[status] || 0) + 1
+                }
+            })
+
+            // Second pass: Process converted leads for the converted metric
+            convertedLeadsList.forEach((lead: any) => {
+                const name = (lead.assigned_to || lead.assignedTo || "Unassigned").trim()
+                if (activeSalespersonNames.has(name)) {
+                    if (!spStats[name]) {
+                        spStats[name] = {
+                            name,
+                            totalLeads: 0, // This person might not have had new leads assigned, but had conversions
+                            interested: 0,
+                            converted: 0,
+                            statusBreakdown: {}
+                        }
+                    }
+                    spStats[name].converted++
                 }
             })
 
@@ -178,7 +219,7 @@ export async function GET(request: Request) {
                 contactAnalysis,
             }
 
-            const estimatedReads = totalLeads + activeSalespersonsSnapshot.size
+            const estimatedReads = totalLeads + convertedLeadsCount + activeSalespersonsSnapshot.size
             console.log(`[Sales Analytics] Phase 3: Fetched ${totalLeads} docs (with select). Total Reads: ${estimatedReads}`)
 
             const responseData = { analytics: analyticsResult, estimatedReads }
