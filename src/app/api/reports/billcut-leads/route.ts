@@ -39,11 +39,13 @@ export async function GET(request: Request) {
             }
 
             let baseQuery = db.collection("billcutLeads") as FirebaseFirestore.Query
+            let conversionQuery = db.collection("billcutLeads").where("category", "==", "Converted") as FirebaseFirestore.Query
 
             if (startDateParam) {
                 const startDate = new Date(startDateParam)
                 startDate.setHours(0, 0, 0, 0)
                 baseQuery = baseQuery.where("date", ">=", startDate.getTime())
+                conversionQuery = conversionQuery.where("convertedAt", ">=", startDate)
             }
 
             if (endDateParam) {
@@ -54,19 +56,24 @@ export async function GET(request: Request) {
                     endDate.setHours(23, 59, 59, 999)
                 }
                 baseQuery = baseQuery.where("date", "<=", endDate.getTime())
+                conversionQuery = conversionQuery.where("convertedAt", "<=", endDate)
             }
 
             // OPTIMIZATION: Use count() for simple metrics
             const totalLeadsCountPromise = baseQuery.count().get()
-            const convertedLeadsCountPromise = baseQuery.where("category", "==", "Converted").count().get()
+            // Modified to use conversionQuery for accurate count based on convertedAt
+            const convertedLeadsCountPromise = conversionQuery.count().get()
 
             // Fetch all docs for detailed analytics (still needed for trends/breakdowns)
             const querySnapshotPromise = baseQuery.get()
+            // Fetch converted docs for detailed conversion analytics
+            const conversionSnapshotPromise = conversionQuery.get()
 
-            const [totalLeadsSnap, convertedLeadsSnap, querySnapshot] = await Promise.all([
+            const [totalLeadsSnap, convertedLeadsSnap, querySnapshot, conversionSnapshot] = await Promise.all([
                 totalLeadsCountPromise,
                 convertedLeadsCountPromise,
-                querySnapshotPromise
+                querySnapshotPromise,
+                conversionSnapshotPromise
             ])
 
             const totalLeads = totalLeadsSnap.data().count
@@ -79,8 +86,9 @@ export async function GET(request: Request) {
             const totalEstimatedReads = countReads + docReads
 
             console.log(`[DEBUG] Analytics: Fetched ${querySnapshot.size} leads (Total Count: ${totalLeads})`);
-            console.log(`[DEBUG] Analytics: Estimated Firestore Reads: ${totalEstimatedReads} (Aggregation: ${countReads}, Documents: ${docReads})`);
+            console.log(`[DEBUG] Analytics: Fetched ${conversionSnapshot.size} converted leads (Converted Count: ${convertedLeadsCount})`);
 
+            // Map created leads
             const leads = querySnapshot.docs.map(
                 (doc: any) =>
                     ({
@@ -89,12 +97,21 @@ export async function GET(request: Request) {
                     }) as any,
             )
 
-            if (!leads.length) {
+            // Map converted leads
+            const convertedLeadsList = conversionSnapshot.docs.map(
+                (doc: any) =>
+                    ({
+                        id: doc.id,
+                        ...doc.data(),
+                    }) as any,
+            )
+
+            if (!leads.length && !convertedLeadsList.length) {
                 return NextResponse.json({ analytics: null }, { headers: { 'Cache-Control': 'no-store, max-age=0' } })
             }
 
             // Basic metrics
-            const uniqueAssignees = new Set(leads.map((lead) => lead.assigned_to)).size
+            const uniqueAssignees = new Set([...leads, ...convertedLeadsList].map((lead) => lead.assigned_to)).size
 
             // Calculate average debt range
             const debtRanges: number[] = leads
@@ -120,8 +137,9 @@ export async function GET(request: Request) {
             const shortLoanRate = (shortLoanLeads / totalLeads) * 100
 
             // Conversion Time Analysis
-            const convertedLeadsWithTime = leads.filter(
-                (lead) => lead.category === "Converted" && lead.convertedAt && (lead.date || lead.synced_date),
+            // Conversion Time Analysis - Use convertedLeadsList
+            const convertedLeadsWithTime = convertedLeadsList.filter(
+                (lead) => lead.convertedAt && (lead.date || lead.synced_date),
             )
 
             const conversionTimeData = convertedLeadsWithTime.map((lead) => {
@@ -177,6 +195,7 @@ export async function GET(request: Request) {
             })
 
             // Lead Entry Timeline Analysis
+            // First, populate based on creation date
             const leadEntryTimeline = leads.reduce(
                 (acc, lead) => {
                     const creationDate = new Date(
@@ -195,9 +214,9 @@ export async function GET(request: Request) {
                     }
 
                     acc[dateKey].totalLeads++
-                    if (lead.category === "Converted") {
-                        acc[dateKey].convertedLeads++
-                    } else if (lead.category === "Interested") {
+                    // We only count Interested/Not Interested for leads created in this period
+                    // Converted is handled separately below to align with conversion date
+                    if (lead.category === "Interested") {
                         acc[dateKey].interestedLeads++
                     } else if (lead.category === "Not Interested") {
                         acc[dateKey].notInterestedLeads++
@@ -207,6 +226,37 @@ export async function GET(request: Request) {
                 },
                 {} as Record<string, any>,
             )
+
+            // Second, overlay conversion data based on conversion date
+            convertedLeadsList.forEach(lead => {
+                // Determine conversion date string
+                let conversionTime;
+                if (!lead.convertedAt) return;
+
+                if (lead.convertedAt?.toDate) {
+                    conversionTime = lead.convertedAt.toDate();
+                } else if (lead.convertedAt?.toMillis) {
+                    conversionTime = new Date(lead.convertedAt.toMillis());
+                } else {
+                    conversionTime = new Date(lead.convertedAt);
+                }
+
+                if (isNaN(conversionTime.getTime())) return;
+
+                const dateKey = conversionTime.toISOString().split("T")[0];
+
+                if (!leadEntryTimeline[dateKey]) {
+                    leadEntryTimeline[dateKey] = {
+                        date: dateKey,
+                        totalLeads: 0, // No lead created this day in the filtered range
+                        convertedLeads: 0,
+                        interestedLeads: 0,
+                        notInterestedLeads: 0,
+                    }
+                }
+
+                leadEntryTimeline[dateKey].convertedLeads++;
+            });
 
             const leadEntryTimelineData = Object.values(leadEntryTimeline)
                 .sort((a: any, b: any) => a.date.localeCompare(b.date))
@@ -414,13 +464,20 @@ export async function GET(request: Request) {
                     const totalCount = count as number
                     const assigneeLeads = leads.filter((lead) => lead.assigned_to === name)
                     const interestedCount = assigneeLeads.filter((lead) => lead.category === "Interested").length
-                    const convertedCount = assigneeLeads.filter((lead) => lead.category === "Converted" && lead.convertedAt).length
+                    // Calculate converted count from convertedLeadsList (leads converted in this period)
+                    const convertedCount = convertedLeadsList.filter((lead) => lead.assigned_to === name).length
+
                     const conversionRate = totalCount > 0 ? ((interestedCount + convertedCount) / totalCount) * 100 : 0
 
                     const statusBreakdown = categoryData.reduce((acc, category) => {
                         acc[category.name] = assigneeLeads.filter((lead) => lead.category === category.name).length
                         return acc
                     }, {} as Record<string, number>)
+
+                    // Allow statusBreakdown to show "Converted" even if not in created leads, if we want?
+                    // But statusBreakdown is based on categoryData which is based on leads created.
+                    // Let's leave statusBreakdown as is (breakdown of created leads), 
+                    // but the metric `converted` is now based on convertedAt.
 
                     return {
                         name,
