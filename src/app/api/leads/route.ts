@@ -362,8 +362,9 @@ export async function GET(request: NextRequest) {
                 'Surrogate-Control': 'no-store'
             }
         })
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error fetching leads:", error)
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+        const errorMessage = error.message || "Internal Server Error"
+        return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
 }

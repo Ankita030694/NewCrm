@@ -465,7 +465,7 @@ const AmaLeadsFilters = ({
                 if (searchQuery) {
                   // When searching, show search results count
                   displayCount = searchResultsCount
-                } else if (databaseFilteredCount > 0 && hasActiveFilters) {
+                } else if (hasActiveFilters) {
                   // When filters are active, show database filtered count
                   displayCount = databaseFilteredCount
                   // Show "loaded X of Y" if we haven't loaded all yet

@@ -78,7 +78,10 @@ export const useLeads = () => {
                     'Cache-Control': 'no-cache'
                 }
             })
-            if (!response.ok) throw new Error("Failed to fetch leads")
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}))
+                throw new Error(errorData.error || "Failed to fetch leads")
+            }
 
             const data = await response.json()
 
@@ -91,8 +94,19 @@ export const useLeads = () => {
             console.log(`[DEBUG] useLeads: Received ${data.leads.length} leads, Total available: ${data.meta.total}`)
         } catch (err) {
             console.error(err)
-            setError(err instanceof Error ? err.message : "An error occurred")
-            toast.error("Failed to load leads")
+            const errorMessage = err instanceof Error ? err.message : "An error occurred"
+            setError(errorMessage)
+
+            if (errorMessage.toLowerCase().includes("index")) {
+                toast.error("Database index missing. Check console for creation link.", { autoClose: 10000 })
+            } else {
+                toast.error("Failed to load leads: " + errorMessage)
+            }
+
+            if (!append) {
+                setLeads([])
+                setMeta({ total: 0, page: 1, limit: 50, totalPages: 0 })
+            }
         } finally {
             setIsLoading(false)
         }

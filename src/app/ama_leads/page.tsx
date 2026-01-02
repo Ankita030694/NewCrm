@@ -690,6 +690,7 @@ const AmaLeadsPage = () => {
               }}
               hasMoreLeads={meta.page < meta.totalPages}
               isLoadingMore={isLoading}
+              isLoading={isLoading}
               loadMoreLeads={async () => handleLoadMore()}
               // Bulk Actions
               selectedLeads={selectedLeads}

@@ -34,6 +34,7 @@ type LeadsTableProps = {
   onEditLanguageBarrier?: (lead: any) => void
   hasMoreLeads?: boolean
   isLoadingMore?: boolean
+  isLoading?: boolean
   loadMoreLeads?: () => Promise<void>
   // New props for selection and bulk assignment
   selectedLeads?: string[]
@@ -79,6 +80,7 @@ const AmaLeadsTable = (props: LeadsTableProps) => {
     onEditLanguageBarrier = () => {},
     hasMoreLeads = false,
     isLoadingMore = false,
+    isLoading = false,
     loadMoreLeads,
     // New selection and bulk assignment props
     selectedLeads = [],
@@ -615,7 +617,17 @@ const AmaLeadsTable = (props: LeadsTableProps) => {
   const assignmentOptions = getAssignmentOptions()
 
   return (
-    <div className="bg-[#ffffff] shadow-2xl rounded-xl overflow-visible border border-[#5A4C33]/10">
+    <div className="bg-[#ffffff] shadow-2xl rounded-xl overflow-visible border border-[#5A4C33]/10 relative">
+      {/* Loading Overlay */}
+      {isLoading && !isLoadingMore && (
+        <div className="absolute inset-0 bg-white/50 z-50 flex items-center justify-center rounded-xl backdrop-blur-[1px]">
+           <div className="flex flex-col items-center gap-2">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#D2A02A]"></div>
+              <span className="text-sm font-medium text-[#5A4C33]">Loading...</span>
+           </div>
+        </div>
+      )}
+      
       {/* Hidden Columns Control Panel */}
       {Object.values(columnVisibility).some((visible) => !visible) && (
         <div className="bg-[#F8F5EC] px-4 py-2 border-b border-[#5A4C33]/10">
