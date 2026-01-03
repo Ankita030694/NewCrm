@@ -600,6 +600,34 @@ const AmaLeadsPage = () => {
   }
   const Sidebar = SidebarComponent()
 
+  // Low-level UI state
+  const [isLoadAllLoading, setIsLoadAllLoading] = useState(false)
+
+  const handleLoadAllLeads = async () => {
+    setIsLoadAllLoading(true)
+    try {
+      await fetchLeads({
+        page: 1,
+        limit: 100000, // Load effectively all leads
+        search: searchQuery,
+        status: statusFilter,
+        source: sourceFilter,
+        salespersonId: salesPersonFilter,
+        tab: activeTab,
+        sort: sortConfig.key,
+        order: sortConfig.direction === "ascending" ? "asc" : "desc",
+        startDate: fromDate,
+        endDate: toDate,
+      })
+      toast.success("All leads loaded")
+    } catch (error) {
+      console.error("Failed to load all leads:", error)
+      toast.error("Failed to load all leads")
+    } finally {
+      setIsLoadAllLoading(false)
+    }
+  }
+
   return (
     <div className="flex h-screen bg-[#F8F5EC] overflow-hidden font-sans text-[#5A4C33]">
       <Sidebar />
@@ -612,8 +640,8 @@ const AmaLeadsPage = () => {
           currentUser={currentUser}
           isLoading={isLoading}
           exportToCSV={() => {}} // TODO: Implement server-side export
-          loadAllLeads={() => {}} // Deprecated
-          isLoadAllLoading={false}
+          loadAllLeads={handleLoadAllLeads}
+          isLoadAllLoading={isLoadAllLoading}
         />
 
         <div className="flex-1 flex flex-col min-h-0 p-4 gap-4">
@@ -776,11 +804,64 @@ const AmaLeadsPage = () => {
           <AmaBulkWhatsAppModal
               isOpen={showBulkWhatsAppModal}
               onClose={() => setShowBulkWhatsAppModal(false)}
-              selectedLeads={selectedLeads}
+              selectedLeads={leads.filter(l => selectedLeads.includes(l.id))}
               onSendBulkWhatsApp={async (template, ids, data) => {
-                  // TODO: Implement actual sending logic
-                  console.log("Sending WhatsApp", template, ids);
-                  toast.success("Bulk WhatsApp sending initiated");
+                  try {
+                      const sendWhatsappMessageFn = httpsCallable(functions, "sendWhatsappMessage")
+                      let successCount = 0
+                      let failCount = 0
+
+                      // Show loading toast
+                      const toastId = toast.loading("Sending bulk WhatsApp messages...")
+
+                      // Process in parallel with limit or sequential?
+                      // Using Promise.all for speed, cloud functions should accept concurrent requests
+                      const promises = data.map(async (lead: any) => {
+                          try {
+                              const messageData = {
+                                  phoneNumber: lead.phone, // Already formatted by modal
+                                  templateName: template,
+                                  leadId: lead.id,
+                                  userId: currentUser?.displayName || localStorage.getItem("userName") || "Unknown",
+                                  userName: currentUser?.displayName || localStorage.getItem("userName") || "Unknown",
+                                  message: `Template message: ${template}`,
+                                  customParams: [
+                                      { name: "name", value: lead.name || "Customer" },
+                                      { name: "Channel", value: "AMA Legal Solutions" },
+                                      { name: "agent_name", value: currentUser?.displayName || localStorage.getItem("userName") || "Agent" },
+                                      { name: "customer_mobile", value: lead.phone },
+                                  ],
+                                  channelNumber: "919289622596",
+                                  broadcastName: `${template}_${Date.now()}_bulk`,
+                              }
+
+                              const result = await sendWhatsappMessageFn(messageData)
+                              if (result.data && (result.data as any).success) {
+                                  successCount++
+                              } else {
+                                  failCount++
+                                  console.error(`Failed to send to ${lead.name}:`, result)
+                              }
+                          } catch (err) {
+                              failCount++
+                              console.error(`Error sending to ${lead.name}:`, err)
+                          }
+                      })
+
+                      await Promise.all(promises)
+
+                      // Update toast
+                      toast.update(toastId, {
+                          render: `Sent ${successCount} messages. ${failCount > 0 ? `${failCount} failed.` : ""}`,
+                          type: failCount === 0 ? "success" : "warning",
+                          isLoading: false,
+                          autoClose: 4000
+                      })
+
+                  } catch (error) {
+                      console.error("Bulk send error:", error)
+                      toast.error("Failed to initiate bulk sending")
+                  }
               }}
               onSuccess={() => {
                   setSelectedLeads([])

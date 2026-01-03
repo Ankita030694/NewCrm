@@ -29,8 +29,10 @@ const AmaBulkWhatsAppModal: React.FC<AmaBulkWhatsAppModalProps> = ({
   // Filter leads with valid phone numbers
   useEffect(() => {
     const valid = selectedLeads.filter(lead => {
-      const phone = lead.phone || "";
-      return phone.replace(/\s+/g, "").replace(/[()-]/g, "").length >= 10;
+      const phone = lead.mobile || lead.phone || "";
+      // Strip all non-digit characters
+      const cleanPhone = phone.toString().replace(/\D/g, "");
+      return cleanPhone.length >= 10;
     });
     setValidLeads(valid);
   }, [selectedLeads]);
@@ -47,12 +49,21 @@ const AmaBulkWhatsAppModal: React.FC<AmaBulkWhatsAppModalProps> = ({
     }
 
     // Instead of just sending IDs, send the full lead data to avoid lookup issues
-    const leadData = validLeads.map(lead => ({
-      id: lead.id,
-      name: lead.name,
-      phone: lead.phone,
-      email: lead.email
-    }));
+    const leadData = validLeads.map(lead => {
+      let phone = (lead.mobile || lead.phone || "").toString().replace(/\D/g, "");
+      
+      // Auto-append 91 if it's a 10-digit number
+      if (phone.length === 10) {
+        phone = "91" + phone;
+      }
+
+      return {
+        id: lead.id,
+        name: lead.name,
+        phone: phone,
+        email: lead.email
+      };
+    });
     
     setIsSending(true);
     try {
