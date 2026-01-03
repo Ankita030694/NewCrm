@@ -816,7 +816,8 @@ const AmaLeadsPage = () => {
 
                       // Process in parallel with limit or sequential?
                       // Using Promise.all for speed, cloud functions should accept concurrent requests
-                      const promises = data.map(async (lead: any) => {
+                      const leadsToProcess = data || []
+                      const promises = leadsToProcess.map(async (lead: any) => {
                           try {
                               const messageData = {
                                   phoneNumber: lead.phone, // Already formatted by modal
