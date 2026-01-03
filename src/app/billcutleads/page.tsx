@@ -1111,7 +1111,7 @@ const BillCutLeadsPage = () => {
                                 if (l.status !== leadData.status || 
                                     l.assignedTo !== leadData.assignedTo || 
                                     l.salesNotes !== latestNote) {
-                                    return { ...l, ...leadData, salesNotes: latestNote };
+                                    return { ...l, ...leadData, salesNotes: latestNote, callbackInfo: l.callbackInfo };
                                 }
                             }
                             return l;
