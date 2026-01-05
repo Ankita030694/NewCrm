@@ -34,6 +34,7 @@ export interface Client {
     bankName: string;
     loanAmount: string;
     loanType: string;
+    settled?: boolean;
   }>
   documents?: Array<{
     name: string;

@@ -16,6 +16,7 @@ interface Bank {
   accountNumber: string;
   loanType: string;
   loanAmount: string;
+  settled?: boolean;
 }
 
 // Define the Client type to match Firebase structure
@@ -300,7 +301,16 @@ export default function MyClientsPage() {
                 }`}></div>
                 <div className="p-5">
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="font-bold text-lg text-gray-800 dark:text-white">{client.name.toUpperCase()}</h3>
+                    <div className="flex flex-col">
+                      <h3 className="font-bold text-lg text-gray-800 dark:text-white flex items-center gap-2">
+                        {client.name.toUpperCase()}
+                        {client.banks?.some(b => b.settled) && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                            Settled
+                          </span>
+                        )}
+                      </h3>
+                    </div>
                     <span
                       className={`px-2 py-1 rounded-full text-xs font-bold ${
                         client.status === 'Converted'

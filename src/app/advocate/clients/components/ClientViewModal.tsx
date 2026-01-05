@@ -475,7 +475,7 @@ export default function ClientViewModal({
                               {bank.loanType}
                             </span>
                             {bank.settled && (
-                              <span className="text-xs px-2 py-1 bg-green-800/40 text-green-200 rounded-full">
+                              <span className="text-xs px-2 py-1 bg-green-800/40 text-green-200 border border-green-800 rounded-full">
                                 Settled
                               </span>
                             )}

@@ -26,6 +26,7 @@ interface Bank {
   accountNumber: string;
   loanType: string;
   loanAmount: string;
+  settled?: boolean;
 }
 
 // Define the Client type to match Firebase structure
@@ -371,10 +372,15 @@ export default function ClientDetailsModal({ client, isOpen, onClose, formatDate
                           </h4>
                           {client.banks && client.banks.length > 0 ? (
                             <div className="space-y-3">
-                              {client.banks.map((bank) => (
+                              {client.banks.map((bank: Bank) => (
                                 <div key={bank.id} className="bg-[#f5f5f5] dark:bg-[#30261d] p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
-                                  <div className="text-md font-medium text-blue-600 dark:text-blue-400 mb-2">
-                                    {bank.bankName} - {bank.loanType}
+                                  <div className="text-md font-medium text-blue-600 dark:text-blue-400 mb-2 flex justify-between items-center">
+                                    <span>{bank.bankName} - {bank.loanType}</span>
+                                    {bank.settled && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                                        Settled
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="grid grid-cols-2 gap-2">
                                     <div className="bg-[#f5f5f5] dark:bg-[#30261d] p-2 rounded">

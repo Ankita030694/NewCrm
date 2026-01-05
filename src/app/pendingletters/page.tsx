@@ -29,6 +29,29 @@ export default function PendingLettersPage() {
   const [migrationStatus, setMigrationStatus] = useState<string>('');
   const [productivityLoading, setProductivityLoading] = useState(false);
   const [productivityStatus, setProductivityStatus] = useState<string>('');
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string>('');
+
+  const handleSyncSettlements = async () => {
+    setSyncLoading(true);
+    setSyncStatus('Starting settlement sync...');
+    
+    try {
+      const syncSettledAccountsManual = httpsCallable(functions, 'syncSettledAccountsManual');
+      const result = await syncSettledAccountsManual({});
+      
+      setSyncStatus('Sync completed successfully!');
+      toast.success('Settlement status sync completed');
+      console.log('Sync result:', result.data);
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Unknown error occurred';
+      setSyncStatus(`Sync failed: ${errorMessage}`);
+      toast.error(`Sync failed: ${errorMessage}`);
+      console.error('Sync error:', error);
+    } finally {
+      setSyncLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -360,6 +383,72 @@ export default function PendingLettersPage() {
                 <>
                   <FiBarChart className="text-lg mr-2" />
                   Create Daily Productivity Snapshot
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Settlement Status Sync Section */}
+          <div className="mt-8 bg-gray-800/50 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-xl p-8">
+            <div className="flex items-center mb-6">
+              <div className="bg-blue-900/50 p-3 rounded-xl mr-4">
+                <FiRefreshCw className="text-blue-400 text-xl" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-white">Settlement Status Sync</h2>
+                <p className="text-gray-400 text-sm">Sync 'Settled' status from Settlements to Clients</p>
+              </div>
+            </div>
+            
+            <div className="bg-gray-900/50 rounded-xl p-6 border border-gray-700/50 mb-6">
+              <h3 className="text-lg font-semibold text-white mb-3">Sync Details</h3>
+              <ul className="text-gray-300 text-sm space-y-2">
+                <li className="flex items-center">
+                  <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                  Finds all settlements marked as 'Settled'
+                </li>
+                <li className="flex items-center">
+                  <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                  Updates corresponding client bank records with 'settled: true'
+                </li>
+                <li className="flex items-center">
+                  <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
+                  Backfills missing status for older records
+                </li>
+              </ul>
+            </div>
+
+            {syncStatus && (
+              <div className="mb-6 p-4 rounded-xl border border-gray-700/50 bg-gray-900/30">
+                <div className="flex items-center">
+                  {syncLoading ? (
+                    <FiRefreshCw className="text-blue-400 text-lg mr-3 animate-spin" />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full bg-blue-500 mr-3"></div>
+                  )}
+                  <span className="text-gray-300">{syncStatus}</span>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleSyncSettlements}
+              disabled={syncLoading}
+              className={`flex items-center justify-center px-6 py-3 rounded-xl font-semibold transition-all duration-200 ${
+                syncLoading
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-blue-900/25'
+              }`}
+            >
+              {syncLoading ? (
+                <>
+                  <FiRefreshCw className="text-lg mr-2 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <FiRefreshCw className="text-lg mr-2" />
+                  Test Sync Settlements
                 </>
               )}
             </button>
