@@ -188,14 +188,7 @@ export default function ClientsTable({
                 <TableCell className="p-1 text-[10px]">{formatStartDate(client.startDate)}</TableCell>
                 <TableCell className={`font-medium p-1 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                   <div className="flex flex-col">
-                    <span className="font-medium text-[10px] flex items-center gap-1">
-                      {client.name.toUpperCase()}
-                      {client.banks?.some(b => b.settled) && (
-                        <span className="inline-flex items-center px-1 rounded-full text-[8px] font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
-                          Settled
-                        </span>
-                      )}
-                    </span>
+                    <span className="font-medium text-[10px]">{client.name.toUpperCase()}</span>
                     <span className={`text-[8px] ${formatSourceName(client.source_database || '').color}`}>
                       {formatSourceName(client.source_database || '').name}
                     </span>

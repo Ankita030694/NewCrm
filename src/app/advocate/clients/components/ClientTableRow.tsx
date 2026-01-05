@@ -193,11 +193,6 @@ export default function ClientTableRow({
       <td className="px-3 py-2 whitespace-nowrap text-gray-200 text-xs">
         <div className="flex items-center">
           {client.name}
-          {client.banks?.some(b => b.settled) && (
-            <span className="ml-1.5 px-1.5 py-0.5 bg-green-900/40 text-green-300 border border-green-800 rounded-full text-xs font-medium">
-              Settled
-            </span>
-          )}
           {isNewClient(client.startDate) && (
             <span className="ml-1.5 px-1.5 py-0.5 bg-green-900/60 text-green-300 rounded-full text-xs font-medium animate-pulse">
               New
