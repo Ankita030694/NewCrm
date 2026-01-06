@@ -287,24 +287,35 @@ const AmaLeadsFilters = ({
     [onSearchResults, setIsSearching],
   )
 
-  // Debounced search function
+  // Debounced parent update to prevent typing glitches
+  const debouncedSetSearchQuery = useMemo(
+    () =>
+      debounce((value: string) => {
+        setSearchQuery(value)
+      }, 500),
+    [setSearchQuery],
+  )
+
+  // Debounced database search function (existing but slightly modified to be purely for side-effect data if needed)
   const debouncedSearch = useMemo(
     () =>
       debounce((value: string) => {
         if (value.trim()) {
           performDatabaseSearch(value)
         } else {
-          setSearchQuery(value)
           onSearchResults?.([])
           setSearchResultsCount(0)
         }
       }, 500),
-    [performDatabaseSearch, setSearchQuery, onSearchResults],
+    [performDatabaseSearch, onSearchResults],
   )
 
   // Update local search state when parent state changes
+  // We strictly check if the values are different to avoid unnecessary resets
   useEffect(() => {
-    setSearchInput(searchQuery)
+    if (searchQuery !== searchInput) {
+        setSearchInput(searchQuery)
+    }
   }, [searchQuery])
 
   // Handle search input changes
@@ -312,21 +323,26 @@ const AmaLeadsFilters = ({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const value = e.target.value
       setSearchInput(value)
-      setSearchQuery(value) // Update parent state immediately for UI
+      
+      // Debounce the parent update so we don't spam fetches and cause re-render loops/glitches
+      debouncedSetSearchQuery(value)
+      
+      // Also debounce the local database search (if used for autocomplete/counts)
       debouncedSearch(value)
     },
-    [debouncedSearch, setSearchQuery],
+    [debouncedSetSearchQuery, debouncedSearch],
   )
 
   // Clear search function
   const clearSearch = useCallback(() => {
     setSearchInput("")
     setSearchQuery("")
+    debouncedSetSearchQuery.cancel()
+    debouncedSearch.cancel()
     onSearchResults?.([])
     setSearchResultsCount(0)
-    debouncedSearch.cancel()
     onSearchCleared?.()
-  }, [setSearchQuery, onSearchResults, debouncedSearch, onSearchCleared])
+  }, [setSearchQuery, onSearchResults, debouncedSearch, debouncedSetSearchQuery, onSearchCleared])
 
   // Clear all filters
   const clearAllFilters = useCallback(() => {
