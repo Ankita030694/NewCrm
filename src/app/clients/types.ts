@@ -64,4 +64,5 @@ export interface Client {
     createdAt: number;
     createdBy: string;
   }[];
+  searchKeywords?: string[];
 } 

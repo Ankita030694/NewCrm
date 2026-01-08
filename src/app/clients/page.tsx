@@ -71,6 +71,30 @@ const createSearchVariants = (value: string): string[] => {
   return Array.from(new Set([normalized, lower, upper, titleCase])).filter((variant) => variant.length > 0)
 }
 
+const generateSearchKeywords = (name: string): string[] => {
+  if (!name) return []
+  const keywords = new Set<string>()
+  const normalizedName = name.toLowerCase().trim()
+  
+  // Add full name variants
+  keywords.add(normalizedName)
+  
+  // Split into words
+  const words = normalizedName.split(/\s+/).filter(w => w.length > 0)
+  
+  words.forEach(word => {
+    // Add exact word
+    keywords.add(word)
+    
+    // Add prefixes of length >= 2
+    for (let i = 2; i <= word.length; i++) {
+      keywords.add(word.substring(0, i))
+    }
+  })
+
+  return Array.from(keywords)
+}
+
 interface User {
   uid: string
   firstName: string
@@ -246,6 +270,8 @@ function ClientsPageWithParams() {
   const [isDocViewerOpen, setIsDocViewerOpen] = useState(false)
   const [viewingDocumentUrl, setViewingDocumentUrl] = useState("")
   const [viewingDocumentName, setViewingDocumentName] = useState("")
+  const [isReindexing, setIsReindexing] = useState(false)
+  const [reindexProgress, setReindexProgress] = useState("")
 
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState<string>("")
@@ -457,7 +483,7 @@ function ClientsPageWithParams() {
         searchTerms.add(` ${term}`)
       })
 
-      // Name Search (Prefix)
+      // Name Search (Prefix on Name field)
       searchTerms.forEach((variant) => {
         try {
           queries.push(
@@ -474,6 +500,23 @@ function ClientsPageWithParams() {
           console.warn("Skipping name search query:", error)
         }
       })
+
+      // Keyword Search (Partial/Middle name match)
+      // We only use the lowercase normalized term for array-contains
+      if (normalizedLowerTerm.length >= 2) {
+        try {
+          queries.push(
+            query(
+              collectionRef,
+              ...baseConstraints,
+              where("searchKeywords", "array-contains", normalizedLowerTerm),
+              limitClause
+            )
+          )
+        } catch (error) {
+          console.warn("Skipping keyword search query:", error)
+        }
+      }
 
       // Phone Search (Exact)
       try {
@@ -852,9 +895,10 @@ function ClientsPageWithParams() {
       // Remove id from the data to be updated
       const { id, ...clientData } = editingClient
 
-      // Update last modified timestamp
+      // Update last modified timestamp and search keywords
       const updatedData = {
         ...clientData,
+        searchKeywords: generateSearchKeywords(clientData.name),
         lastModified: new Date(),
       }
 
@@ -873,6 +917,54 @@ function ClientsPageWithParams() {
       showToast("Update failed", "Failed to update client information. Please try again.", "error")
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleReindex = async () => {
+    if (!confirm("This will update all clients with search keywords. This may take a while. Continue?")) return
+
+    setIsReindexing(true)
+    setReindexProgress("Starting...")
+    
+    try {
+      let processed = 0
+      let updated = 0
+      let lastDoc = null
+      
+      while (true) {
+        let q = query(collection(db, "clients"), orderBy("startDate", "desc"), limit(100))
+        if (lastDoc) {
+          q = query(collection(db, "clients"), orderBy("startDate", "desc"), startAfter(lastDoc), limit(100))
+        }
+
+        const snapshot = await getDocs(q)
+        if (snapshot.empty) break
+
+        const batchPromises = snapshot.docs.map(async (docSnap) => {
+          const data = docSnap.data() as Client
+          if (!data.searchKeywords || data.searchKeywords.length === 0) {
+            const keywords = generateSearchKeywords(data.name || "")
+            await updateDoc(doc(db, "clients", docSnap.id), {
+              searchKeywords: keywords
+            })
+            updated++
+          }
+        })
+
+        await Promise.all(batchPromises)
+        
+        processed += snapshot.size
+        setReindexProgress(`Processed ${processed} clients (${updated} updated)...`)
+        lastDoc = snapshot.docs[snapshot.docs.length - 1]
+      }
+      
+      showToast("Reindex Complete", `Successfully processed ${processed} clients. Updated ${updated} records.`, "success")
+    } catch (error) {
+      console.error("Reindexing failed:", error)
+      showToast("Reindex Failed", "An error occurred during reindexing.", "error")
+    } finally {
+      setIsReindexing(false)
+      setReindexProgress("")
     }
   }
 
@@ -2058,6 +2150,21 @@ function ClientsPageWithParams() {
                     Filters
                     {showFilters ? <ChevronUp className="ml-2 h-3.5 w-3.5" /> : <ChevronDown className="ml-2 h-3.5 w-3.5" />}
                   </Button>
+
+                  {userRole === "overlord" && (
+                    <Button
+                      variant="outline"
+                      onClick={handleReindex}
+                      disabled={isReindexing}
+                      className={`h-9 px-3 text-sm ${
+                        theme === "dark" 
+                          ? "bg-purple-900/20 border-purple-800 text-purple-300 hover:bg-purple-900/40" 
+                          : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                      }`}
+                    >
+                      {isReindexing ? reindexProgress : "Reindex Search"}
+                    </Button>
+                  )}
 
                   {(statusFilter !== "all" || primaryAdvocateFilter !== "all" || secondaryAdvocateFilter !== "all" || sourceFilter !== "all" || documentFilter !== "all" || bankNameFilter !== "all" || agreementFilter !== "all" || searchTerm) && (
                     <Button
