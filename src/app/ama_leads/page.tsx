@@ -593,6 +593,54 @@ const AmaLeadsPage = () => {
 
   // --- Render ---
 
+  // Export to CSV function
+  const exportToCSV = () => {
+    try {
+      if (userRole !== "admin" && userRole !== "overlord") {
+        toast.error("You don't have permission to export data")
+        return
+      }
+
+      const csvData = leads.map((lead: any) => ({
+        Name: lead.name || "",
+        Mobile: lead.phone || lead.mobile || lead.number || "",
+        Email: lead.email || "",
+        Location: lead.address || lead.city || "",
+        Status: lead.status || "",
+        Source: lead.source || "",
+        "Assigned To": lead.assignedTo || "Unassigned",
+        "Debt Amount": lead.debt_Range ?? lead.debt_range ?? lead.debtRange ?? "",
+        "Sales Notes": lead.salesNotes || "",
+        "Date": lead.synced_at ? new Date(lead.synced_at).toLocaleDateString() : "",
+        "Query": lead.query || "",
+        "Callback Info": lead.callbackInfo && lead.callbackInfo.scheduled_dt ? new Date(lead.callbackInfo.scheduled_dt).toLocaleString() : ""
+      }))
+
+      const headers = Object.keys(csvData[0]).join(",")
+      const rows = csvData.map((obj) =>
+        Object.values(obj)
+          .map((value) => (typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : value))
+          .join(","),
+      )
+
+      const csv = [headers, ...rows].join("\n")
+      const blob = new Blob([csv], { type: "text/csv" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.setAttribute("hidden", "")
+      a.setAttribute("href", url)
+      a.setAttribute("download", `ama-leads-export-${new Date().toISOString().split("T")[0]}.csv`)
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+
+      toast.success("Export completed successfully")
+    } catch (error) {
+      console.error("Error exporting data: ", error)
+      toast.error("Failed to export data")
+    }
+  }
+
   const SidebarComponent = () => {
     if (userRole === "admin") return AdminSidebar
     if (userRole === "overlord") return OverlordSidebar
@@ -639,7 +687,7 @@ const AmaLeadsPage = () => {
           userRole={userRole}
           currentUser={currentUser}
           isLoading={isLoading}
-          exportToCSV={() => {}} // TODO: Implement server-side export
+          exportToCSV={exportToCSV}
           loadAllLeads={handleLoadAllLeads}
           isLoadAllLoading={isLoadAllLoading}
         />
