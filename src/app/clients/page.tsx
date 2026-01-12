@@ -283,6 +283,8 @@ function ClientsPageWithParams() {
   const [documentFilter, setDocumentFilter] = useState<string>("all")
   const [bankNameFilter, setBankNameFilter] = useState<string>("all")
   const [agreementFilter, setAgreementFilter] = useState<string>("all")
+  const [fromDate, setFromDate] = useState<string>("")
+  const [toDate, setToDate] = useState<string>("")
 
   // Lists for filter dropdowns
   const [allAdvocates, setAllAdvocates] = useState<string[]>([])
@@ -618,6 +620,14 @@ function ClientsPageWithParams() {
       constraints.push(where("source_database", "==", sourceFilter))
     }
 
+    if (fromDate) {
+      constraints.push(where("startDate", ">=", fromDate))
+    }
+
+    if (toDate) {
+      constraints.push(where("startDate", "<=", toDate))
+    }
+
     if (agreementFilter === "sent") {
       constraints.push(where("sentAgreement", "==", true))
     } else if (agreementFilter === "not_sent") {
@@ -625,7 +635,7 @@ function ClientsPageWithParams() {
     }
 
     return constraints
-  }, [statusFilter, primaryAdvocateFilter, secondaryAdvocateFilter, sourceFilter, agreementFilter])
+  }, [statusFilter, primaryAdvocateFilter, secondaryAdvocateFilter, sourceFilter, agreementFilter, fromDate, toDate])
 
   const fetchFilteredCount = useCallback(async () => {
     try {
@@ -1240,6 +1250,21 @@ function ClientsPageWithParams() {
         return agreementFilter === "sent" ? hasAgreementSent : !hasAgreementSent
       })
     }
+
+    // Apply date filter
+    if (fromDate) {
+      results = results.filter((client) => {
+        const clientDate = typeof client.startDate === 'string' ? client.startDate : ''
+        return clientDate >= fromDate
+      })
+    }
+
+    if (toDate) {
+      results = results.filter((client) => {
+        const clientDate = typeof client.startDate === 'string' ? client.startDate : ''
+        return clientDate <= toDate
+      })
+    }
     setFilteredClients(results)
   }, [
     clients,
@@ -1251,6 +1276,8 @@ function ClientsPageWithParams() {
     documentFilter,
     bankNameFilter,
     agreementFilter,
+    fromDate,
+    toDate,
   ])
 
   useEffect(() => {
@@ -1307,7 +1334,10 @@ function ClientsPageWithParams() {
     setSourceFilter("all")
     setDocumentFilter("all")
     setBankNameFilter("all")
+    setBankNameFilter("all")
     setAgreementFilter("all")
+    setFromDate("")
+    setToDate("")
   }
 
   // Function to format source display name
@@ -2166,7 +2196,7 @@ function ClientsPageWithParams() {
                     </Button>
                   )}
 
-                  {(statusFilter !== "all" || primaryAdvocateFilter !== "all" || secondaryAdvocateFilter !== "all" || sourceFilter !== "all" || documentFilter !== "all" || bankNameFilter !== "all" || agreementFilter !== "all" || searchTerm) && (
+                  {(statusFilter !== "all" || primaryAdvocateFilter !== "all" || secondaryAdvocateFilter !== "all" || sourceFilter !== "all" || documentFilter !== "all" || bankNameFilter !== "all" || agreementFilter !== "all" || searchTerm || fromDate || toDate) && (
                     <Button
                       variant="ghost"
                       onClick={resetFilters}
@@ -2253,6 +2283,36 @@ function ClientsPageWithParams() {
                         <SelectItem value="not_sent">Agreement Not Sent</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>From Date</label>
+                    <Input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      max={toDate}
+                      className={`h-9 text-sm ${
+                        theme === "dark" 
+                          ? "bg-gray-900 border-gray-700 text-gray-200" 
+                          : "bg-white border-gray-200"
+                      }`}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>To Date</label>
+                    <Input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      min={fromDate}
+                      className={`h-9 text-sm ${
+                        theme === "dark" 
+                          ? "bg-gray-900 border-gray-700 text-gray-200" 
+                          : "bg-white border-gray-200"
+                      }`}
+                    />
                   </div>
                   
                   {/* Bulk Select by Number Input */}
