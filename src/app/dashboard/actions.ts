@@ -319,31 +319,39 @@ export async function getDashboardHistory(endMonth: string, endYear: number): Pr
             }
         });
 
-        // Fetch ALL targets in ONE query
-        const targetsRef = db.collection('targets');
+        // Optimizing Target Fetching: 
+        // Previously we fetched parent docs 'targets/{Month_Year}' and read 'total' or 'amountCollectedTarget'.
+        // However, the source of truth is the 'sales_targets' subcollection which might not be synced to the parent 'total'.
+        // To fix the "0 target" bug and ensure consistency with the top dashboard cards, 
+        // we must aggregate the subcollections directly.
+
         console.time('getDashboardHistory:Targets');
-        const targetsSnap = await targetsRef.get();
+        // Use collectionGroup to fetch ALL sales_targets from ALL months
+        // This is reasonably efficient as we want the global history.
+        const salesTargetsSnap = await db.collectionGroup('sales_targets').get();
         console.timeEnd('getDashboardHistory:Targets');
 
         const targetsByMonth: { [key: string]: number } = {};
 
-        // Optimization: Use the pre-calculated 'total' field in the monthly document
-        // This avoids fetching all subcollections or using collectionGroup queries.
-        targetsSnap.forEach(doc => {
-            const monthKey = doc.id;
-            // Ensure it's a monthly doc (e.g., "Jan_2025")
-            if (monthKey.includes('_')) {
-                const data = doc.data();
+        salesTargetsSnap.forEach(doc => {
+            // Path structure: targets/{Month_Year}/sales_targets/{userId}
+            // We want {Month_Year} which is the ID of the parent document of the collection.
+            const monthDocRef = doc.ref.parent.parent;
 
-                // Check for the new 'total' string field (e.g., "27,49,999")
-                if (data.total) {
-                    // Remove commas and convert to number
-                    const cleanTotal = String(data.total).replace(/,/g, '');
-                    targetsByMonth[monthKey] = parseFloat(cleanTotal) || 0;
-                }
-                // Fallback to legacy field if 'total' is missing
-                else if (data.amountCollectedTarget) {
-                    targetsByMonth[monthKey] = data.amountCollectedTarget;
+            if (monthDocRef) {
+                const monthKey = monthDocRef.id;
+
+                // Ensure it's a valid month key (e.g., "Jan_2025")
+                if (monthKey.includes('_')) {
+                    const data = doc.data();
+                    const targetAmount = data.amountCollectedTarget || 0;
+
+                    targetsByMonth[monthKey] = (targetsByMonth[monthKey] || 0) + targetAmount;
+
+                    // CRITICAL FIX: Add this month to allMonthsSet
+                    // This ensures that even if there are NO payments for a month (e.g. future month),
+                    // it still appears in the chart with the correct target.
+                    allMonthsSet.add(monthKey);
                 }
             }
         });
