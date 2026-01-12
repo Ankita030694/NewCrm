@@ -268,11 +268,7 @@ export default function ClientViewModal({
                             ? "Bill Cut"
                             : client.source_database || "Not specified"}
                   </span>
-                  {client.leadId && (
-                    <span className="ml-2 px-2 py-0.5 bg-gray-700 text-gray-300 rounded text-xs font-medium">
-                      ID: {client.leadId}
-                    </span>
-                  )}
+                 
                 </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-300">
                   <div className="flex items-center">
@@ -319,12 +315,7 @@ export default function ClientViewModal({
               </div>
 
               <div className="flex flex-col md:items-end space-y-1">
-                {client.convertedAt && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-sm font-medium">Converted:</span>
-                    <span className="text-white">{formatIndianDate(client.convertedAt)}</span>
-                  </div>
-                )}
+               
                 <div className="flex items-center gap-2">
                   <span className="text-gray-300 text-sm font-medium">Assigned At:</span>
                   <span className="text-white">{formatIndianDate(client.alloc_adv_at)}</span>
@@ -371,7 +362,7 @@ export default function ClientViewModal({
             {/* Detailed Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Personal & Professional */}
-              <div className="bg-gray-800/50 p-5 rounded-lg border border-gray-700 shadow-sm">
+              <div className="bg-gray-800/50 p-5 rounded-lg border border-gray-700 shadow-sm md:col-span-2">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                   <svg className="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -383,7 +374,7 @@ export default function ClientViewModal({
                   </svg>
                   Personal Information
                 </h3>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 text-sm">
                   <div className="flex border-b border-gray-700 pb-2">
                     <span className="text-gray-400 w-1/3">Name</span>
                     <span className="text-white w-2/3 font-medium">{client.name}</span>
@@ -452,8 +443,8 @@ export default function ClientViewModal({
               </div>
 
               {/* Bank Details */}
-              <div className="bg-gray-800/50 p-5 rounded-lg border border-gray-700 shadow-sm">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+              <div className="bg-gray-800/50 p-5 rounded-lg border border-gray-700 shadow-sm md:col-span-2">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center shrink-0">
                   <svg className="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
@@ -465,29 +456,31 @@ export default function ClientViewModal({
                   Bank Details ({client.banks?.length || 0} accounts)
                 </h3>
                 {client.banks && client.banks.length > 0 ? (
-                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {client.banks.map((bank, index) => (
-                      <div key={bank.id} className="rounded-lg bg-gray-900/50 p-4 border border-gray-700">
+                      <div key={bank.id} className="rounded-lg bg-gray-900/50 p-4 border border-gray-700 h-full">
                         <div className="flex justify-between items-center mb-2">
-                          <h4 className="text-white font-semibold">{bank.bankName}</h4>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs px-2 py-1 bg-purple-900/40 text-purple-300 rounded">
+                          <h4 className="text-white font-semibold truncate" title={bank.bankName}>{bank.bankName}</h4>
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <span className="text-xs px-2 py-1 bg-purple-900/40 text-purple-300 rounded whitespace-nowrap">
                               {bank.loanType}
                             </span>
-                            {bank.settled && (
-                              <span className="text-xs px-2 py-1 bg-green-800/40 text-green-200 border border-green-800 rounded-full">
+                          </div>
+                        </div>
+                        <div className="mb-2">
+                           {bank.settled && (
+                              <span className="text-xs px-2 py-1 bg-green-800/40 text-green-200 border border-green-800 rounded-full inline-block">
                                 Settled
                               </span>
                             )}
-                          </div>
                         </div>
-                        <div className="grid grid-cols-1 gap-3 text-sm">
+                        <div className="grid grid-cols-1 gap-2 text-sm">
                           <div>
-                            <p className="text-gray-400 mb-1">Account Number</p>
-                            <p className="text-gray-200 font-mono text-xs">{bank.accountNumber}</p>
+                            <p className="text-gray-400 mb-1 text-xs">Account Number</p>
+                            <p className="text-gray-200 font-mono text-xs break-all">{bank.accountNumber}</p>
                           </div>
                           <div>
-                            <p className="text-gray-400 mb-1">Loan Amount</p>
+                            <p className="text-gray-400 mb-1 text-xs">Loan Amount</p>
                             <p className="text-gray-200 font-medium">{formatIndianCurrency(bank.loanAmount)}</p>
                           </div>
                         </div>
@@ -501,81 +494,7 @@ export default function ClientViewModal({
                 )}
               </div>
 
-              {/* Notes & Remarks */}
-              <div className="bg-gray-800/50 p-5 rounded-lg border border-gray-700 shadow-sm md:col-span-2">
-                <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                  <svg className="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  Notes & Queries
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {client.remarks && (
-                    <div className="bg-gray-900/50 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-purple-300 mb-2 flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
-                          />
-                        </svg>
-                        Remarks
-                      </h4>
-                      <div className="bg-gray-800/50 p-3 rounded text-gray-200 text-sm max-h-32 overflow-y-auto">
-                        {client.remarks}
-                      </div>
-                    </div>
-                  )}
-                  {client.salesNotes && (
-                    <div className="bg-gray-900/50 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-purple-300 mb-2 flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
-                        </svg>
-                        Sales Notes
-                      </h4>
-                      <div className="bg-gray-800/50 p-3 rounded text-gray-200 text-sm max-h-32 overflow-y-auto">
-                        {client.salesNotes}
-                      </div>
-                    </div>
-                  )}
-                  {client.queries && (
-                    <div className="bg-gray-900/50 rounded-lg p-4">
-                      <h4 className="text-sm font-medium text-purple-300 mb-2 flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        Queries
-                      </h4>
-                      <div className="bg-gray-800/50 p-3 rounded text-gray-200 text-sm max-h-32 overflow-y-auto">
-                        {client.queries}
-                      </div>
-                    </div>
-                  )}
-                  {!client.remarks && !client.salesNotes && !client.queries && (
-                    <div className="md:col-span-2 flex items-center justify-center h-32 text-gray-400 bg-gray-800/30 rounded-lg border border-dashed border-gray-700">
-                      No notes or queries available
-                    </div>
-                  )}
-                </div>
-              </div>
+
 
               {/* Document Section */}
               <div className="bg-gray-800/50 p-5 rounded-lg border border-gray-700 shadow-sm md:col-span-2 mt-5">
