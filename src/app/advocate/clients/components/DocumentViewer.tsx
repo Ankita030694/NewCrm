@@ -20,9 +20,18 @@ export default function DocumentViewer({ isOpen, documentUrl, documentName, onCl
       setIsLoading(true)
       setHasError(false)
 
-      // Always use Google Docs viewer for better compatibility
+    // Always use Google Docs viewer for better compatibility
       const googleDocsUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(documentUrl)}&embedded=true`
       setViewerUrl(googleDocsUrl)
+
+      // Safety timeout in case iframe onload doesn't fire
+      const timer = setTimeout(() => {
+        setIsLoading(false)
+      }, 10000)
+
+      return () => clearTimeout(timer)
+    } else {
+      setViewerUrl("")
     }
   }, [isOpen, documentUrl])
 
@@ -126,6 +135,7 @@ export default function DocumentViewer({ isOpen, documentUrl, documentName, onCl
 
           {viewerUrl && (
             <iframe
+              key={viewerUrl}
               src={viewerUrl}
               className="w-full h-full border-0"
               title="Document Viewer"
