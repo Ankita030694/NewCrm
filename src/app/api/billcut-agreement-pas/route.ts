@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     // Get PAS template from Firebase Storage
     const templateRef = ref(storage, 'templates/billcut-pas-template.docx');
     let templateBuffer;
-    
+
     try {
       templateBuffer = await getBytes(templateRef);
       console.log('Billcut PAS template fetched successfully from Firebase');
@@ -23,14 +23,14 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-    
+
     const data = await request.json();
-    console.log('Received data for billcut PAS agreement generation:', { 
-      name: data.name, 
+    console.log('Received data for billcut PAS agreement generation:', {
+      name: data.name,
       email: data.email,
       banksCount: data.banks?.length || 0
     });
-    
+
     const {
       name,
       email,
@@ -50,17 +50,20 @@ export async function POST(request: Request) {
     // Format the input date
     const formattedDate = formatDate(new Date(date));
     const totalPercentage = parseFloat(feePercentage) + 2;
-    
+
+    // Calculate total loan amount
     // Calculate total loan amount
     const totalLoanAmount = banks.reduce((total: number, bank: any) => {
-      return total + (parseFloat(bank.loanAmount) || 0);
+      const amountStr = String(bank.loanAmount || '0').replace(/,/g, '');
+      return total + (parseFloat(amountStr) || 0);
     }, 0);
-    
+
     // Calculate fees for each bank using the provided fee percentage
     const banksWithFees = banks.map((bank: any) => {
-      const loanAmount = parseFloat(bank.loanAmount) || 0;
+      const amountStr = String(bank.loanAmount || '0').replace(/,/g, '');
+      const loanAmount = parseFloat(amountStr) || 0;
       const feeForThisLoan = parseFloat((loanAmount * (parseFloat(feePercentage) / 100)).toFixed(2)); // Use provided fee percentage with 2 decimal places
-      
+
       return {
         bankName: bank.bankName,
         loanAmount: formatIndianNumber(loanAmount),
@@ -68,7 +71,7 @@ export async function POST(request: Request) {
         fees: formatIndianNumber(feeForThisLoan)
       };
     });
-    
+
     // Calculate total fees
     const totalFees = banksWithFees.reduce((total: number, bank: any) => {
       return total + parseFloat(bank.fees.replace(/,/g, ''));
@@ -101,17 +104,17 @@ export async function POST(request: Request) {
     // Generate document as buffer
     const buffer = doc.getZip().generate({ type: "nodebuffer" });
     console.log('Billcut PAS document generated successfully');
-    
+
     // Save to temporary file (needed for verification)
     const tempDir = os.tmpdir();
     const tempFilePath = path.join(tempDir, `${name}_billcut_pas_agreement_${Date.now()}.docx`);
     fs.writeFileSync(tempFilePath, buffer);
     console.log('Temporary file created at:', tempFilePath);
-    
+
     // Upload to Firebase Storage
     const documentPath = `clients/billcut-pas/documents/${name}_billcut_pas_agreement.docx`;
     console.log('Uploading to Firebase path:', documentPath);
-    
+
     const storageRef = ref(storage, documentPath);
     await uploadBytes(storageRef, buffer).then(snapshot => {
       console.log('Upload successful, metadata:', snapshot.metadata);
@@ -119,16 +122,16 @@ export async function POST(request: Request) {
       console.error('Firebase upload error details:', error);
       throw error; // Rethrow to be caught by the outer try/catch
     });
-    
+
     // Get download URL
     const downloadUrl = await getDownloadURL(storageRef);
     console.log('Download URL obtained:', downloadUrl);
-    
+
     // Clean up temp file
     fs.unlinkSync(tempFilePath);
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       documentUrl: downloadUrl,
       documentName: `${name}_billcut_pas_agreement.docx`,
       documentUploadedAt: new Date().toISOString(),
@@ -139,7 +142,7 @@ export async function POST(request: Request) {
         banksWithFees
       }
     });
-    
+
   } catch (error: any) {
     console.error('Error generating billcut PAS agreement:', error);
     return NextResponse.json(
@@ -159,18 +162,18 @@ function formatIndianNumber(num: number): string {
   if (!num) return "0";
   let numStr = num.toString();
   let afterPoint = "";
-  
+
   if (numStr.includes(".")) {
     [numStr, afterPoint] = numStr.split(".");
     afterPoint = "." + afterPoint;
   }
-  
+
   let lastThree = numStr.length > 3 ? numStr.substring(numStr.length - 3) : numStr;
   let otherNumbers = numStr.substring(0, numStr.length - 3);
-  
+
   if (otherNumbers) {
     lastThree = "," + lastThree;
   }
-  
+
   return otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + lastThree + afterPoint;
 }

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { User, Search, ChevronDown, X } from 'lucide-react'
 import { FaRupeeSign } from 'react-icons/fa'
 import { Button } from '@/components/ui/button'
+
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select'
@@ -52,6 +53,8 @@ interface Client {
   documentUploadedAt?: Date
   sentAgreement?: boolean
   request_letter?: boolean
+  shouldGenerateAgreement?: boolean
+  feePercentage?: string
 }
 
 interface UserType {
@@ -536,6 +539,16 @@ export default function EditModal({
                   />
                 </div>
                 <div>
+                  <label className="text-sm text-gray-400 block mb-1">Start Date</label>
+                  <Input 
+                    name="startDate"
+                    type="date"
+                    value={client.startDate || ''}
+                    onChange={handleEditInputChange}
+                    className="bg-gray-950 border-gray-700 text-white"
+                  />
+                </div>
+                <div>
                   <label className="text-sm text-gray-400 block mb-1">Source</label>
                   <Select 
                     value={client.source_database || 'none'} 
@@ -654,6 +667,42 @@ export default function EditModal({
                 >
                   Test
                 </Button>
+              </div>
+
+              {/* Agreement Regeneration Section */}
+              <div className="mt-4 pt-4 border-t border-gray-800">
+                <div className="flex items-center space-x-2 mb-3">
+                  <input
+                    type="checkbox"
+                    id="regenerate-agreement"
+                    checked={client.shouldGenerateAgreement || false}
+                    onChange={(e) => handleSelectChange('shouldGenerateAgreement', e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
+                  />
+                  <label
+                    htmlFor="regenerate-agreement"
+                    className="text-sm font-medium leading-none text-gray-300 cursor-pointer"
+                  >
+                    Regenerate Agreement
+                  </label>
+                </div>
+                
+                {client.shouldGenerateAgreement && (
+                  <div className="animate-in slide-in-from-top-2 fade-in duration-200">
+                    <label className="text-sm text-gray-400 block mb-1">Fee Percentage (%)</label>
+                    <Input 
+                      name="feePercentage"
+                      value={client.feePercentage || ''}
+                      onChange={handleEditInputChange}
+                      placeholder="e.g. 15"
+                      type="number"
+                      className="bg-gray-950 border-gray-700 text-white"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Required for regenerating the agreement document.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

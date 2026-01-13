@@ -65,4 +65,6 @@ export interface Client {
     createdBy: string;
   }[];
   searchKeywords?: string[];
+  feePercentage?: string;
+  shouldGenerateAgreement?: boolean;
 } 

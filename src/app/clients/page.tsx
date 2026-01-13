@@ -895,6 +895,86 @@ function ClientsPageWithParams() {
     }
   }
 
+  // Function to generate agreement document
+  const generateAgreementDocument = async (clientData: Client): Promise<{documentName: string, documentUrl: string, documentUploadedAt: string} | null> => {
+    try {
+      // Determine which API endpoint to use based on source and loan amount
+      let apiEndpoint = '/api/agreement';
+      let requestData: any = clientData;
+      
+      if (clientData.source_database === 'billcut' && clientData.banks) {
+        // Calculate total loan amount
+        const totalLoanAmount = clientData.banks.reduce((total: number, bank: any) => {
+          const amountStr = String(bank.loanAmount || '0').replace(/,/g, '');
+          return total + (parseFloat(amountStr) || 0);
+        }, 0);
+        
+        // Fee percentage is now passed from the client data (entered in UI)
+        const feePercentage = parseFloat(clientData.feePercentage || '0');
+        
+        // If total loan amount is <= 400000, use billcut agreement
+        if (totalLoanAmount <= 400000) {
+          apiEndpoint = '/api/billcut-agreement';
+          
+          // Prepare data for billcut agreement
+          requestData = {
+            name: clientData.name,
+            email: clientData.email,
+            panNumber: clientData.panNumber,
+            feePercentage: feePercentage,
+            date: clientData.startDate || new Date().toISOString().split('T')[0],
+            banks: clientData.banks.map((bank: any) => ({
+              bankName: bank.bankName,
+              loanAmount: bank.loanAmount,
+              loanType: bank.loanType
+            }))
+          };
+        } else {
+          // If total loan amount is > 400000, use billcut PAS agreement with adjusted fee
+          apiEndpoint = '/api/billcut-agreement-pas';
+          
+          // Calculate adjusted fee percentage (2% less than entered)
+          const adjustedPercentage = Math.max(0, feePercentage - 2); // Ensure it doesn't go negative
+          
+          // Prepare data for billcut PAS agreement with adjusted fee
+          requestData = {
+            name: clientData.name,
+            email: clientData.email,
+            panNumber: clientData.panNumber,
+            feePercentage: adjustedPercentage, // Pass the adjusted percentage
+            date: clientData.startDate || new Date().toISOString().split('T')[0],
+            banks: clientData.banks.map((bank: any) => ({
+              bankName: bank.bankName,
+              loanAmount: bank.loanAmount,
+              loanType: bank.loanType
+            }))
+          };
+        }
+      }
+      
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+      
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('Failed to generate agreement. Status:', response.status, 'Body:', errorBody);
+        throw new Error('Failed to generate agreement');
+      }
+      
+      const data = await response.json();
+      return data;
+      
+    } catch (error: any) {
+      console.error('Error in generateAgreementDocument function:', error);
+      throw error;
+    }
+  };
+
   const handleSaveChanges = async () => {
     if (!editingClient) return
 
@@ -902,20 +982,51 @@ function ClientsPageWithParams() {
     try {
       const clientRef = doc(db, "clients", editingClient.id)
 
-      // Remove id from the data to be updated
-      const { id, ...clientData } = editingClient
+      // Start with the current editing client data
+      let finalClientData = { ...editingClient };
+
+      // Check if we need to regenerate agreement
+      if (editingClient.shouldGenerateAgreement) {
+        if (!editingClient.feePercentage && editingClient.source_database === 'billcut') {
+           showToast("Missing Fee Percentage", "Please enter a fee percentage to regenerate the agreement.", "error");
+           setIsSaving(false);
+           return;
+        }
+
+        showToast("Generating Agreement", "Please wait while the agreement is being generated...", "info");
+        
+        try {
+          const documentData = await generateAgreementDocument(editingClient);
+          
+          if (documentData) {
+            finalClientData.documentUrl = documentData.documentUrl;
+            finalClientData.documentName = documentData.documentName;
+            finalClientData.documentUploadedAt = new Date(documentData.documentUploadedAt);
+            
+            showToast("Agreement Generated", "New agreement has been generated successfully.", "success");
+          }
+        } catch (genError) {
+          console.error("Agreement generation failed:", genError);
+          showToast("Agreement Failed", "Failed to generate agreement, but other changes will be saved.", "error");
+          // We continue saving other changes even if agreement fails, or we could return here.
+          // Let's decide to continue saving other data but warn the user.
+        }
+      }
+
+      // Remove temporary UI fields and id from the data to be updated
+      const { id, shouldGenerateAgreement, feePercentage, ...clientDataToSave } = finalClientData;
 
       // Update last modified timestamp and search keywords
       const updatedData = {
-        ...clientData,
-        searchKeywords: generateSearchKeywords(clientData.name),
+        ...clientDataToSave,
+        searchKeywords: generateSearchKeywords(clientDataToSave.name),
         lastModified: new Date(),
       }
 
       await updateDoc(clientRef, updatedData)
 
       // Update the local state
-      setClients(clients.map((client) => (client.id === editingClient.id ? editingClient : client)))
+      setClients(clients.map((client) => (client.id === editingClient.id ? finalClientData : client)))
 
       // Show success toast
       showToast("Client updated", "Client information has been successfully updated.", "success")
