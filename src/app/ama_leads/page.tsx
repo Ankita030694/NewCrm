@@ -57,6 +57,11 @@ const AmaLeadsPage = () => {
   const [convertedFilter, setConvertedFilter] = useState<boolean | null>(null) // Kept for UI compatibility
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
+  const [convertedFromDate, setConvertedFromDate] = useState("")
+  const [convertedToDate, setConvertedToDate] = useState("")
+  const [lastModifiedFromDate, setLastModifiedFromDate] = useState("")
+  const [lastModifiedToDate, setLastModifiedToDate] = useState("")
+
   const [activeTab, setActiveTab] = useState<"all" | "callback">("all")
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "ascending" | "descending" }>({
     key: "synced_at",
@@ -161,6 +166,10 @@ const AmaLeadsPage = () => {
       order: sortConfig.direction === "ascending" ? "asc" : "desc" as "asc" | "desc",
       startDate: fromDate,
       endDate: toDate,
+      convertedStartDate: convertedFromDate,
+      convertedEndDate: convertedToDate,
+      lastModifiedStartDate: lastModifiedFromDate,
+      lastModifiedEndDate: lastModifiedToDate,
     }
     
     fetchLeads(params)
@@ -181,6 +190,10 @@ const AmaLeadsPage = () => {
     sortConfig,
     fromDate,
     toDate,
+    convertedFromDate,
+    convertedToDate,
+    lastModifiedFromDate,
+    lastModifiedToDate,
     fetchLeads,
     fetchStats,
     fetchSalespersons
@@ -201,6 +214,10 @@ const AmaLeadsPage = () => {
       order: sortConfig.direction === "ascending" ? "asc" : "desc",
       startDate: fromDate,
       endDate: toDate,
+      convertedStartDate: convertedFromDate,
+      convertedEndDate: convertedToDate,
+      lastModifiedStartDate: lastModifiedFromDate,
+      lastModifiedEndDate: lastModifiedToDate,
     })
   }
 
@@ -218,6 +235,10 @@ const AmaLeadsPage = () => {
         order: sortConfig.direction === "ascending" ? "asc" : "desc",
         startDate: fromDate,
         endDate: toDate,
+        convertedStartDate: convertedFromDate,
+        convertedEndDate: convertedToDate,
+        lastModifiedStartDate: lastModifiedFromDate,
+        lastModifiedEndDate: lastModifiedToDate,
       }, true) // Pass true for append
     }
   }
@@ -246,7 +267,7 @@ const AmaLeadsPage = () => {
         container.removeEventListener("scroll", handleScroll)
       }
     }
-  }, [meta.page, meta.totalPages, isLoading, searchQuery, statusFilter, sourceFilter, salesPersonFilter, activeTab, sortConfig, fromDate, toDate])
+  }, [meta.page, meta.totalPages, isLoading, searchQuery, statusFilter, sourceFilter, salesPersonFilter, activeTab, sortConfig, fromDate, toDate, convertedFromDate, convertedToDate, lastModifiedFromDate, lastModifiedToDate])
 
   // Real-time Listeners
   const listenersRef = useRef<{ [key: string]: () => void }>({})
@@ -259,11 +280,13 @@ const AmaLeadsPage = () => {
       }
   }, [])
 
-  // 1. Collection Listener for New Leads (only when no search query)
+  // 1. Collection Listener for New Leads (only when no search query and NO advanced date filters)
   useEffect(() => {
       let collectionUnsubscribe: (() => void) | null = null;
       
-      if (!searchQuery) {
+      const hasAdvancedDateFilters = convertedFromDate || convertedToDate || lastModifiedFromDate || lastModifiedToDate;
+
+      if (!searchQuery && !hasAdvancedDateFilters) {
           let q = query(collection(db, "ama_leads"));
           
           // Apply Filters (matching API logic)
@@ -356,7 +379,7 @@ const AmaLeadsPage = () => {
       return () => {
           if (collectionUnsubscribe) collectionUnsubscribe();
       }
-  }, [searchQuery, statusFilter, sourceFilter, salesPersonFilter, activeTab, sortConfig, fromDate, toDate, meta.page])
+  }, [searchQuery, statusFilter, sourceFilter, salesPersonFilter, activeTab, sortConfig, fromDate, toDate, meta.page, convertedFromDate, convertedToDate, lastModifiedFromDate, lastModifiedToDate])
 
   // 2. Individual Document Listeners (for leads already in state)
   useEffect(() => {
@@ -666,6 +689,10 @@ const AmaLeadsPage = () => {
         order: sortConfig.direction === "ascending" ? "asc" : "desc",
         startDate: fromDate,
         endDate: toDate,
+        convertedStartDate: convertedFromDate,
+        convertedEndDate: convertedToDate,
+        lastModifiedStartDate: lastModifiedFromDate,
+        lastModifiedEndDate: lastModifiedToDate,
       })
       toast.success("All leads loaded")
     } catch (error) {
@@ -726,6 +753,15 @@ const AmaLeadsPage = () => {
               isSearching={isLoading}
               onSearchResults={() => {}} // Handled by hook
               databaseFilteredCount={meta.total}
+              // Advanced Date Filters
+              convertedFromDate={convertedFromDate}
+              setConvertedFromDate={setConvertedFromDate}
+              convertedToDate={convertedToDate}
+              setConvertedToDate={setConvertedToDate}
+              lastModifiedFromDate={lastModifiedFromDate}
+              setLastModifiedFromDate={setLastModifiedFromDate}
+              lastModifiedToDate={lastModifiedToDate}
+              setLastModifiedToDate={setLastModifiedToDate}
             />
 
             <AmaLeadsTable

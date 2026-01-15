@@ -38,6 +38,15 @@ type LeadsFiltersProps = {
   allLeadsCount?: number
   onSearchCleared?: () => void
   databaseFilteredCount?: number // Total count from database matching all filters
+  // New optional props for advanced filters
+  convertedFromDate?: string
+  setConvertedFromDate?: (date: string) => void
+  convertedToDate?: string
+  setConvertedToDate?: (date: string) => void
+  lastModifiedFromDate?: string
+  setLastModifiedFromDate?: (date: string) => void
+  lastModifiedToDate?: string
+  setLastModifiedToDate?: (date: string) => void
 }
 
 const AmaLeadsFilters = ({
@@ -68,6 +77,15 @@ const AmaLeadsFilters = ({
   allLeadsCount = 0,
   onSearchCleared,
   databaseFilteredCount = 0,
+  // New Advanced Date Filters Props
+  convertedFromDate,
+  setConvertedFromDate,
+  convertedToDate,
+  setConvertedToDate,
+  lastModifiedFromDate,
+  setLastModifiedFromDate,
+  lastModifiedToDate,
+  setLastModifiedToDate,
 }: LeadsFiltersProps) => {
   const [salesUsers, setSalesUsers] = useState<{ id: string; name: string }[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -353,7 +371,11 @@ const AmaLeadsFilters = ({
     setConvertedFilter(null)
     setFromDate("")
     setToDate("")
-  }, [clearSearch, setSourceFilter, setStatusFilter, setSalesPersonFilter, setConvertedFilter, setFromDate, setToDate])
+    if (setConvertedFromDate) setConvertedFromDate("")
+    if (setConvertedToDate) setConvertedToDate("")
+    if (setLastModifiedFromDate) setLastModifiedFromDate("")
+    if (setLastModifiedToDate) setLastModifiedToDate("")
+  }, [clearSearch, setSourceFilter, setStatusFilter, setSalesPersonFilter, setConvertedFilter, setFromDate, setToDate, setConvertedFromDate, setConvertedToDate, setLastModifiedFromDate, setLastModifiedToDate])
 
   // Check if any filters are active - memoized
   const hasActiveFilters = useMemo(() => {
@@ -364,9 +386,13 @@ const AmaLeadsFilters = ({
       salesPersonFilter !== "all" ||
       convertedFilter !== null ||
       fromDate ||
-      toDate
+      toDate ||
+      convertedFromDate ||
+      convertedToDate ||
+      lastModifiedFromDate ||
+      lastModifiedToDate
     )
-  }, [searchQuery, sourceFilter, statusFilter, salesPersonFilter, convertedFilter, fromDate, toDate])
+  }, [searchQuery, sourceFilter, statusFilter, salesPersonFilter, convertedFilter, fromDate, toDate, convertedFromDate, convertedToDate, lastModifiedFromDate, lastModifiedToDate])
 
   // Fetch sales users
   useEffect(() => {
@@ -406,6 +432,14 @@ const AmaLeadsFilters = ({
   const clearDateFilters = () => {
     setFromDate("")
     setToDate("")
+  }
+
+  // Clear Advanced date filters
+  const clearAdvancedDateFilters = () => {
+    if (setConvertedFromDate) setConvertedFromDate("")
+    if (setConvertedToDate) setConvertedToDate("")
+    if (setLastModifiedFromDate) setLastModifiedFromDate("")
+    if (setLastModifiedToDate) setLastModifiedToDate("")
   }
 
   return (
@@ -699,6 +733,84 @@ const AmaLeadsFilters = ({
             </div>
           </div>
         </div>
+
+        {/* Advanced Filters section for Admin/Overlord */}
+        {(userRole === "admin" || userRole === "overlord") && 
+          setConvertedFromDate && setConvertedToDate && 
+          setLastModifiedFromDate && setLastModifiedToDate && (
+          <div className="mt-4 pt-4 border-t border-[#5A4C33]/10">
+            <h3 className="text-sm font-medium text-[#5A4C33] mb-3">Advanced Date Filters</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Converted Date Range */}
+              <div className="space-y-1">
+                <CustomDateInput
+                  value={convertedFromDate || ''}
+                  onChange={(date) => setConvertedFromDate(date)}
+                  max={convertedToDate || today}
+                  placeholder="Converted From"
+                  label="Converted From"
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-1">
+                <CustomDateInput
+                  value={convertedToDate || ''}
+                  onChange={(date) => setConvertedToDate(date)}
+                  min={convertedFromDate}
+                  max={today}
+                  placeholder="Converted To"
+                  label="Converted To"
+                  className="w-full"
+                />
+              </div>
+
+              {/* Last Modified Date Range */}
+              <div className="space-y-1">
+                <CustomDateInput
+                  value={lastModifiedFromDate || ''}
+                  onChange={(date) => setLastModifiedFromDate(date)}
+                  max={lastModifiedToDate || today}
+                  placeholder="Modified From"
+                  label="Modified From"
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-1">
+                <CustomDateInput
+                  value={lastModifiedToDate || ''}
+                  onChange={(date) => setLastModifiedToDate(date)}
+                  min={lastModifiedFromDate}
+                  max={today}
+                  placeholder="Modified To"
+                  label="Modified To"
+                  className="w-full"
+                />
+              </div>
+
+              {/* Clear Advanced Filters Button */}
+              {(convertedFromDate || convertedToDate || lastModifiedFromDate || lastModifiedToDate) && (
+                <div className="flex items-end">
+                  <button
+                    onClick={clearAdvancedDateFilters}
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-[#ffffff] bg-[#D2A02A] hover:bg-[#B8911E] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#D2A02A]"
+                    type="button"
+                  >
+                    <svg
+                      className="mr-2 h-4 w-4"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Clear advanced filters
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

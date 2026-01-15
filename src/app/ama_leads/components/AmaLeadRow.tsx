@@ -625,6 +625,8 @@ const AmaLeadRow = ({
             onStatusChangeConfirmation={(leadId, leadName, newStatus) =>
               onStatusChangeConfirmation(leadId, leadName, newStatus)
             }
+            userRole={userRole}
+            textColor={rowColors.textColor}
           />
         )}
 

@@ -31,6 +31,10 @@ interface FetchParams {
     order?: "asc" | "desc"
     startDate?: string
     endDate?: string
+    convertedStartDate?: string
+    convertedEndDate?: string
+    lastModifiedStartDate?: string
+    lastModifiedEndDate?: string
 }
 
 interface LeadsMeta {
@@ -70,6 +74,10 @@ export const useLeads = () => {
             if (params.order) queryParams.set("order", params.order)
             if (params.startDate) queryParams.set("startDate", params.startDate)
             if (params.endDate) queryParams.set("endDate", params.endDate)
+            if (params.convertedStartDate) queryParams.set("convertedStartDate", params.convertedStartDate)
+            if (params.convertedEndDate) queryParams.set("convertedEndDate", params.convertedEndDate)
+            if (params.lastModifiedStartDate) queryParams.set("lastModifiedStartDate", params.lastModifiedStartDate)
+            if (params.lastModifiedEndDate) queryParams.set("lastModifiedEndDate", params.lastModifiedEndDate)
 
             const response = await fetch(`/api/leads?${queryParams.toString()}`, {
                 cache: 'no-store',

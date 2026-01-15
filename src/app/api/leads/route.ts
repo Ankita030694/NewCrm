@@ -93,6 +93,36 @@ export async function GET(request: NextRequest) {
             queryRef = queryRef.where("synced_at", "<=", Timestamp.fromDate(end))
         }
 
+        // Advanced Date Filters (Converted & Last Modified)
+        const convertedFromDate = searchParams.get("convertedStartDate")
+        const convertedToDate = searchParams.get("convertedEndDate")
+        const lastModifiedFromDate = searchParams.get("lastModifiedStartDate")
+        const lastModifiedToDate = searchParams.get("lastModifiedEndDate")
+
+        if (convertedFromDate) {
+            const start = new Date(convertedFromDate)
+            start.setHours(0, 0, 0, 0)
+            queryRef = queryRef.where("convertedAt", ">=", Timestamp.fromDate(start))
+        }
+
+        if (convertedToDate) {
+            const end = new Date(convertedToDate)
+            end.setHours(23, 59, 59, 999)
+            queryRef = queryRef.where("convertedAt", "<=", Timestamp.fromDate(end))
+        }
+
+        if (lastModifiedFromDate) {
+            const start = new Date(lastModifiedFromDate)
+            start.setHours(0, 0, 0, 0)
+            queryRef = queryRef.where("lastModified", ">=", Timestamp.fromDate(start))
+        }
+
+        if (lastModifiedToDate) {
+            const end = new Date(lastModifiedToDate)
+            end.setHours(23, 59, 59, 999)
+            queryRef = queryRef.where("lastModified", "<=", Timestamp.fromDate(end))
+        }
+
         // --- Pagination ---
         // For simple offset pagination (not efficient for massive datasets but easiest to drop-in replace)
         // For cursor pagination, we'd need to pass the last doc snapshot, which is hard via REST API without serializing it.
@@ -116,7 +146,7 @@ export async function GET(request: NextRequest) {
 
             const queries: Promise<FirebaseFirestore.QuerySnapshot>[] = []
 
-            // Helper to create base query with other filters
+            // Helper to create.baseQuery with other filters
             const createBaseQuery = () => {
                 let q = db.collection("ama_leads") as FirebaseFirestore.Query
                 if (tab === "callback") q = q.where("status", "==", "Callback")
@@ -134,6 +164,30 @@ export async function GET(request: NextRequest) {
                     const end = new Date(endDateParam)
                     end.setHours(23, 59, 59, 999)
                     q = q.where("synced_at", "<=", Timestamp.fromDate(end))
+                }
+
+                if (convertedFromDate) {
+                    const start = new Date(convertedFromDate)
+                    start.setHours(0, 0, 0, 0)
+                    q = q.where("convertedAt", ">=", Timestamp.fromDate(start))
+                }
+
+                if (convertedToDate) {
+                    const end = new Date(convertedToDate)
+                    end.setHours(23, 59, 59, 999)
+                    q = q.where("convertedAt", "<=", Timestamp.fromDate(end))
+                }
+
+                if (lastModifiedFromDate) {
+                    const start = new Date(lastModifiedFromDate)
+                    start.setHours(0, 0, 0, 0)
+                    q = q.where("lastModified", ">=", Timestamp.fromDate(start))
+                }
+
+                if (lastModifiedToDate) {
+                    const end = new Date(lastModifiedToDate)
+                    end.setHours(23, 59, 59, 999)
+                    q = q.where("lastModified", "<=", Timestamp.fromDate(end))
                 }
 
                 return q
@@ -278,7 +332,28 @@ export async function GET(request: NextRequest) {
         // --- Sorting ---
         // Only apply sorting if not searching (search usually requires specific order for range queries)
         if (!isSearchActive) {
-            queryRef = queryRef.orderBy(sortKey, sortDir)
+            // Check for inequality filters which dictate sort order
+            if (convertedFromDate || convertedToDate) {
+                // If filtering by convertedAt, we MUST sort by convertedAt first
+                queryRef = queryRef.orderBy("convertedAt", sortDir)
+                // Secondary sort can be kept or default
+                if (sortKey !== "convertedAt") {
+                    queryRef = queryRef.orderBy(sortKey, sortDir)
+                }
+            } else if (lastModifiedFromDate || lastModifiedToDate) {
+                // If filtering by lastModified, we MUST sort by lastModified first
+                queryRef = queryRef.orderBy("lastModified", sortDir)
+                // Secondary sort
+                if (sortKey !== "lastModified") {
+                    queryRef = queryRef.orderBy(sortKey, sortDir)
+                }
+            } else if (startDateParam || endDateParam) {
+                // synced_at filter
+                queryRef = queryRef.orderBy("synced_at", sortDir)
+            } else {
+                // No inequality filters limiting sort order
+                queryRef = queryRef.orderBy(sortKey, sortDir)
+            }
         }
 
         // --- Pagination ---

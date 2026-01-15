@@ -8,6 +8,8 @@ type AmaStatusCellProps = {
   onStatusChangeToLanguageBarrier?: (leadId: string, leadName: string) => void;
   onStatusChangeToConverted?: (leadId: string, leadName: string) => void;
   onStatusChangeConfirmation?: (leadId: string, leadName: string, newStatus: string) => void;
+  userRole?: string;
+  textColor?: string;
 };
 
 // Utility function to check if user can edit a lead
@@ -66,6 +68,61 @@ const getStatusColor = (status: string) => {
   return 'bg-gray-700 text-gray-200 border border-gray-600';
 };
 
+const formatTimestamp = (timestamp: any) => {
+  if (!timestamp) return 'N/A';
+  
+  // If it is a string, display it exactly as is (User Request)
+  if (typeof timestamp === 'string') {
+    return timestamp;
+  }
+  
+  try {
+    let date: Date;
+
+    // Handle Firestore Timestamp (has toDate method)
+    if (timestamp && typeof timestamp.toDate === 'function') {
+      date = timestamp.toDate();
+    } 
+    // Handle serialized Firestore Timestamp with underscores (has _seconds property)
+    else if (timestamp && typeof timestamp._seconds === 'number') {
+       date = new Date(timestamp._seconds * 1000);
+    }
+    // Handle serialized Firestore Timestamp (has seconds property)
+    else if (timestamp && typeof timestamp.seconds === 'number') {
+      date = new Date(timestamp.seconds * 1000);
+    } 
+    // Handle serialized Firestore Timestamp (check for seconds as string as well just in case)
+    else if (timestamp && typeof timestamp.seconds !== 'undefined') {
+       date = new Date(Number(timestamp.seconds) * 1000);
+    } 
+    // Handle Date object
+    else if (timestamp instanceof Date) {
+      date = timestamp;
+    } 
+    // Fallback for number or other types
+    else {
+      date = new Date(timestamp);
+    }
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return 'Invalid Date';
+    }
+
+    return date.toLocaleString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Error';
+  }
+};
+
 const AmaStatusCell = ({
   lead,
   updateLead,
@@ -74,6 +131,8 @@ const AmaStatusCell = ({
   onStatusChangeToLanguageBarrier,
   onStatusChangeToConverted,
   onStatusChangeConfirmation,
+  userRole,
+  textColor,
 }: AmaStatusCellProps) => {
   
   const canEdit = canUserEditLead(lead);
@@ -151,6 +210,31 @@ const AmaStatusCell = ({
             );
           })}
         </select>
+
+        {/* Show lastModified and convertedAt info only for admin and overlord roles */}
+        {(userRole === "admin" || userRole === "overlord") && (
+          <div className="flex flex-col gap-1 mt-2">
+            {/* Last Modified timestamp */}
+            <div className={`text-[10px] ${textColor ? "text-white/70" : "text-[#5A4C33]/60"}`}>
+              Last Modified:
+            </div>
+            <div className={`text-[10px] ${textColor ? "text-white/90" : "text-[#5A4C33]/80"}`}>
+              {formatTimestamp(lead.lastModified)}
+            </div>
+
+            {/* Converted At timestamp - only show for converted leads */}
+            {lead.status === "Converted" && lead.convertedAt && (
+              <>
+                <div className={`text-[10px] ${textColor ? "text-white/70" : "text-green-600/70"} mt-1`}>
+                  Converted At:
+                </div>
+                <div className={`text-[10px] ${textColor ? "text-white/90" : "text-green-600/90"}`}>
+                  {formatTimestamp(lead.convertedAt)}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </td>
   );
