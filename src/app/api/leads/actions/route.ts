@@ -54,8 +54,26 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ error: "Missing status" }, { status: 400 })
             }
 
-            leadIds.forEach((id) => {
+            // Prefetch leads to get current status and assignment details
+            // This allows us to determine if a target update is needed (e.g. Converted status change)
+            // and allows us to use the data for CAPI triggers without re-fetching.
+            const leadSnaps = await Promise.all(leadIds.map(id => leadsRef.doc(id).get()))
+
+            interface TargetUpdate {
+                userId: string;
+                userName: string;
+                change: number;
+            }
+            const targetUpdates: TargetUpdate[] = [];
+
+            leadSnaps.forEach((snap) => {
+                if (!snap.exists) return; // Should not happen given leadIds are valid, but safety check
+
+                const id = snap.id
                 const docRef = leadsRef.doc(id)
+                const data = snap.data();
+                const currentStatus = data?.status;
+
                 const updateData: any = {
                     status,
                     lastModified: FieldValue.serverTimestamp(),
@@ -67,7 +85,6 @@ export async function POST(request: NextRequest) {
                     updateData.convertedToClient = true
                 } else {
                     // If status is NOT Converted, remove the converted flags/timestamps
-                    // This ensures the tick mark is removed if status changes from Converted to something else
                     updateData.convertedAt = FieldValue.delete()
                     updateData.convertedToClient = FieldValue.delete()
                 }
@@ -78,17 +95,44 @@ export async function POST(request: NextRequest) {
                 }
 
                 batch.update(docRef, updateData)
+
+                // --- Target Update Logic ---
+                // Identify if status changed to/from 'Converted'
+                const isConverting = status === 'Converted' && currentStatus !== 'Converted';
+                const isDeconverting = status !== 'Converted' && currentStatus === 'Converted';
+
+                if (isConverting || isDeconverting) {
+                    // Identify Salesperson
+                    // Try assigned_to_id (snake_case) first as per schema seen in 'assign' action
+                    // Fallback to assignedToId (camelCase) or userId or assigned_to (name)
+                    const assignedToId = data?.assigned_to_id || data?.assignedToId || data?.userId;
+                    const assignedToName = data?.assigned_to || data?.assignedTo || 'Unknown';
+
+                    if (assignedToId) {
+                        targetUpdates.push({
+                            userId: assignedToId,
+                            userName: assignedToName,
+                            change: isConverting ? 1 : -1
+                        });
+                    } else if (assignedToName && assignedToName !== 'Unknown') {
+                        // Fallback: If no ID but name exists (legacy?), log warning or try name match?
+                        // For safety, we prefer ID. But if system relies on names, we might store name as ID? 
+                        // Billcut leads uses 'userName' for matching. We should try to find by Name if ID missing.
+                        // But best practice is ID. We'll store what we have.
+                        targetUpdates.push({
+                            userId: '', // Flag to searching by name if needed, or just skip if critical
+                            userName: assignedToName,
+                            change: isConverting ? 1 : -1
+                        });
+                    }
+                }
             })
 
-            // Meta CAPI Trigger Logic
+            // Meta CAPI Trigger Logic (Moved outside loop, uses pre-fetched leadSnaps)
             if (status === 'Converted' || status === 'Qualified') {
                 const { testEventCode } = payload
-                // We need to fetch lead data to check source and get contact info
-                // This is done outside the batch update loop for efficiency
                 const triggerCapi = async () => {
                     try {
-                        const leadSnaps = await Promise.all(leadIds.map(id => leadsRef.doc(id).get()))
-
                         for (const snap of leadSnaps) {
                             if (!snap.exists) continue
 
@@ -96,15 +140,12 @@ export async function POST(request: NextRequest) {
                             if (!data) continue
 
                             const source = (data.source || "").toLowerCase().trim()
-                            // Check if source is credsettle (handling variations)
                             if (source.includes("credsettle")) {
                                 const email = String(data.email || "")
                                 const phone = String(data.phone || data.mobile || data.number || "")
 
                                 if (email || phone) {
-                                    console.log(`[CAPI] Triggering for lead ${snap.id} (Source: ${source}) with testEventCode: ${testEventCode}`)
-
-                                    // Fire and forget the fetch to avoid blocking the response
+                                    console.log(`[CAPI] Triggering for lead ${snap.id} (Source: ${source})`)
                                     fetch("https://www.credsettle.com/api/meta/capi", {
                                         method: "POST",
                                         headers: { "Content-Type": "application/json" },
@@ -116,30 +157,21 @@ export async function POST(request: NextRequest) {
                                             leadId: snap.id,
                                             testEventCode: testEventCode
                                         })
-                                    }).then(async res => {
-                                        const resText = await res.text()
-                                        if (!res.ok) {
-                                            console.error(`[CAPI ERROR] Failed for ${snap.id}: ${res.status} ${res.statusText} - ${resText}`)
-                                        } else {
-                                            console.log(`[CAPI SUCCESS] Sent for ${snap.id}: ${res.status} - ${resText}`)
-                                        }
-                                    }).catch(err => {
-                                        console.error(`[CAPI ERROR] Fetch failed for ${snap.id}:`, err)
-                                    })
-                                } else {
-                                    console.log(`[CAPI SKIP] Lead ${snap.id} has no email or phone`)
+                                    }).catch(console.error)
                                 }
-                            } else {
-                                console.log(`[CAPI SKIP] Lead ${snap.id} source is not credsettle: "${source}"`)
                             }
                         }
                     } catch (err) {
-                        console.error("[CAPI ERROR] Error in trigger logic:", err)
+                        console.error("[CAPI ERROR]", err)
                     }
                 }
+                triggerCapi() // Fire and forget
+            }
 
-                // Execute trigger logic
-                triggerCapi()
+            // Execute Target Updates (Async, but awaited before response to ensure consistency if possible, 
+            // or fire-and-forget if latency concern. Awaiting is safer for "targets updated" guarantee)
+            if (targetUpdates.length > 0) {
+                await processTargetUpdates(targetUpdates);
             }
         } else if (action === "update_notes") {
             const { salesNotes } = payload
@@ -166,5 +198,63 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error("Error performing lead action:", error)
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+    }
+}
+
+// Helper function to process target updates
+async function processTargetUpdates(updates: { userId: string, userName: string, change: number }[]) {
+    try {
+        const now = new Date();
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const currentMonth = monthNames[now.getMonth()];
+        const currentYear = now.getFullYear();
+        const monthDocId = `${currentMonth}_${currentYear}`;
+
+        const targetsRef = adminDb!.collection('targets');
+        const monthDocRef = targetsRef.doc(monthDocId);
+        const salesTargetsRef = monthDocRef.collection('sales_targets');
+
+        // We process updates sequentially to handle creation/updates safely
+        for (const update of updates) {
+            const { userId, userName, change } = update;
+            if (!userId && !userName) continue;
+
+            // Query for existing target document
+            // If userId is present, use it. If not, fallback to userName (legacy compat)
+            let query = salesTargetsRef.limit(1);
+            if (userId) {
+                query = query.where('userId', '==', userId);
+            } else {
+                query = query.where('userName', '==', userName);
+            }
+
+            const snapshot = await query.get();
+
+            if (!snapshot.empty) {
+                // Update existing
+                const docRef = snapshot.docs[0].ref;
+                // Atomic increment
+                await docRef.update({
+                    convertedLeads: FieldValue.increment(change),
+                    updatedAt: FieldValue.serverTimestamp()
+                });
+            } else if (change > 0) {
+                // Create new (only if incrementing)
+                await salesTargetsRef.add({
+                    userId: userId || '',
+                    userName: userName || 'Unknown',
+                    convertedLeads: change,
+                    convertedLeadsTarget: 0,
+                    amountCollected: 0,
+                    amountCollectedTarget: 0,
+                    createdAt: FieldValue.serverTimestamp(),
+                    updatedAt: FieldValue.serverTimestamp(),
+                    createdBy: 'api'
+                });
+            }
+        }
+    } catch (error) {
+        console.error("Error processing target updates:", error);
+        // We do not throw here to avoid failing the main API response
     }
 }
