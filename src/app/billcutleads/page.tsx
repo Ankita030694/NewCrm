@@ -475,6 +475,8 @@ const BillCutLeadsPage = () => {
       const constraints: any[] = []
 
       // Date filters - using 'date' field instead of 'synced_date'
+      const hasDateFilter = !!(fromDate || toDate)
+      
       if (fromDate) {
         // Explicitly construct UTC date to avoid local timezone interference
         const start = new Date(`${fromDate}T00:00:00.000Z`)
@@ -555,20 +557,37 @@ const BillCutLeadsPage = () => {
         constraints.push(where("category", "==", "Callback"))
       }
 
-      // Add ordering based on whether Advanced Date Filters are active
-      if (hasAdvancedDateFilters) {
-        // When Advanced Date Filters are active, sort by lastModified and convertedAt
-        if (convertedFromDate || convertedToDate) {
-          // If converted date filters are active, sort by convertedAt first, then lastModified
-          constraints.push(orderBy("convertedAt", "desc"))
-          constraints.push(orderBy("lastModified", "desc"))
+      // Determine Sort Order
+      // We can only use Debt Range sort if there are NO inequality filters (Range filters) active.
+      const hasInequalityFilters = hasDateFilter || hasAdvancedDateFilters
+
+      if (debtRangeSort !== "none" && !hasInequalityFilters) {
+        // Apply Server-Side Debt Sort
+        if (debtRangeSort === "low-to-high") {
+          constraints.push(orderBy("debt_range", "asc"))
         } else {
-          // If only lastModified filters are active, sort by lastModified
-          constraints.push(orderBy("lastModified", "desc"))
+          constraints.push(orderBy("debt_range", "desc"))
         }
-      } else {
-        // Default sorting - use 'date' field for consistency
+        // Secondary sort by date for consistency
         constraints.push(orderBy("date", "desc"))
+      } else {
+        // Default Sorting
+        
+        // Add ordering based on whether Advanced Date Filters are active
+        if (hasAdvancedDateFilters) {
+          // When Advanced Date Filters are active, sort by lastModified and convertedAt
+          if (convertedFromDate || convertedToDate) {
+            // If converted date filters are active, sort by convertedAt first, then lastModified
+            constraints.push(orderBy("convertedAt", "desc"))
+            constraints.push(orderBy("lastModified", "desc"))
+          } else {
+            // If only lastModified filters are active, sort by lastModified
+            constraints.push(orderBy("lastModified", "desc"))
+          }
+        } else {
+          // Default sorting - use 'date' field for consistency
+          constraints.push(orderBy("date", "desc"))
+        }
       }
 
       // Add pagination
@@ -580,7 +599,7 @@ const BillCutLeadsPage = () => {
 
       return query(baseQuery, ...constraints)
     },
-    [fromDate, toDate, statusFilter, salesPersonFilter, showMyLeads, activeTab, userRole, convertedFromDate, convertedToDate, lastModifiedFromDate, lastModifiedToDate],
+    [fromDate, toDate, statusFilter, salesPersonFilter, showMyLeads, activeTab, userRole, convertedFromDate, convertedToDate, lastModifiedFromDate, lastModifiedToDate, debtRangeSort],
   )
 
   // Build count query to get total filtered results
@@ -1050,14 +1069,28 @@ const BillCutLeadsPage = () => {
         const hasAdvancedDateFilters = (userRole === "admin" || userRole === "overlord") && 
             (convertedFromDate || convertedToDate || lastModifiedFromDate || lastModifiedToDate)
 
-        if (hasAdvancedDateFilters) {
+        const hasDateFilter = !!(fromDate || toDate)
+        const hasInequalityFilters = hasDateFilter || hasAdvancedDateFilters
+
+        if (debtRangeSort !== "none" && !hasInequalityFilters) {
+          // Apply Server-Side Debt Sort
+          if (debtRangeSort === "low-to-high") {
+            q = query(q, orderBy("debt_range", "asc"))
+          } else {
+            q = query(q, orderBy("debt_range", "desc"))
+          }
+          // Secondary sort by date for consistency
+          q = query(q, orderBy("date", "desc"))
+        } else {
+          if (hasAdvancedDateFilters) {
             if (convertedFromDate || convertedToDate) {
                 q = query(q, orderBy("convertedAt", "desc"), orderBy("lastModified", "desc"));
             } else {
                 q = query(q, orderBy("lastModified", "desc"));
             }
-        } else {
+          } else {
             q = query(q, orderBy("date", "desc"));
+          }
         }
 
         q = query(q, limit(LEADS_PER_PAGE));
