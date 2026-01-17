@@ -168,27 +168,27 @@ const getCallbackDateColor = (scheduledDate: Date) => {
 
   if (scheduledDateOnly.getTime() === todayOnly.getTime()) {
     return {
-      textColor: "text-[#ffffff] font-bold",
-      dotColor: "bg-[#ffffff]",
-      rowBg: "bg-red-600",
+      textColor: "",
+      dotColor: "bg-red-600",
+      rowBg: "hover:bg-[#F8F5EC] border-l-4 border-red-600",
     }
   } else if (scheduledDateOnly.getTime() === tomorrowOnly.getTime()) {
     return {
-      textColor: "text-[#ffffff] font-bold",
-      dotColor: "bg-[#ffffff]",
-      rowBg: "bg-yellow-500",
+      textColor: "",
+      dotColor: "bg-yellow-500",
+      rowBg: "hover:bg-[#F8F5EC] border-l-4 border-yellow-500",
     }
   } else if (scheduledDateOnly.getTime() >= dayAfterTomorrowOnly.getTime()) {
     return {
-      textColor: "text-[#ffffff] font-bold",
-      dotColor: "bg-[#ffffff]",
-      rowBg: "bg-green-600",
+      textColor: "",
+      dotColor: "bg-green-600",
+      rowBg: "hover:bg-[#F8F5EC] border-l-4 border-green-600",
     }
   } else {
     return {
-      textColor: "text-[#ffffff]",
-      dotColor: "bg-[#ffffff]",
-      rowBg: "bg-gray-600",
+      textColor: "",
+      dotColor: "bg-gray-600",
+      rowBg: "hover:bg-[#F8F5EC] border-l-4 border-gray-600",
     }
   }
 }
@@ -348,7 +348,7 @@ const AmaLeadRow = ({
       }
     }
     return {
-      rowBg: "hover:bg-[#F8F5EC]",
+      rowBg: "hover:bg-[#F8F5EC] border-l-4 border-transparent",
       textColor: "",
     }
   }
