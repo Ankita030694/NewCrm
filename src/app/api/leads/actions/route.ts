@@ -129,6 +129,8 @@ export async function POST(request: NextRequest) {
             })
 
             // Meta CAPI Trigger Logic (Moved outside loop, uses pre-fetched leadSnaps)
+            // COMMMENTED OUT AS PER REQUEST - META CAPI NOT NEEDED FOR NOW
+            /*
             if (status === 'Converted' || status === 'Qualified') {
                 const { testEventCode } = payload
                 const triggerCapi = async () => {
@@ -167,6 +169,7 @@ export async function POST(request: NextRequest) {
                 }
                 triggerCapi() // Fire and forget
             }
+            */
 
             // Execute Target Updates (Async, but awaited before response to ensure consistency if possible, 
             // or fire-and-forget if latency concern. Awaiting is safer for "targets updated" guarantee)

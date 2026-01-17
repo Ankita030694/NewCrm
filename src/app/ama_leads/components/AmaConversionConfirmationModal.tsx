@@ -67,7 +67,9 @@ const AmaConversionConfirmationModal: React.FC<AmaConversionConfirmationModalPro
             Lead: <span className="text-[#D2A02A]">{leadName}</span>
           </p>
           
-          <div className="mt-4">
+            {/* 
+            // COMMENTED OUT - META CAPI NOT NEEDED FOR NOW
+            <div className="mt-4">
             <label htmlFor="testEventCode" className="block text-sm font-medium text-[#5A4C33]/70 mb-1">
               Meta Test Event Code (Optional)
             </label>
@@ -84,6 +86,7 @@ const AmaConversionConfirmationModal: React.FC<AmaConversionConfirmationModalPro
               Required only for testing conversion events in Meta Events Manager.
             </p>
           </div>
+          */}
 
           <div className="mt-4 p-3 bg-[#F8F5EC] rounded-lg border border-[#5A4C33]/10">
             <p className="text-sm text-[#5A4C33]/70">
