@@ -86,11 +86,12 @@ export async function POST(request: NextRequest) {
 
                 if (leadFound) {
                     const leadData = matchedSnap.docs[0].data();
-                    const currentStatus = (collectionName === "ama_leads" ? leadData.status : leadData.category) || "";
+                    const rawStatus = (collectionName === "ama_leads" ? leadData.status : leadData.category) || "";
+                    const normalizedStatus = String(rawStatus).trim().toLowerCase();
 
-                    // Exclude ONLY 'Converted' status
-                    if (currentStatus === "Converted") {
-                        console.log(`[WATI_WEBHOOK] SKIP: Lead ${leadId} is 'Converted'. Ignoring automation trigger.`);
+                    // Exclude 'Converted' status (case insensitive)
+                    if (normalizedStatus === "converted") {
+                        console.log(`[WATI_WEBHOOK] SKIP: Lead ${leadId} is '${rawStatus}'. Ignoring automation trigger.`);
                     } else {
                         if (collectionName === "ama_leads") {
                             await db.collection("ama_leads").doc(leadId).update({
