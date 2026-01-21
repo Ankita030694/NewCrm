@@ -89,16 +89,7 @@ export async function POST(request: NextRequest) {
                     updateData.convertedToClient = FieldValue.delete()
                 }
 
-                // Handle Not Answering
-                if (status === 'Not Answering') {
-                    updateData.notAnsweringAt = FieldValue.serverTimestamp()
-                    // Reset follow-up flag in case this lead enters this status again
-                    updateData.notAnsweringFollowupSent = FieldValue.delete()
-                } else {
-                    // If status changes AWAY from Not Answering, clear the timestamp so automation doesn't fire later unexpectedly
-                    updateData.notAnsweringAt = FieldValue.delete()
-                    updateData.notAnsweringFollowupSent = FieldValue.delete()
-                }
+                // Handle Language Barrier (Moved up, Not Answering logic removed)
 
                 // Handle Language Barrier
                 if (status === 'Language Barrier' && payload.language) {

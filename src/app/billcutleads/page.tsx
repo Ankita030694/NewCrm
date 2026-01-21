@@ -1343,17 +1343,6 @@ const BillCutLeadsPage = () => {
 
       if ("status" in data) {
         updateData.category = data.status
-        
-        // Handle Not Answering timestamp
-        if (data.status === 'Not Answering') {
-           updateData.notAnsweringAt = serverTimestamp()
-           // Reset follow-up flag in case this lead enters this status again
-           updateData.notAnsweringFollowupSent = deleteField() 
-        } else {
-           // If status changes AWAY from Not Answering, clear the timestamp
-           updateData.notAnsweringAt = deleteField()
-           updateData.notAnsweringFollowupSent = deleteField()
-        }
       }
 
       if ("assignedTo" in data) {
