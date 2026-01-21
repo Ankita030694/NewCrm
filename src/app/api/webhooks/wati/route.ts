@@ -85,32 +85,40 @@ export async function POST(request: NextRequest) {
                 }
 
                 if (leadFound) {
-                    if (collectionName === "ama_leads") {
-                        await db.collection("ama_leads").doc(leadId).update({
-                            status: "Retargeting",
-                            synced_at: FieldValue.serverTimestamp(),
-                            lastModified: FieldValue.serverTimestamp(),
-                        });
+                    const leadData = matchedSnap.docs[0].data();
+                    const currentStatus = (collectionName === "ama_leads" ? leadData.status : leadData.category) || "";
+
+                    // Exclude ONLY 'Converted' status
+                    if (currentStatus === "Converted") {
+                        console.log(`[WATI_WEBHOOK] SKIP: Lead ${leadId} is 'Converted'. Ignoring automation trigger.`);
                     } else {
-                        // BillCut Leads Logic
-                        // Status field is 'category'
-                        // Bump field is 'synced_date' (based on page.tsx logic)
-                        await db.collection("billcutLeads").doc(leadId).update({
-                            category: "Retargeting",
-                            synced_date: FieldValue.serverTimestamp(),
-                            lastModified: FieldValue.serverTimestamp(),
+                        if (collectionName === "ama_leads") {
+                            await db.collection("ama_leads").doc(leadId).update({
+                                status: "Retargeting",
+                                synced_at: FieldValue.serverTimestamp(),
+                                lastModified: FieldValue.serverTimestamp(),
+                            });
+                        } else {
+                            // BillCut Leads Logic
+                            // Status field is 'category'
+                            // Bump field is 'synced_date' (based on page.tsx logic)
+                            await db.collection("billcutLeads").doc(leadId).update({
+                                category: "Retargeting",
+                                synced_date: FieldValue.serverTimestamp(),
+                                lastModified: FieldValue.serverTimestamp(),
+                            });
+                        }
+
+                        // Add system note
+                        await db.collection(collectionName).doc(leadId).collection(collectionName === "billcutLeads" ? "salesNotes" : "history").add({
+                            content: `Auto-moved to Retargeting via Wati interest response ("${text}")`,
+                            createdAt: FieldValue.serverTimestamp(),
+                            createdBy: "System (Wati Webhook)",
+                            type: "system"
                         });
+
+                        console.log(`[WATI_WEBHOOK] Updated lead ${leadId} in ${collectionName} to Retargeting`);
                     }
-
-                    // Add system note
-                    await db.collection(collectionName).doc(leadId).collection(collectionName === "billcutLeads" ? "salesNotes" : "history").add({
-                        content: `Auto-moved to Retargeting via Wati interest response ("${text}")`,
-                        createdAt: FieldValue.serverTimestamp(),
-                        createdBy: "System (Wati Webhook)",
-                        type: "system"
-                    });
-
-                    console.log(`[WATI_WEBHOOK] Updated lead ${leadId} in ${collectionName} to Retargeting`);
                 } else {
                     console.log(`[WATI_WEBHOOK] Lead not found for phone ${senderPhone} in any collection`);
                 }
