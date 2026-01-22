@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
             }
 
             // Check triggers
-            const triggers = ["yes", "ok", "okay"];
+            const triggers = ["Scrumptious"];
             const isInterested = triggers.some(trigger => text.includes(trigger));
 
             if (isInterested) {
