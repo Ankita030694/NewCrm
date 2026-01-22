@@ -85,7 +85,7 @@ interface ClientTableRowProps {
   latestRemark: string
   onStatusChange: (clientId: string, newStatus: string) => void
   onRequestLetterChange: (clientId: string, checked: boolean) => void
-  onRemarkSave: (clientId: string, remark: string) => void
+  onRemarkSave: (clientId: string, remark: string) => Promise<void>
   onAppStatusSave: (clientId: string, status: string, currentStatus: any[]) => void
   onViewHistory: (clientId: string) => void
   onViewAppStatusHistory: (client: Client) => void
@@ -111,6 +111,7 @@ export default function ClientTableRow({
   isSendingWhatsApp,
 }: ClientTableRowProps) {
   const [remarkText, setRemarkText] = useState(latestRemark || "")
+  const [isSaving, setIsSaving] = useState(false)
   
   // App Status state - Sort by createdAt to get the latest
   const getLatestAppStatus = (statusArray?: any[]) => {
@@ -155,8 +156,14 @@ export default function ClientTableRow({
     }
   }, [showWhatsAppMenu])
 
-  const handleRemarkSave = () => {
-    onRemarkSave(client.id, remarkText)
+  const handleRemarkSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true)
+    try {
+      await onRemarkSave(client.id, remarkText)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleAppStatusSave = () => {
@@ -298,9 +305,18 @@ export default function ClientTableRow({
           <div className="flex space-x-1.5">
             <button
               onClick={handleRemarkSave}
-              className="px-2 py-0.5 bg-green-700 hover:bg-green-600 text-white text-xs rounded transition-colors duration-200"
+              disabled={isSaving}
+              className={`px-2 py-0.5 text-white text-xs rounded transition-colors duration-200 flex items-center justify-center min-w-[50px] ${
+                isSaving 
+                  ? "bg-green-800 cursor-not-allowed opacity-75" 
+                  : "bg-green-700 hover:bg-green-600"
+              }`}
             >
-              Save
+              {isSaving ? (
+                <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-white"></div>
+              ) : (
+                "Save"
+              )}
             </button>
             <button
               onClick={() => onViewHistory(client.id)}

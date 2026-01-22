@@ -73,7 +73,7 @@ interface ClientsTableProps {
   latestRemarks: { [key: string]: string }
   onStatusChange: (clientId: string, newStatus: string) => void
   onRequestLetterChange: (clientId: string, checked: boolean) => void
-  onRemarkSave: (clientId: string, remark: string) => void
+  onRemarkSave: (clientId: string, remark: string) => Promise<void>
   onAppStatusSave: (clientId: string, status: string, currentStatus: any[]) => void
   onViewHistory: (clientId: string) => void
   onViewAppStatusHistory: (client: Client) => void
