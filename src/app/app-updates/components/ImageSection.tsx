@@ -1,23 +1,126 @@
-'use client';
+'use client'; 
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '@/firebase/ama_app'; // Use the secondary app instance
-import { doc, updateDoc, arrayUnion, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { toast } from 'react-toastify';
-import { FaTrash, FaUpload, FaSpinner, FaImage } from 'react-icons/fa';
+import { FaTrash, FaUpload, FaSpinner, FaImage, FaSave, FaGripVertical } from 'react-icons/fa';
+import {
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface ImageSectionProps {
   sectionName: string; // 'home', 'ama', 'services', 'casedesk'
   title: string;
 }
 
+interface ImageItem {
+  id: string; // Unique identifier for the image
+  url: string;
+  priority: number; 
+}
+
+// --- Sortable Image Component ---
+const SortableImageItem = ({ 
+    img, 
+    index, 
+    handleDelete 
+}: { 
+    img: ImageItem, 
+    index: number, 
+    handleDelete: (item: ImageItem) => void 
+}) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: img.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 1,
+        opacity: isDragging ? 0.5 : 1,
+    };
+
+    return (
+        <div 
+            ref={setNodeRef} 
+            style={style} 
+            className="group relative bg-gray-50 rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col"
+        >
+            <div className="aspect-video relative overflow-hidden bg-gray-200">
+                <img 
+                    src={img.url} 
+                    alt={`Image ${index + 1}`} 
+                    className="w-full h-full object-cover"
+                />
+                <div className="absolute top-2 right-2 flex gap-2 z-20">
+                     <button
+                        onClick={() => handleDelete(img)}
+                        className="p-1.5 bg-red-600/90 text-white rounded shadow-sm hover:bg-red-700 transition"
+                        title="Remove Image"
+                        onPointerDown={(e) => e.stopPropagation()} // Prevent drag start
+                    >
+                        <FaTrash size={12} />
+                    </button>
+                </div>
+                
+                {/* Drag Handle Overlay */}
+                <div 
+                    {...attributes} 
+                    {...listeners}
+                    className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing bg-black/30"
+                >
+                     <FaGripVertical className="text-white text-3xl drop-shadow-md" />
+                </div>
+            </div>
+            <div className="p-2 border-t border-gray-100 flex justify-between items-center text-xs text-gray-500 bg-white">
+                <span>Priority: {index + 1}</span>
+                <span className="cursor-grab active:cursor-grabbing" {...listeners} {...attributes}>
+                    Drag to reorder
+                </span>
+            </div>
+        </div>
+    );
+};
+
+
 const ImageSection: React.FC<ImageSectionProps> = ({ sectionName, title }) => {
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<ImageItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [savingOrder, setSavingOrder] = useState(false);
 
-  // Fetch images for this section
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+        activationConstraint: {
+            distance: 8, // Require 8px movement to start drag (prevents accidental drags)
+        }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
   useEffect(() => {
     const docRef = doc(db, 'images', sectionName);
     
@@ -25,9 +128,26 @@ const ImageSection: React.FC<ImageSectionProps> = ({ sectionName, title }) => {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setImages(data.urls || []);
+        let fetchedImages: ImageItem[] = [];
+
+        // Handle backward compatibility
+        if (Array.isArray(data.urls)) {
+            fetchedImages = data.urls.map((item: any) => {
+                if (typeof item === 'string') {
+                    return {
+                        id: item, 
+                        url: item,
+                        priority: 999 
+                    };
+                }
+                return item as ImageItem;
+            });
+        }
+        
+        // Sort by priority on initial fetch
+        fetchedImages.sort((a, b) => a.priority - b.priority);
+        setImages(fetchedImages);
       } else {
-        // Create the document if it doesn't exist
         setDoc(docRef, { urls: [] });
         setImages([]);
       }
@@ -47,7 +167,6 @@ const ImageSection: React.FC<ImageSectionProps> = ({ sectionName, title }) => {
 
     setUploading(true);
     try {
-      // 1. Upload to Storage
       const timestamp = Date.now();
       const storagePath = `${sectionName}/${timestamp}_${file.name}`;
       const storageRef = ref(storage, storagePath);
@@ -55,10 +174,15 @@ const ImageSection: React.FC<ImageSectionProps> = ({ sectionName, title }) => {
       const snapshot = await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(snapshot.ref);
 
-      // 2. Save URL to Firestore
+      const newImage: ImageItem = {
+          id: storagePath,
+          url: downloadURL,
+          priority: images.length + 1
+      };
+
       const docRef = doc(db, 'images', sectionName);
       await updateDoc(docRef, {
-        urls: arrayUnion(downloadURL)
+        urls: arrayUnion(newImage)
       });
 
       toast.success('Image uploaded successfully!');
@@ -67,44 +191,76 @@ const ImageSection: React.FC<ImageSectionProps> = ({ sectionName, title }) => {
       toast.error('Failed to upload image.');
     } finally {
       setUploading(false);
-      // Reset input
       e.target.value = '';
     }
   };
   
-  const handleDelete = async (url: string) => {
+  const handleDelete = async (item: ImageItem) => {
     if (!confirm('Are you sure you want to remove this image?')) return;
-    
     try {
-      // 1. Delete from Storage
-      // Create a reference from the HTTPS URL
-      // Note: ref(storage, url) works for download URLs
       try {
-        const storageRef = ref(storage, url);
+        const storageRef = ref(storage, item.url);
         await deleteObject(storageRef);
       } catch (storageError: any) {
-        console.warn('Storage delete error (might already be deleted):', storageError);
-        // We continue to delete from Firestore even if storage delete fails (e.g. 404)
+        console.warn('Storage delete error:', storageError);
         if (storageError.code !== 'storage/object-not-found') {
-           // If it's a permission error or something else, we might want to warn user, 
-           // but seeing as this is an admin tool, clearing the db entry is often desired anyway.
            toast.warn('Could not delete file from storage, but removing from list.');
         }
       }
 
-      // 2. Remove from Firestore
       const docRef = doc(db, 'images', sectionName);
-      const { arrayRemove } = await import('firebase/firestore');
-      
-      await updateDoc(docRef, {
-        urls: arrayRemove(url)
-      });
-      
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+          const currentData = docSnap.data();
+          const currentList = currentData.urls || [];
+          const updatedList = currentList.filter((i: any) => {
+              if (typeof i === 'string') return i !== item.url;
+              return i.url !== item.url;
+          });
+          
+          await updateDoc(docRef, { urls: updatedList });
+      }
       toast.success('Image permanently deleted');
     } catch (error) {
       console.error('Delete error:', error);
       toast.error('Failed to remove image');
     }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setImages((items) => {
+        const oldIndex = items.findIndex((i) => i.id === active.id);
+        const newIndex = items.findIndex((i) => i.id === over.id);
+        
+        // Create new array with correct order
+        const newOrder = arrayMove(items, oldIndex, newIndex);
+        
+        // Update priorities based on new index
+        return newOrder.map((item, idx) => ({
+            ...item,
+            priority: idx + 1
+        }));
+      });
+    }
+  };
+
+  const saveOrder = async () => {
+      setSavingOrder(true);
+      try {
+          const docRef = doc(db, 'images', sectionName);
+          await updateDoc(docRef, {
+              urls: images
+          });
+          toast.success('Order saved successfully!');
+      } catch (error) {
+          console.error("Error saving order:", error);
+          toast.error("Failed to save order");
+      } finally {
+          setSavingOrder(false);
+      }
   };
 
   return (
@@ -118,22 +274,34 @@ const ImageSection: React.FC<ImageSectionProps> = ({ sectionName, title }) => {
             <p className="text-gray-500 text-sm mt-1">Manage assets for the {title} app section</p>
         </div>
         
-        <div className="relative">
-            <input
-                type="file"
-                id={`file-upload-${sectionName}`}
-                className="hidden"
-                accept="image/*"
-                onChange={handleFileUpload}
-                disabled={uploading}
-            />
-            <label 
-                htmlFor={`file-upload-${sectionName}`}
-                className={`flex items-center gap-2 px-4 py-2 bg-[#D2A02A] hover:bg-[#b88b25] text-white rounded-md cursor-pointer transition-colors shadow-sm font-medium text-sm ${uploading ? 'opacity-70 cursor-not-allowed' : ''}`}
-            >
-                {uploading ? <FaSpinner className="animate-spin" /> : <FaUpload />}
-                {uploading ? 'Uploading...' : 'Upload Image'}
-            </label>
+        <div className="flex gap-2">
+            {images.length > 0 && (
+                <button
+                    onClick={saveOrder}
+                    disabled={savingOrder}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors shadow-sm font-medium text-sm disabled:opacity-70"
+                >
+                    {savingOrder ? <FaSpinner className="animate-spin" /> : <FaSave />}
+                    Save Order
+                </button>
+            )}
+            <div className="relative">
+                <input
+                    type="file"
+                    id={`file-upload-${sectionName}`}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    disabled={uploading}
+                />
+                <label 
+                    htmlFor={`file-upload-${sectionName}`}
+                    className={`flex items-center gap-2 px-4 py-2 bg-[#D2A02A] hover:bg-[#b88b25] text-white rounded-md cursor-pointer transition-colors shadow-sm font-medium text-sm ${uploading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                >
+                    {uploading ? <FaSpinner className="animate-spin" /> : <FaUpload />}
+                    {uploading ? 'Uploading...' : 'Upload Image'}
+                </label>
+            </div>
         </div>
       </div>
 
@@ -150,26 +318,27 @@ const ImageSection: React.FC<ImageSectionProps> = ({ sectionName, title }) => {
             <p className="text-gray-400 text-sm mt-1">Upload an image to populate this section</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {images.map((url, index) => (
-                <div key={index} className="group relative aspect-video bg-gray-100 rounded-lg overflow-hidden border border-gray-200 hover:shadow-md transition-shadow">
-                    <img 
-                        src={url} 
-                        alt={`${title} ${index + 1}`} 
-                        className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button
-                            onClick={() => handleDelete(url)}
-                            className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition-transform hover:scale-105 shadow-sm"
-                            title="Remove Image"
-                        >
-                            <FaTrash />
-                        </button>
-                    </div>
+        <DndContext 
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+        >
+            <SortableContext 
+                items={images.map(i => i.id)}
+                strategy={rectSortingStrategy}
+            >
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {images.map((img, index) => (
+                        <SortableImageItem 
+                            key={img.id} 
+                            img={img} 
+                            index={index}
+                            handleDelete={handleDelete}
+                        />
+                    ))}
                 </div>
-            ))}
-        </div>
+            </SortableContext>
+        </DndContext>
       )}
     </div>
   );
