@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
+import { getStorage } from "firebase/storage";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 
@@ -25,5 +26,6 @@ if (getApps().some(a => a.name === appName)) {
 
 const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 const db = getFirestore(app);
+const storage = getStorage(app);
 
-export { app, analytics, db };
+export { app, analytics, db, storage };

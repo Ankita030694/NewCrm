@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { FiHome, FiUsers, FiClipboard, FiSettings, FiBarChart2, FiDatabase, FiLogOut, FiUserPlus, FiShare2, FiBriefcase, FiCalendar, FiCheckSquare, FiBarChart, FiPieChart, FiCreditCard, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import { FiHome, FiUsers, FiClipboard, FiSettings, FiBarChart2, FiDatabase, FiLogOut, FiUserPlus, FiShare2, FiBriefcase, FiCalendar, FiCheckSquare, FiBarChart, FiPieChart, FiCreditCard, FiChevronDown, FiChevronRight, FiRefreshCw } from 'react-icons/fi';
 import { FaBalanceScale, FaMoneyBillWave, FaUserFriends, FaFolder, FaFileAlt, FaEnvelopeOpenText, FaHandshake, FaClipboardList, FaMoneyCheckAlt, FaMobileAlt, FaBell, FaQuestionCircle, FaCommentDots, FaInfoCircle } from 'react-icons/fa';
 import { getAuth, signOut } from 'firebase/auth';
 import { toast } from 'react-hot-toast';
@@ -202,6 +202,7 @@ const OverlordSidebar: React.FC<OverlordSidebarProps> = ({ children }) => {
         { href: '/appQueries', icon: <FaQuestionCircle />, label: 'Queries', isActive: false },
         { href: '/feedback', icon: <FaCommentDots />, label: 'Feedback', isActive: false },
         { href: '/ama-questions', icon: <FaInfoCircle />, label: 'AMA', isActive: false },
+        { href: '/app-updates', icon: <FiRefreshCw />, label: 'App Updates', isActive: false },
       ]
     },
     {
