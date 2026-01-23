@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { db } from '@/firebase/firebase'
-import { collection, getDocs, addDoc, query, orderBy, where, limit, serverTimestamp, updateDoc, deleteDoc, doc, startAfter, DocumentData, QueryDocumentSnapshot } from 'firebase/firestore'
+import { collection, getDocs, addDoc, query, orderBy, where, limit, serverTimestamp, updateDoc, deleteDoc, doc, startAfter, DocumentData, QueryDocumentSnapshot, getCountFromServer } from 'firebase/firestore'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -137,6 +137,7 @@ const SettlementTracker = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
+  const [totalCount, setTotalCount] = useState(0)
   
   // Add new state for remarks management
   const [settlementRemarks, setSettlementRemarks] = useState<{ [key: string]: string }>({})
@@ -274,8 +275,6 @@ const SettlementTracker = () => {
       setLastVisible(lastVisibleDoc)
       setHasMore(snapshot.docs.length === 20)
       
-
-      
       // Process each settlement and fetch latest remark
       const settlementsData = await processSettlementDocs(snapshot.docs)
       
@@ -298,6 +297,23 @@ const SettlementTracker = () => {
     } finally {
       setLoading(false)
       setIsLoadingMore(false)
+    }
+  }
+
+  // Fetch total count from server
+  const fetchTotalCount = async () => {
+    try {
+      const settlementsRef = collection(db, 'settlements')
+      let q = query(settlementsRef)
+
+      if (filterStatus !== 'All') {
+        q = query(settlementsRef, where('status', '==', filterStatus))
+      }
+
+      const snapshot = await getCountFromServer(q)
+      setTotalCount(snapshot.data().count)
+    } catch (error) {
+      console.error('Error fetching total count:', error)
     }
   }
 
@@ -326,7 +342,7 @@ const SettlementTracker = () => {
   useEffect(() => {
     const loadData = async () => {
       // Initial load
-      await Promise.all([fetchSettlements(false), fetchClients()])
+      await Promise.all([fetchSettlements(false), fetchClients(), fetchTotalCount()])
     }
     
     loadData()
@@ -337,6 +353,7 @@ const SettlementTracker = () => {
     setLastVisible(null)
     setHasMore(true)
     fetchSettlements(false)
+    fetchTotalCount()
   }, [filterStatus])
 
   // Infinite scroll observer
@@ -580,6 +597,7 @@ const SettlementTracker = () => {
       setLastVisible(null)
       setHasMore(true)
       await fetchSettlements(false)
+      await fetchTotalCount()
       
     } catch (error) {
       console.error('Error adding settlement:', error)
@@ -761,6 +779,9 @@ const SettlementTracker = () => {
 
       // Update local state
       setSettlements(settlements.filter((settlement) => settlement.id !== settlementToDelete.id))
+      
+      // Refresh count
+      fetchTotalCount()
 
       alert("Settlement deleted successfully")
       setIsDeleteModalOpen(false)
@@ -1004,11 +1025,9 @@ const SettlementTracker = () => {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className={`text-xl ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>Settlement Records</CardTitle>
-              {searchTerm && (
-                <span className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {filteredSettlements.length} of {settlements.length} settlements
+                <span className={`text-sm font-semibold ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                   Total Records: {totalCount}
                 </span>
-              )}
             </div>
           </CardHeader>
           <CardContent>
