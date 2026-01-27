@@ -902,6 +902,30 @@ function ClientsPageWithParams() {
       let apiEndpoint = '/api/agreement';
       let requestData: any = clientData;
       
+    // Helper to format date reliably
+    const getFormattedDate = (dateVal: any): string => {
+      if (!dateVal) return new Date().toISOString().split('T')[0];
+      
+      // Handle Firestore Timestamp
+      if (typeof dateVal === 'object' && typeof dateVal.toDate === 'function') {
+        try {
+          return dateVal.toDate().toISOString().split('T')[0];
+        } catch (e) {
+          console.error("Error converting timestamp:", e);
+          return new Date().toISOString().split('T')[0];
+        }
+      }
+      
+      // Handle string or Date object
+      try {
+        return new Date(dateVal).toISOString().split('T')[0];
+      } catch (e) {
+        return new Date().toISOString().split('T')[0];
+      }
+    };
+
+    const formattedDate = getFormattedDate(clientData.startDate);
+
       if (clientData.source_database === 'billcut' && clientData.banks) {
         // Calculate total loan amount
         const totalLoanAmount = clientData.banks.reduce((total: number, bank: any) => {
@@ -922,7 +946,7 @@ function ClientsPageWithParams() {
             email: clientData.email,
             panNumber: clientData.panNumber,
             feePercentage: feePercentage,
-            date: clientData.startDate || new Date().toISOString().split('T')[0],
+            date: formattedDate,
             banks: clientData.banks.map((bank: any) => ({
               bankName: bank.bankName,
               loanAmount: bank.loanAmount,
@@ -942,7 +966,7 @@ function ClientsPageWithParams() {
             email: clientData.email,
             panNumber: clientData.panNumber,
             feePercentage: adjustedPercentage, // Pass the adjusted percentage
-            date: clientData.startDate || new Date().toISOString().split('T')[0],
+            date: formattedDate,
             banks: clientData.banks.map((bank: any) => ({
               bankName: bank.bankName,
               loanAmount: bank.loanAmount,
@@ -987,10 +1011,19 @@ function ClientsPageWithParams() {
 
       // Check if we need to regenerate agreement
       if (editingClient.shouldGenerateAgreement) {
-        if (!editingClient.feePercentage && editingClient.source_database === 'billcut') {
-           showToast("Missing Fee Percentage", "Please enter a fee percentage to regenerate the agreement.", "error");
-           setIsSaving(false);
-           return;
+        if (editingClient.source_database === 'billcut') {
+           const missingFields = [];
+           if (!editingClient.name) missingFields.push('Name');
+           if (!editingClient.email) missingFields.push('Email');
+           if (!editingClient.panNumber) missingFields.push('PAN Number');
+           if (!editingClient.feePercentage) missingFields.push('Fee Percentage');
+           if (!editingClient.banks || editingClient.banks.length === 0) missingFields.push('Banks');
+
+           if (missingFields.length > 0) {
+             showToast("Missing Required Fields", `Please fill the following fields to generate agreement: ${missingFields.join(', ')}`, "error");
+             setIsSaving(false);
+             return;
+           }
         }
 
         showToast("Generating Agreement", "Please wait while the agreement is being generated...", "info");

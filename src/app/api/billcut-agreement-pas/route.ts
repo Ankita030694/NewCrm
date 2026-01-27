@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       banks = []
     } = data;
 
-    if (!name || !email || !panNumber || !feePercentage || !date || !banks || banks.length === 0) {
+    if (!name || !email || !panNumber || (feePercentage === undefined || feePercentage === null) || !date || !banks || banks.length === 0) {
       return NextResponse.json(
         { error: 'Required fields are missing: name, email, panNumber, feePercentage, date, and banks array are required' },
         { status: 400 }
