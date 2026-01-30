@@ -329,7 +329,27 @@ function ClientsPageWithParams() {
   const [isBulkWhatsAppModalOpen, setIsBulkWhatsAppModalOpen] = useState(false)
 
   // Add new state for theme
+  // Add new state for theme
   const [theme, setTheme] = useState<"light" | "dark">("light")
+  const [isThemeLoaded, setIsThemeLoaded] = useState(false)
+
+  // Load theme from local storage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null
+      if (savedTheme) {
+        setTheme(savedTheme)
+      }
+      setIsThemeLoaded(true)
+    }
+  }, [])
+
+  // Save theme to local storage when it changes
+  useEffect(() => {
+    if (typeof window !== "undefined" && isThemeLoaded) {
+      localStorage.setItem("theme", theme)
+    }
+  }, [theme, isThemeLoaded])
 
   // Add new state for bulk select by number
   const [bulkSelectNumber, setBulkSelectNumber] = useState<string>("")
@@ -1656,7 +1676,7 @@ function ClientsPageWithParams() {
         const advocatesQuery = query(
           collection(db, "users"),
           where("role", "==", "advocate"),
-          // Removed status filter to include inactive advocates
+          where("status", "==", "active"),
         )
 
         const querySnapshot = await getDocs(advocatesQuery)
@@ -2284,7 +2304,7 @@ function ClientsPageWithParams() {
                    {/* Status Filter - Always Visible */}
                    <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className={`w-[140px] h-9 text-sm ${
-                      theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"
+                      theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900"
                     }`}>
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
@@ -2299,7 +2319,7 @@ function ClientsPageWithParams() {
                   {/* Primary Advocate - Always Visible */}
                   <Select value={primaryAdvocateFilter} onValueChange={setPrimaryAdvocateFilter}>
                     <SelectTrigger className={`w-[160px] h-9 text-sm ${
-                      theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"
+                      theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900"
                     }`}>
                       <SelectValue placeholder="Primary Advocate" />
                     </SelectTrigger>
@@ -2359,7 +2379,7 @@ function ClientsPageWithParams() {
                   <div className="space-y-1.5">
                     <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Secondary Advocate</label>
                     <Select value={secondaryAdvocateFilter} onValueChange={setSecondaryAdvocateFilter}>
-                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900"}`}>
                         <SelectValue placeholder="Select Advocate" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2374,7 +2394,7 @@ function ClientsPageWithParams() {
                   <div className="space-y-1.5">
                     <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Source</label>
                     <Select value={sourceFilter} onValueChange={setSourceFilter} disabled={userRole === "billcut"}>
-                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"} ${userRole === "billcut" ? "opacity-50" : ""}`}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900"} ${userRole === "billcut" ? "opacity-50" : ""}`}>
                         <SelectValue placeholder="Select Source" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2389,7 +2409,7 @@ function ClientsPageWithParams() {
                   <div className="space-y-1.5">
                     <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Document Status</label>
                     <Select value={documentFilter} onValueChange={setDocumentFilter}>
-                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900"}`}>
                         <SelectValue placeholder="Select Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2403,7 +2423,7 @@ function ClientsPageWithParams() {
                   <div className="space-y-1.5">
                     <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Bank Name</label>
                     <Select value={bankNameFilter} onValueChange={setBankNameFilter}>
-                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900"}`}>
                         <SelectValue placeholder="Select Bank" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2418,7 +2438,7 @@ function ClientsPageWithParams() {
                   <div className="space-y-1.5">
                     <label className={`text-xs font-medium ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>Agreement Status</label>
                     <Select value={agreementFilter} onValueChange={setAgreementFilter}>
-                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}>
+                      <SelectTrigger className={`w-full h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900"}`}>
                         <SelectValue placeholder="Select Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2439,7 +2459,7 @@ function ClientsPageWithParams() {
                       className={`h-9 text-sm ${
                         theme === "dark" 
                           ? "bg-gray-900 border-gray-700 text-gray-200" 
-                          : "bg-white border-gray-200"
+                          : "bg-white border-gray-200 text-gray-900"
                       }`}
                     />
                   </div>
@@ -2454,7 +2474,7 @@ function ClientsPageWithParams() {
                       className={`h-9 text-sm ${
                         theme === "dark" 
                           ? "bg-gray-900 border-gray-700 text-gray-200" 
-                          : "bg-white border-gray-200"
+                          : "bg-white border-gray-200 text-gray-900"
                       }`}
                     />
                   </div>
@@ -2469,7 +2489,7 @@ function ClientsPageWithParams() {
                            value={bulkSelectNumber}
                            onChange={(e) => setBulkSelectNumber(e.target.value)}
                            onKeyPress={handleBulkSelectKeyPress}
-                           className={`h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200"}`}
+                           className={`h-9 text-sm ${theme === "dark" ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-900"}`}
                            type="number"
                            min="1"
                          />
