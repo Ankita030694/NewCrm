@@ -7,10 +7,28 @@ import { AppLead } from './types';
 import AppLeadsTable from './components/AppLeadsTable';
 import OverlordSidebar from "@/components/navigation/OverlordSidebar";
 import AdminSidebar from "@/components/navigation/AdminSidebar";
+import AppLeadsHistoryModal from './components/AppLeadsHistoryModal';
 import { FiSearch, FiDownload } from 'react-icons/fi';
+import { toast } from 'react-toastify';
+
+const statusOptions = [
+  "No Status",
+  "Interested",
+  "Not Interested",
+  "Not Answering",
+  "Callback",
+  "Future Potential",
+  "Converted",
+  "Language Barrier",
+  "Closed Lead",
+  "Loan Required",
+  "Short Loan",
+  "Cibil Issue",
+  "Retargeting",
+]
 
 export default function AppLeadsPage() {
-  const { userRole, loading: authLoading } = useAuth();
+  const { userRole, user, userName, loading: authLoading } = useAuth();
   const router = useRouter();
   const [leads, setLeads] = useState<AppLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,8 +38,14 @@ export default function AppLeadsPage() {
   const [lastId, setLastId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState('');
+
+  // History Modal State
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyLeadId, setHistoryLeadId] = useState<string | null>(null);
+  const [historyLeadName, setHistoryLeadName] = useState<string | null>(null);
 
   // Export to CSV function
   const exportToCSV = async () => {
@@ -50,6 +74,10 @@ export default function AppLeadsPage() {
         } else if (lastCreatedAtVal && lastIdVal) {
            params.append('lastCreatedAt', lastCreatedAtVal);
            params.append('lastId', lastIdVal);
+        }
+
+        if (statusFilter !== 'all') {
+          params.append('status', statusFilter);
         }
 
         const response = await fetch(`/api/app-leads?${params.toString()}`, { cache: 'no-store' });
@@ -88,6 +116,8 @@ export default function AppLeadsPage() {
         "Phone": lead.phone || "",
         "Email": lead.email || "",
         "State": lead.state || "",
+        "Status": lead.status || "",
+        "Remarks": lead.remarks || "",
         "Source": lead.source || "",
         "Query": lead.query || "",
       }));
@@ -126,17 +156,50 @@ export default function AppLeadsPage() {
     }
   };
 
-  const fetchLeads = useCallback(async (isLoadMore = false, query = '') => {
+  const handleUpdateLead = async (id: string, updates: Partial<AppLead>) => {
+    try {
+      const response = await fetch('/api/app-leads', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id, 
+          ...updates,
+          user: {
+            uid: user?.uid,
+            name: userName
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update lead');
+      }
+
+      setLeads((prev) =>
+        prev.map((lead) => (lead.id === id ? { ...lead, ...updates } : lead))
+      );
+      toast.success('Lead updated successfully');
+    } catch (err) {
+      console.error('Error updating lead:', err);
+      toast.error('Failed to update lead');
+    }
+  };
+
+  const fetchLeads = useCallback(async (isLoadMore = false) => {
     try {
       setLoading(true);
       setError(null);
       const params = new URLSearchParams({ limit: '50' });
       
-      if (query) {
-        params.append('search', query);
+      if (searchQuery) {
+        params.append('search', searchQuery);
       } else if (isLoadMore && lastCreatedAt && lastId) {
         params.append('lastCreatedAt', lastCreatedAt.toString());
         params.append('lastId', lastId);
+      }
+
+      if (statusFilter !== 'all') {
+        params.append('status', statusFilter);
       }
 
       const response = await fetch(`/api/app-leads?${params.toString()}`, { cache: 'no-store' });
@@ -172,7 +235,7 @@ export default function AppLeadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [lastCreatedAt, lastId]);
+  }, [lastCreatedAt, lastId, searchQuery, statusFilter]);
 
   useEffect(() => {
     if (!authLoading && userRole !== 'admin' && userRole !== 'overlord') {
@@ -181,20 +244,20 @@ export default function AppLeadsPage() {
   }, [userRole, authLoading, router]);
 
   useEffect(() => {
-    // Initial load
-    fetchLeads(false, searchQuery);
-  }, []);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Reset pagination state on new search
+    // Initial load or filter change
     setLastCreatedAt(null);
     setLastId(null);
-    fetchLeads(false, searchQuery);
-  };
+    fetchLeads(false);
+  }, [searchQuery, statusFilter]);
 
   const handleLoadMore = () => {
-    fetchLeads(true, searchQuery);
+    fetchLeads(true);
+  };
+
+  const handleViewHistory = (leadId: string, leadName: string) => {
+    setHistoryLeadId(leadId);
+    setHistoryLeadName(leadName);
+    setShowHistoryModal(true);
   };
 
   if (authLoading) {
@@ -223,19 +286,50 @@ export default function AppLeadsPage() {
                 </div>
             </div>
             
-            {/* Search Bar */}
-            <form onSubmit={handleSearch} className="relative max-w-md">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FiSearch className="h-5 w-5 text-gray-400" />
+            {/* Filters Row */}
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <FiSearch className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-[#D2A02A] focus:border-[#D2A02A] sm:text-sm"
+                      placeholder="Search by name or phone number..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                 </div>
-                <input
-                  type="text"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-[#D2A02A] focus:border-[#D2A02A] sm:text-sm"
-                  placeholder="Search by name or phone number..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-            </form>
+
+                {/* Status Filter */}
+                <div className="flex items-center space-x-2">
+                  <label htmlFor="statusFilter" className="text-sm font-medium text-gray-700">Status:</label>
+                  <select
+                    id="statusFilter"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="block w-full pl-3 pr-10 py-2 text-sm border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-[#D2A02A] focus:border-[#D2A02A] rounded-md"
+                  >
+                    <option value="all">All Status</option>
+                    {statusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    setSearchQuery('');
+                    setStatusFilter('all');
+                  }}
+                  className="text-xs text-[#D2A02A] hover:underline"
+                >
+                  Clear Filters
+                </button>
+            </div>
         </header>
         
         <main className="flex-1 p-6">
@@ -251,10 +345,20 @@ export default function AppLeadsPage() {
                 leads={leads} 
                 hasMore={hasMore} 
                 loading={loading} 
-                loadMore={handleLoadMore} 
+                loadMore={handleLoadMore}
+                statusOptions={statusOptions}
+                onUpdateLead={handleUpdateLead}
+                onViewHistory={handleViewHistory}
              />
           </div>
         </main>
+
+        <AppLeadsHistoryModal 
+          isOpen={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          leadId={historyLeadId || ""}
+          leadName={historyLeadName || ""}
+        />
       </div>
   );
 

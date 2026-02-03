@@ -21,56 +21,57 @@ export async function GET(request: NextRequest) {
     const lastCreatedAtParam = searchParams.get('lastCreatedAt');
     const lastIdParam = searchParams.get('lastId');
     const searchQuery = searchParams.get('search');
+    const statusFilter = searchParams.get('status');
 
     const collectionRef = collection(db, 'leads');
     let q;
     let total = 0;
 
-    // If search query is present, we'll search by phone number or name
-    // Note: Firestore doesn't support full-text search natively. 
-    // We'll implement a basic prefix search for phone and exact match for name/email if needed
-    // For a production app with large dataset, consider Algolia or ElasticSearch
+    // Base query filters
+    let baseFilters = [];
+    if (statusFilter && statusFilter !== 'all') {
+      if (statusFilter === 'No Status') {
+        baseFilters.push(where('status', 'in', ['No Status', '', null]));
+      } else {
+        baseFilters.push(where('status', '==', statusFilter));
+      }
+    }
 
     if (searchQuery) {
       const trimmedQuery = searchQuery.trim();
 
-      // Try searching by phone first
-      // This is a simple implementation. A more robust one would use a dedicated search service.
-      // We can't easily combine multiple OR conditions with different fields in Firestore in a single query 
-      // without complex index setup or multiple queries.
-      // Prioritizing Phone Number search as it's most unique
+      // ... existing search logic ...
+      // Note: Firestore doesn't allow multiple inequalities on different fields.
+      // Search already uses inequalities on 'phone' or 'name'.
+      // If status filter is also present, it's an equality, so it should be fine.
 
       if (/^\d+$/.test(trimmedQuery)) {
-        // It's a number, search by phone
         q = query(
           collectionRef,
+          ...baseFilters,
           where('phone', '>=', trimmedQuery),
           where('phone', '<=', trimmedQuery + '\uf8ff'),
           limit(limitParam)
         );
       } else {
-        // Search by name (case-sensitive unfortunately in standard Firestore)
-        // We'll try to match name
         q = query(
           collectionRef,
+          ...baseFilters,
           where('name', '>=', trimmedQuery),
           where('name', '<=', trimmedQuery + '\uf8ff'),
           limit(limitParam)
         );
       }
-
-      // Count for search results is harder to get efficiently without reading all, 
-      // so we might skip total count for search or do a separate count query if critical.
-      // For now, we'll just get the docs.
-
     } else {
       // Default pagination logic
-      // Get total count only for default view
-      const countSnapshot = await getCountFromServer(collectionRef);
+      // Get total count only for default view (or with status filter)
+      const countQuery = query(collectionRef, ...baseFilters);
+      const countSnapshot = await getCountFromServer(countQuery);
       total = countSnapshot.data().count;
 
       q = query(
         collectionRef,
+        ...baseFilters,
         orderBy('created_at', 'desc'),
         orderBy('__name__', 'desc'),
         limit(limitParam)
@@ -81,6 +82,7 @@ export async function GET(request: NextRequest) {
         if (!isNaN(lastCreatedAt)) {
           q = query(
             collectionRef,
+            ...baseFilters,
             orderBy('created_at', 'desc'),
             orderBy('__name__', 'desc'),
             startAfter(lastCreatedAt, lastIdParam),
@@ -102,7 +104,9 @@ export async function GET(request: NextRequest) {
         phone: data.phone,
         query: data.query,
         source: data.source,
-        state: data.state
+        state: data.state,
+        status: data.status || 'No Status',
+        remarks: data.remarks || ''
       };
     });
 
@@ -113,6 +117,53 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error fetching app leads:', error);
+    return NextResponse.json({ error: 'Internal Server Error', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
+  }
+}
+
+import { amaAppDb } from '@/firebase/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
+
+export async function PATCH(request: NextRequest) {
+  if (!amaAppDb) {
+    return NextResponse.json({ error: 'AMA App Admin not initialized' }, { status: 500 });
+  }
+
+  try {
+    const body = await request.json();
+    const { id, user, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Lead ID is required' }, { status: 400 });
+    }
+
+    const docRef = amaAppDb.collection('leads').doc(id);
+
+    // Check if remarks were updated
+    if (updates.remarks !== undefined) {
+      const historyRef = docRef.collection('history');
+      await historyRef.add({
+        content: updates.remarks,
+        createdBy: user?.name || 'Unknown User',
+        createdById: user?.uid || '',
+        createdAt: FieldValue.serverTimestamp(),
+        displayDate: new Date().toLocaleString('en-IN', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        })
+      });
+    }
+
+    await docRef.update(updates);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error updating app lead:', error);
     return NextResponse.json({ error: 'Internal Server Error', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

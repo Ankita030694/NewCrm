@@ -7,6 +7,8 @@ export interface AppLead {
   query: string;
   source: string;
   state: string;
+  status?: string;
+  remarks?: string;
 }
 
 export interface AppLeadsResponse {
