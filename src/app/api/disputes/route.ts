@@ -9,7 +9,9 @@ import {
     query,
     orderBy,
     limit,
-    where
+    where,
+    doc,
+    getDoc
 } from 'firebase/firestore';
 
 export async function GET(request: NextRequest) {
@@ -75,8 +77,37 @@ export async function GET(request: NextRequest) {
 
         const paginatedDisputes = allDisputes.slice(startIndex, startIndex + limitParam);
 
+        // Join with user data from login_users
+        const uniqueUserIds = Array.from(new Set(paginatedDisputes.map(d => d.parentDocId)));
+        const userMap: { [key: string]: { email?: string; phone?: string } } = {};
+
+        // Fetch user docs in parallel
+        await Promise.all(uniqueUserIds.map(async (uid) => {
+            if (!uid) return;
+            try {
+                const userDocRef = doc(db, 'login_users', uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    const userData = userDocSnap.data();
+                    userMap[uid] = {
+                        email: userData.email,
+                        phone: userData.phone
+                    };
+                }
+            } catch (err) {
+                console.error(`Error fetching user data for ${uid}:`, err);
+            }
+        }));
+
+        // Map user data back to disputes
+        const finalDisputes = paginatedDisputes.map(dispute => ({
+            ...dispute,
+            userEmail: userMap[dispute.parentDocId]?.email || '',
+            userPhone: userMap[dispute.parentDocId]?.phone || ''
+        }));
+
         return NextResponse.json({
-            disputes: paginatedDisputes,
+            disputes: finalDisputes,
             total: total,
             hasMore: startIndex + limitParam < total
         });

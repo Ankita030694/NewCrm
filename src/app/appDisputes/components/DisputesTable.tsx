@@ -123,7 +123,11 @@ export default function DisputesTable({ disputes, hasMore, loading, loadMore, st
                         : ''}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{dispute.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <div>{dispute.name}</div>
+                    <div className="text-[10px] text-gray-500 font-normal mt-0.5">{dispute.userEmail}</div>
+                    <div className="text-[10px] text-[#D2A02A] font-normal">{dispute.userPhone}</div>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{dispute.phone}</td>
                   
                   <td className="px-6 py-4 whitespace-nowrap text-sm">

@@ -111,6 +111,8 @@ export default function DisputesPage() {
         "Submitted At": dispute.submittedAt ? new Date(dispute.submittedAt).toLocaleString() : "",
         "Name": dispute.name || "",
         "Phone": dispute.phone || "",
+        "Registered Email": dispute.userEmail || "",
+        "Registered Phone": dispute.userPhone || "",
         "Service": dispute.selected_service || "",
         "Status": dispute.status || "",
         "Remarks": dispute.remarks || "",
