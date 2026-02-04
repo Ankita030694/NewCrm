@@ -53,7 +53,7 @@ const AdminSidebar = () => {
             </Link>
           </li>
           <li>
-            <Link href="/appLeads" className={`flex items-center px-6 py-3 ${isActive('/appLeads')} transition-all duration-200 hover:bg-gray-800/70 hover:text-indigo-400 group`}>
+            <Link href="/appDisputes" className={`flex items-center px-6 py-3 ${isActive('/appDisputes')} transition-all duration-200 hover:bg-gray-800/70 hover:text-indigo-400 group`}>
               <FaMobileAlt className="mr-3 text-gray-500 group-hover:text-indigo-400 transition-colors duration-200" />
               <span>App Leads</span>
             </Link>

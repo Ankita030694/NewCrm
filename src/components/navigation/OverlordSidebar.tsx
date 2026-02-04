@@ -146,6 +146,7 @@ const OverlordSidebar: React.FC<OverlordSidebarProps> = ({ children }) => {
       children: [
         { href: '/ama_leads', icon: <FiBarChart2 />, label: 'Sales & Leads', isActive: false },
         { href: '/billcutleads', icon: <FiBarChart2 />, label: 'Billcut Leads', isActive: false },
+        { href: '/appDisputes', icon: <FiClipboard />, label: 'App Leads', isActive: false },
         { href: '/targets', icon: <FiClipboard />, label: 'Targets', isActive: false },
       ]
     },
@@ -196,8 +197,8 @@ const OverlordSidebar: React.FC<OverlordSidebarProps> = ({ children }) => {
       icon: <FaMobileAlt />,
       label: 'AMA App',
       children: [
-        { href: '/appUsers', icon: <FaUserFriends />, label: 'Users', isActive: false },
-        { href: '/appLeads', icon: <FiBarChart2 />, label: 'Leads', isActive: false },
+        { href: '/appUsers', icon: <FaUserFriends />, label: 'Team and Clients', isActive: false },
+        { href: '/appLeads', icon: <FiBarChart2 />, label: 'Users', isActive: false },
         { href: '/ama-app/notifications', icon: <FaBell />, label: 'Notifications', isActive: false },
         { href: '/appQueries', icon: <FaQuestionCircle />, label: 'Queries', isActive: false },
         { href: '/feedback', icon: <FaCommentDots />, label: 'Feedback', isActive: false },

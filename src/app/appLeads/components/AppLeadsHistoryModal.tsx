@@ -15,9 +15,10 @@ type AppLeadsHistoryModalProps = {
   onClose: () => void;
   leadId: string;
   leadName?: string;
+  apiPath?: string;
 };
 
-const AppLeadsHistoryModal = ({ isOpen, onClose, leadId, leadName }: AppLeadsHistoryModalProps) => {
+const AppLeadsHistoryModal = ({ isOpen, onClose, leadId, leadName, apiPath = '/api/app-leads' }: AppLeadsHistoryModalProps) => {
   const [history, setHistory] = useState<AppHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -27,7 +28,7 @@ const AppLeadsHistoryModal = ({ isOpen, onClose, leadId, leadName }: AppLeadsHis
       
       setLoading(true);
       try {
-        const response = await fetch(`/api/app-leads/${leadId}/history`, {
+        const response = await fetch(`${apiPath}/${leadId}/history`, {
             cache: 'no-store',
             headers: {
                 'Pragma': 'no-cache',
