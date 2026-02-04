@@ -7,6 +7,7 @@ import { AppLead } from './types';
 import AppLeadsTable from './components/AppLeadsTable';
 import OverlordSidebar from "@/components/navigation/OverlordSidebar";
 import AdminSidebar from "@/components/navigation/AdminSidebar";
+import SalesSidebar from "@/components/navigation/SalesSidebar";
 import AppLeadsHistoryModal from './components/AppLeadsHistoryModal';
 import { FiSearch, FiDownload } from 'react-icons/fi';
 import { toast } from 'react-toastify';
@@ -238,7 +239,7 @@ export default function AppLeadsPage() {
   }, [lastCreatedAt, lastId, searchQuery, statusFilter]);
 
   useEffect(() => {
-    if (!authLoading && userRole !== 'admin' && userRole !== 'overlord') {
+    if (!authLoading && userRole !== 'admin' && userRole !== 'overlord' && userRole !== 'sales' && userRole !== 'salesperson') {
       router.push('/login');
     }
   }, [userRole, authLoading, router]);
@@ -366,6 +367,19 @@ export default function AppLeadsPage() {
     return (
       <div className="flex h-screen bg-gray-100">
         <AdminSidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
+             {content}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (userRole === 'sales' || userRole === 'salesperson') {
+    return (
+      <div className="flex h-screen bg-gray-100">
+        <SalesSidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto">
              {content}
