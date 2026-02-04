@@ -132,7 +132,7 @@ export default function AppLeadsTable({ leads, hasMore, loading, loadMore, statu
                       <select 
                         value={lead.status || 'No Status'}
                         onChange={(e) => handleStatusChange(lead.id, e.target.value)}
-                        className="text-xs border border-gray-300 rounded p-1"
+                        className="text-xs border border-gray-300 rounded p-1 bg-white text-gray-900"
                       >
                         {statusOptions.map(option => (
                           <option key={option} value={option}>{option}</option>
@@ -145,7 +145,7 @@ export default function AppLeadsTable({ leads, hasMore, loading, loadMore, statu
                   <td className="px-6 py-4 text-sm text-gray-500">
                     <div className="flex flex-col space-y-1">
                       <textarea
-                        className="text-xs border border-gray-300 rounded p-1 w-full min-w-[150px]"
+                        className="text-xs border border-gray-300 rounded p-1 w-full min-w-[150px] bg-white text-gray-900"
                         rows={2}
                         value={editingRemarks[lead.id] !== undefined ? editingRemarks[lead.id] : lead.remarks || ''}
                         onChange={(e) => handleRemarksChange(lead.id, e.target.value)}
