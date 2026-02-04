@@ -147,6 +147,15 @@ const SalesSidebar: React.FC<SalesSidebarProps> = ({ collapsed }) => {
             </Link>
           </li>
           <li>
+            <Link href="/appLeads" 
+              className={`flex items-center py-3 hover:bg-green-700 dark:hover:bg-gray-800 ${isCollapsed ? 'justify-center px-0' : 'px-6'} ${isActive('/appLeads')}`}
+              title={isCollapsed ? "App Users" : ""}
+            >
+              <FaClipboardList className={isCollapsed ? '' : 'mr-3'} />
+              {!isCollapsed && <span>App Users</span>}
+            </Link>
+          </li>
+          <li>
             <Link href="/appDisputes" 
               className={`flex items-center py-3 hover:bg-green-700 dark:hover:bg-gray-800 ${isCollapsed ? 'justify-center px-0' : 'px-6'} ${isActive('/appDisputes')}`}
               title={isCollapsed ? "App Leads" : ""}
