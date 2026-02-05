@@ -33,6 +33,7 @@ export type Lead = {
     scheduled_by: string;
     created_at: any;
   } | null;
+  serviceRequired?: string;
 };
 
 export type User = {

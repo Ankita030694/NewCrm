@@ -595,9 +595,16 @@ const AmaLeadRow = ({
         {/* Source - keeping original colors as requested */}
         {columnVisibility.source && (
           <td className="py-0.5 text-[10px] px-5">
-            <span className={`inline-flex items-center px-3 py-0.5 rounded-full font-medium ${sourceColorClass}`}>
-              {sourceDisplay}
-            </span>
+            <div className="flex flex-col gap-1">
+              <span className={`inline-flex items-center justify-center px-3 py-0.5 rounded-full font-medium ${sourceColorClass}`}>
+                {sourceDisplay}
+              </span>
+              {sourceKey === "ama" && lead.serviceRequired && (
+                <span className="inline-flex items-center justify-center px-3 py-0.5 rounded-full font-medium bg-blue-900 text-blue-100 border border-blue-700 max-w-xs" style={{fontSize: "8px"}}>
+                  {lead.serviceRequired}
+                </span>
+              )}
+            </div>
           </td>
         )}
 
