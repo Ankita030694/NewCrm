@@ -28,16 +28,16 @@ export async function GET(request: NextRequest) {
 
         let allDisputes: any[] = [];
 
-        snapshot.docs.forEach(doc => {
-            const data = doc.data();
+        // Create a unique ID for the disputes and store them
+        snapshot.docs.forEach(docSnap => {
+            const data = docSnap.data();
             if (data.disputes && Array.isArray(data.disputes)) {
                 data.disputes.forEach((dispute: any, index: number) => {
                     allDisputes.push({
                         ...dispute,
-                        parentDocId: doc.id,
+                        parentDocId: docSnap.id,
                         arrayIndex: index,
-                        // Create a unique ID for the dispute since it doesn't have one
-                        id: `${doc.id}_${index}`,
+                        id: `${docSnap.id}_${index}`,
                         status: dispute.status || 'No Status',
                         remarks: dispute.remarks || ''
                     });
@@ -45,13 +45,58 @@ export async function GET(request: NextRequest) {
             }
         });
 
+        // JOIN with user data from login_users BEFORE filtering so we can search by userPhone
+        const uniqueUserIds = Array.from(new Set(allDisputes.map(d => d.parentDocId)));
+        const userMap: { [key: string]: { email?: string; phone?: string } } = {};
+
+        // Fetch user docs in parallel for all users involved
+        await Promise.all(uniqueUserIds.map(async (uid) => {
+            if (!uid) return;
+            try {
+                const userDocRef = doc(db, 'login_users', uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    const userData = userDocSnap.data();
+                    userMap[uid] = {
+                        email: userData.email,
+                        phone: userData.phone
+                    };
+                }
+            } catch (err) {
+                console.error(`Error fetching user data for ${uid}:`, err);
+            }
+        }));
+
+        // Map user data to ALL disputes before filtering
+        allDisputes = allDisputes.map(dispute => ({
+            ...dispute,
+            userEmail: userMap[dispute.parentDocId]?.email || '',
+            userPhone: userMap[dispute.parentDocId]?.phone || ''
+        }));
+
         // Filter by search query
         if (searchQuery) {
             const lowerQuery = searchQuery.toLowerCase();
-            allDisputes = allDisputes.filter(d =>
-                (d.name && d.name.toLowerCase().includes(lowerQuery)) ||
-                (d.phone && d.phone.includes(searchQuery))
-            );
+            const queryDigits = searchQuery.replace(/\D/g, '');
+
+            allDisputes = allDisputes.filter(d => {
+                // Name match
+                if (d.name && d.name.toLowerCase().includes(lowerQuery)) return true;
+
+                // Phone match (digit-only comparison)
+                if (queryDigits) {
+                    const leadPhoneDigits = String(d.phone || '').replace(/\D/g, '');
+                    const userPhoneDigits = String(d.userPhone || '').replace(/\D/g, '');
+                    if (leadPhoneDigits.includes(queryDigits)) return true;
+                    if (userPhoneDigits.includes(queryDigits)) return true;
+                }
+
+                // Fallback literal match for userPhone/email in case they are non-numeric strings
+                if (d.userPhone && String(d.userPhone).includes(searchQuery)) return true;
+                if (d.userEmail && d.userEmail.toLowerCase().includes(lowerQuery)) return true;
+
+                return false;
+            });
         }
 
         // Filter by status
@@ -77,37 +122,8 @@ export async function GET(request: NextRequest) {
 
         const paginatedDisputes = allDisputes.slice(startIndex, startIndex + limitParam);
 
-        // Join with user data from login_users
-        const uniqueUserIds = Array.from(new Set(paginatedDisputes.map(d => d.parentDocId)));
-        const userMap: { [key: string]: { email?: string; phone?: string } } = {};
-
-        // Fetch user docs in parallel
-        await Promise.all(uniqueUserIds.map(async (uid) => {
-            if (!uid) return;
-            try {
-                const userDocRef = doc(db, 'login_users', uid);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists()) {
-                    const userData = userDocSnap.data();
-                    userMap[uid] = {
-                        email: userData.email,
-                        phone: userData.phone
-                    };
-                }
-            } catch (err) {
-                console.error(`Error fetching user data for ${uid}:`, err);
-            }
-        }));
-
-        // Map user data back to disputes
-        const finalDisputes = paginatedDisputes.map(dispute => ({
-            ...dispute,
-            userEmail: userMap[dispute.parentDocId]?.email || '',
-            userPhone: userMap[dispute.parentDocId]?.phone || ''
-        }));
-
         return NextResponse.json({
-            disputes: finalDisputes,
+            disputes: paginatedDisputes,
             total: total,
             hasMore: startIndex + limitParam < total
         });
