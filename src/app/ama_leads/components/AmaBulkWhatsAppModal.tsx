@@ -29,7 +29,7 @@ const AmaBulkWhatsAppModal: React.FC<AmaBulkWhatsAppModalProps> = ({
   // Filter leads with valid phone numbers
   useEffect(() => {
     const valid = selectedLeads.filter(lead => {
-      const phone = lead.mobile || lead.phone || "";
+      const phone = lead.mobile || lead.phone || lead.userPhone || "";
       // Strip all non-digit characters
       const cleanPhone = phone.toString().replace(/\D/g, "");
       return cleanPhone.length >= 10;
@@ -50,7 +50,7 @@ const AmaBulkWhatsAppModal: React.FC<AmaBulkWhatsAppModalProps> = ({
 
     // Instead of just sending IDs, send the full lead data to avoid lookup issues
     const leadData = validLeads.map(lead => {
-      let phone = (lead.mobile || lead.phone || "").toString().replace(/\D/g, "");
+      let phone = (lead.mobile || lead.phone || lead.userPhone || "").toString().replace(/\D/g, "");
       
       // Auto-append 91 if it's a 10-digit number
       if (phone.length === 10) {

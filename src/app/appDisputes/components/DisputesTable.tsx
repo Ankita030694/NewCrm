@@ -3,6 +3,7 @@
 import { Dispute } from '../types';
 import { useEffect, useRef, useState } from 'react';
 import QueryViewModal from './QueryViewModal';
+import { FaWhatsapp } from 'react-icons/fa';
 
 interface DisputesTableProps {
   disputes: Dispute[];
@@ -12,6 +13,11 @@ interface DisputesTableProps {
   statusOptions: string[];
   onUpdateDispute: (id: string, updates: Partial<Dispute>) => Promise<void>;
   onViewHistory: (disputeId: string, disputeName: string) => void;
+  onOpenWhatsApp: (dispute: Dispute) => void;
+  // Selection props
+  selectedDisputes: string[];
+  onSelectDispute: (id: string) => void;
+  onSelectAll: () => void;
 }
 
 const getStatusColor = (status: string) => {
@@ -32,10 +38,27 @@ const getStatusColor = (status: string) => {
   return 'bg-gray-700 text-gray-200 border border-gray-600';
 };
 
-export default function DisputesTable({ disputes, hasMore, loading, loadMore, statusOptions, onUpdateDispute, onViewHistory }: DisputesTableProps) {
+export default function DisputesTable({ 
+  disputes, 
+  hasMore, 
+  loading, 
+  loadMore, 
+  statusOptions, 
+  onUpdateDispute,
+  onViewHistory,
+  onOpenWhatsApp,
+  selectedDisputes,
+  onSelectDispute,
+  onSelectAll
+}: DisputesTableProps) {
   const observerTarget = useRef<HTMLDivElement>(null);
   const [editingRemarks, setEditingRemarks] = useState<{ [key: string]: string }>({});
   const [isSaving, setIsSaving] = useState<{ [key: string]: boolean }>({});
+  
+  // WhatsApp state is now handled by parent via modal
+  // Removed local showWhatsAppMenu and isSendingWhatsApp states
+
+  // WhatsApp handling is now passed to parent
   
   // Query view state
   const [selectedQuery, setSelectedQuery] = useState<{ text: string, name: string } | null>(null);
@@ -92,6 +115,14 @@ export default function DisputesTable({ disputes, hasMore, loading, loadMore, st
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 text-left sticky top-0 bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={disputes.length > 0 && selectedDisputes.length === disputes.length}
+                  onChange={onSelectAll}
+                  className="rounded border-gray-300 text-[#D2A02A] focus:ring-[#D2A02A]"
+                />
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Submitted At</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-50">Contact</th>
@@ -111,6 +142,14 @@ export default function DisputesTable({ disputes, hasMore, loading, loadMore, st
             ) : (
               disputes.map((dispute) => (
                 <tr key={dispute.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedDisputes.includes(dispute.id)}
+                      onChange={() => onSelectDispute(dispute.id)}
+                      className="rounded border-gray-300 text-[#D2A02A] focus:ring-[#D2A02A]"
+                    />
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div>
                       {dispute.submittedAt
@@ -173,6 +212,14 @@ export default function DisputesTable({ disputes, hasMore, loading, loadMore, st
                         >
                           History
                         </button>
+
+                          <button
+                            onClick={() => onOpenWhatsApp(dispute)}
+                            className="p-1.5 rounded transition-colors bg-green-500 hover:bg-green-600 text-white shadow-sm"
+                            title="Send WhatsApp message"
+                          >
+                            <FaWhatsapp className="w-4 h-4" />
+                          </button>
                       </div>
                     </div>
                   </td>

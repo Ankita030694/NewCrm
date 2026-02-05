@@ -9,8 +9,12 @@ import OverlordSidebar from "@/components/navigation/OverlordSidebar";
 import AdminSidebar from "@/components/navigation/AdminSidebar";
 import SalesSidebar from "@/components/navigation/SalesSidebar";
 import AppLeadsHistoryModal from '../appLeads/components/AppLeadsHistoryModal';
+import AmaBulkWhatsAppModal from '../ama_leads/components/AmaBulkWhatsAppModal';
 import { FiSearch, FiDownload } from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '@/firebase/firebase';
 
 const statusOptions = [
   "No Status",
@@ -47,6 +51,10 @@ export default function DisputesPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyDisputeId, setHistoryDisputeId] = useState<string | null>(null);
   const [historyDisputeName, setHistoryDisputeName] = useState<string | null>(null);
+
+  // Selection & Bulk WhatsApp State
+  const [selectedDisputes, setSelectedDisputes] = useState<string[]>([]);
+  const [showBulkWhatsAppModal, setShowBulkWhatsAppModal] = useState(false);
 
   // Export to CSV function
   const exportToCSV = async () => {
@@ -256,6 +264,84 @@ export default function DisputesPage() {
     setShowHistoryModal(true);
   };
 
+  const handleOpenWhatsApp = (dispute: Dispute) => {
+    setSelectedDisputes([dispute.id]);
+    setShowBulkWhatsAppModal(true);
+  };
+
+  const handleSelectDispute = (id: string) => {
+    setSelectedDisputes(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedDisputes.length === disputes.length) {
+      setSelectedDisputes([]);
+    } else {
+      setSelectedDisputes(disputes.map(d => d.id));
+    }
+  };
+
+  const handleSendBulkWhatsApp = async (templateName: string, leadIds: string[], leadData?: any[]) => {
+    try {
+      const sendWhatsappMessageFn = httpsCallable(functions, "sendWhatsappMessage");
+      let successCount = 0;
+      let failCount = 0;
+
+      const toastId = toast.loading("Sending bulk WhatsApp messages...");
+      const leadsToProcess = leadData || [];
+
+      const promises = leadsToProcess.map(async (lead: any) => {
+        try {
+          const messageData = {
+            phoneNumber: lead.phone, // Already formatted by modal
+            templateName: templateName,
+            leadId: lead.id,
+            userId: userName || "Unknown",
+            userName: userName || "Unknown",
+            message: `Template message: ${templateName}`,
+            customParams: [
+              { name: "name", value: lead.name || "Customer" },
+              { name: "Channel", value: "AMA Legal Solutions" },
+              { name: "agent_name", value: userName || "Agent" },
+              { name: "customer_mobile", value: lead.phone },
+            ],
+            channelNumber: "919289622596",
+            broadcastName: `${templateName}_${Date.now()}_bulk`,
+          };
+
+          const result = await sendWhatsappMessageFn(messageData);
+          if (result.data && (result.data as any).success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          failCount++;
+          console.error(`Error sending to ${lead.name}:`, err);
+        }
+      });
+
+      await Promise.all(promises);
+
+      toast.update(toastId, {
+        render: `Sent ${successCount} messages. ${failCount > 0 ? `${failCount} failed.` : ""}`,
+        type: failCount === 0 ? "success" : "warning",
+        isLoading: false,
+        autoClose: 4000
+      });
+
+      if (successCount > 0) {
+        setSelectedDisputes([]);
+        setShowBulkWhatsAppModal(false);
+      }
+    } catch (error) {
+      console.error("Bulk send error:", error);
+      toast.error("Failed to initiate bulk sending");
+    }
+  };
+
   if (authLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
@@ -269,7 +355,7 @@ export default function DisputesPage() {
                   <div className="bg-[#D2A02A] text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
                   Total Leads: {total.toLocaleString()}
                   </div>
-                  <button
+                   <button
                     onClick={exportToCSV}
                     disabled={exporting}
                     className={`flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#D2A02A] ${
@@ -279,6 +365,16 @@ export default function DisputesPage() {
                     <FiDownload className={`mr-2 h-4 w-4 ${exporting ? 'animate-bounce' : ''}`} />
                     {exporting ? (exportProgress || 'Exporting...') : 'Export CSV'}
                   </button>
+
+                  {selectedDisputes.length > 0 && (
+                    <button
+                      onClick={() => setShowBulkWhatsAppModal(true)}
+                      className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
+                    >
+                      <FaWhatsapp className="mr-2 h-4 w-4" />
+                      Bulk WhatsApp ({selectedDisputes.length})
+                    </button>
+                  )}
                 </div>
             </div>
             
@@ -289,7 +385,7 @@ export default function DisputesPage() {
                     </div>
                     <input
                       type="text"
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-[#D2A02A] focus:border-[#D2A02A] sm:text-sm"
+                      className="text-black block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-[#D2A02A] focus:border-[#D2A02A] sm:text-sm"
                       placeholder="Search by name or phone number..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -340,9 +436,13 @@ export default function DisputesPage() {
                 loading={loading} 
                 loadMore={handleLoadMore}
                 statusOptions={statusOptions}
-                onUpdateDispute={handleUpdateDispute}
-                onViewHistory={handleViewHistory}
-             />
+                 onUpdateDispute={handleUpdateDispute}
+                 onViewHistory={handleViewHistory}
+                 onOpenWhatsApp={handleOpenWhatsApp}
+                 selectedDisputes={selectedDisputes}
+                 onSelectDispute={handleSelectDispute}
+                 onSelectAll={handleSelectAll}
+              />
           </div>
         </main>
 
@@ -352,6 +452,14 @@ export default function DisputesPage() {
           leadId={historyDisputeId || ""}
           leadName={historyDisputeName || ""}
           apiPath="/api/disputes"
+        />
+
+        <AmaBulkWhatsAppModal
+          isOpen={showBulkWhatsAppModal}
+          onClose={() => setShowBulkWhatsAppModal(false)}
+          selectedLeads={disputes.filter(d => selectedDisputes.includes(d.id))}
+          onSendBulkWhatsApp={handleSendBulkWhatsApp}
+          onSuccess={() => setSelectedDisputes([])}
         />
       </div>
   );
