@@ -68,6 +68,7 @@ interface Client {
     loanAmount: string
     loanType: string
   }>
+  source?: string
 }
 
 // Separate component for the remark input to prevent re-rendering the whole list
@@ -1419,7 +1420,14 @@ const SettlementTracker = () => {
                         label: client.name
                       }))}
                       value={selectedClient}
-                      onChange={setSelectedClient}
+                      onChange={(clientId) => {
+                        setSelectedClient(clientId)
+                        // Auto-populate source from client
+                        const client = clients.find(c => c.id === clientId)
+                        if (client?.source) {
+                          setSource(client.source)
+                        }
+                      }}
                       placeholder="Search and select a client..."
                       className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-gray-900 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
                     />
