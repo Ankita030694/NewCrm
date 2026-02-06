@@ -1343,6 +1343,24 @@ const BillCutLeadsPage = () => {
 
       if ("status" in data) {
         updateData.category = data.status
+
+        // --- Status History Logic ---
+        const existingHistory = currentLead?.statusHistory || []
+        const newHistoryEntry = {
+          status: data.status,
+          timestamp: new Date().toISOString(),
+          updatedBy: currentUser?.email || currentUser?.displayName || "Unknown User"
+        }
+        
+        let newHistory = [...existingHistory, newHistoryEntry]
+        
+        // Enforce Limit of 5 (FIFO)
+        if (newHistory.length > 5) {
+          newHistory = newHistory.slice(newHistory.length - 5)
+        }
+        
+        updateData.statusHistory = newHistory
+        // ---------------------------
       }
 
       if ("assignedTo" in data) {

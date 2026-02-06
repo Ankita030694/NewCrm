@@ -38,6 +38,11 @@ export type Lead = {
     scheduled_by: string;
     created_at: any;
   } | null;
+  statusHistory?: {
+    status: string;
+    timestamp: string;
+    updatedBy: string;
+  }[];
 };
 
 export type User = {
