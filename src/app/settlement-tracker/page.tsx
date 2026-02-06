@@ -53,6 +53,8 @@ interface Settlement {
   }
   successFeeStatus?: 'Paid' | 'Not Paid' | 'Partially Paid' | 'Not Required'
   successFeeAmount?: string
+  settlementAmount?: string
+  source?: string
 }
 
 // Interface for client data
@@ -115,6 +117,50 @@ const RemarkInput = ({
   )
 }
 
+// Component for inline settlement amount editing
+const SettlementAmountInput = ({
+  settlementId,
+  initialValue,
+  isDarkMode,
+  onSave
+}: {
+  settlementId: string
+  initialValue: string
+  isDarkMode: boolean
+  onSave: (id: string, value: string) => void
+}) => {
+  const [value, setValue] = useState(initialValue)
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow numeric input
+    const newValue = e.target.value.replace(/[^0-9.]/g, '')
+    setValue(newValue)
+  }
+
+  return (
+    <div className="flex items-center space-x-1">
+       <input
+        type="text"
+        value={value}
+        onChange={handleChange}
+        placeholder="0"
+        className={`w-20 px-2 py-1 border rounded text-xs h-7 ${
+          isDarkMode 
+            ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+            : 'bg-white border-gray-300 text-gray-800'
+        }`}
+      />
+      <button
+        onClick={() => onSave(settlementId, value)}
+        className="px-2 py-1 text-xs rounded transition-colors duration-200 bg-green-600 hover:bg-green-500 text-white h-7 flex items-center justify-center"
+        title="Save Amount"
+      >
+        ✓
+      </button>
+    </div>
+  )
+}
+
 const SettlementTracker = () => {
   const { user, userRole, userName, loading: authLoading, logout } = useAuth()
   const router = useRouter()
@@ -134,6 +180,8 @@ const SettlementTracker = () => {
   const [manualAccountNumber, setManualAccountNumber] = useState('')
   const [manualLoanAmount, setManualLoanAmount] = useState('')
   const [manualLoanType, setManualLoanType] = useState('')
+  const [settlementAmount, setSettlementAmount] = useState('')
+  const [source, setSource] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('All')
@@ -217,6 +265,8 @@ const SettlementTracker = () => {
   const [editDate, setEditDate] = useState('')
   const [editAmount, setEditAmount] = useState('')
   const [editAccount, setEditAccount] = useState('')
+  const [editSettlementAmount, setEditSettlementAmount] = useState('')
+  const [editSource, setEditSource] = useState('')
   const [isEditing, setIsEditing] = useState(false)
 
   // Add dark mode state
@@ -244,6 +294,14 @@ const SettlementTracker = () => {
     'Settled',
     'Failed',
     'On Hold'
+  ]
+
+  // Source options
+  const sourceOptions = [
+    'AMA',
+    'Billcut',
+    'Credsettle',
+    'Settleloans'
   ]
 
   // Fetch settlements data
@@ -504,6 +562,11 @@ const SettlementTracker = () => {
       return
     }
 
+    if (!source) {
+      alert('Please select a source')
+      return
+    }
+
     setSubmitting(true)
     
     try {
@@ -570,7 +633,9 @@ const SettlementTracker = () => {
         status: settlementStatus,
         remarks: remarks,
         createdAt: new Date(),
-        createdBy: userName
+        createdBy: userName,
+        settlementAmount: settlementAmount,
+        source: source
       }
 
       // Add settlement to settlements collection only
@@ -586,7 +651,10 @@ const SettlementTracker = () => {
       setManualBankName('')
       setManualAccountNumber('')
       setManualLoanAmount('')
+      setManualLoanAmount('')
       setManualLoanType('')
+      setSettlementAmount('')
+      setSource('')
       setIsNewClientMode(false)
       setNewClientName('')
       setNewClientMobile('')
@@ -762,6 +830,45 @@ const SettlementTracker = () => {
     }
   }
 
+  // Handle Settlement Amount Save
+  const handleSettlementAmountSave = async (settlementId: string, amount: string) => {
+    try {
+      const settlementRef = doc(db, "settlements", settlementId)
+      await updateDoc(settlementRef, {
+        settlementAmount: amount,
+        lastModified: serverTimestamp(),
+      })
+
+      setSettlements(prev => prev.map(s => 
+        s.id === settlementId ? { ...s, settlementAmount: amount } : s
+      ))
+      alert("Amount saved successfully")
+    } catch (error) {
+      console.error("Error updating settlement amount:", error)
+      alert("Failed to update settlement amount")
+    }
+  }
+
+  // Handle Source Update
+  const handleSourceUpdate = async (settlementId: string, newSource: string) => {
+    try {
+      const settlementRef = doc(db, "settlements", settlementId)
+      await updateDoc(settlementRef, {
+        source: newSource,
+        lastModified: serverTimestamp(),
+      })
+
+      setSettlements(prev => prev.map(s => 
+        s.id === settlementId ? { ...s, source: newSource } : s
+      ))
+    } catch (error) {
+       console.error("Error updating source:", error)
+       alert("Failed to update source")
+    }
+  }
+
+
+
   // Add function to handle delete initiation
   const handleDeleteSettlement = (settlement: Settlement) => {
     setSettlementToDelete(settlement)
@@ -809,6 +916,8 @@ const SettlementTracker = () => {
     setEditDate(dateStr)
     setEditAmount(settlement.loanAmount)
     setEditAccount(settlement.accountNumber)
+    setEditSettlementAmount(settlement.settlementAmount || '')
+    setEditSource(settlement.source || '')
     setIsEditModalOpen(true)
   }
 
@@ -823,6 +932,8 @@ const SettlementTracker = () => {
       const updates: any = {
         loanAmount: editAmount,
         accountNumber: editAccount,
+        settlementAmount: editSettlementAmount,
+        source: editSource,
         lastModified: serverTimestamp()
       }
       
@@ -1060,6 +1171,12 @@ const SettlementTracker = () => {
                         <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           Type
                         </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Settlement Amt
+                        </th>
+                        <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-20 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          Source
+                        </th>
                         <th className={`px-2 py-2 text-left text-xs font-medium uppercase tracking-wider w-28 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                           Status
                         </th>
@@ -1114,9 +1231,31 @@ const SettlementTracker = () => {
                               {settlement.loanType}
                             </div>
                           </td>
+                          <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                             <SettlementAmountInput 
+                                settlementId={settlement.id}
+                                initialValue={settlement.settlementAmount || ''}
+                                isDarkMode={isDarkMode}
+                                onSave={handleSettlementAmountSave}
+                             />
+                          </td>
+                           <td className={`px-2 py-2 whitespace-nowrap text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <Select value={settlement.source || ''} onValueChange={(value) => handleSourceUpdate(settlement.id, value)}>
+                              <SelectTrigger className={`w-28 h-7 text-xs ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white text-gray-900 border-gray-200'}`}>
+                                <SelectValue placeholder="Select" />
+                              </SelectTrigger>
+                              <SelectContent className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}>
+                                {sourceOptions.map((opt) => (
+                                   <SelectItem key={opt} value={opt} className={`text-xs ${isDarkMode ? 'focus:bg-gray-700 focus:text-white' : ''}`}>
+                                    {opt}
+                                   </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
                           <td className="px-2 py-2 whitespace-nowrap">
                             <Select value={settlement.status} onValueChange={(value) => handleStatusUpdate(settlement.id, value)}>
-                              <SelectTrigger className={`w-32 h-7 text-xs ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : ''}`}>
+                              <SelectTrigger className={`w-32 h-7 text-xs ${isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white text-gray-900 border-gray-200'}`}>
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent className={`${isDarkMode ? 'bg-gray-800 text-white border-gray-700' : ''}`}>
@@ -1409,6 +1548,33 @@ const SettlementTracker = () => {
                 </div>
               )}
 
+              {/* Settlement Amount and Source */}
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="settlementAmount">Settlement Amount</Label>
+                    <Input
+                      id="settlementAmount"
+                      value={settlementAmount}
+                      onChange={(e) => setSettlementAmount(e.target.value)}
+                      placeholder="Enter settlement amount"
+                      type="number"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="source">Source *</Label>
+                    <Select value={source} onValueChange={setSource}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sourceOptions.map((opt) => (
+                           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+               </div>
+
               {/* Settlement Status */}
               <div className="space-y-2">
                 <Label htmlFor="status">Settlement Status *</Label>
@@ -1484,6 +1650,28 @@ const SettlementTracker = () => {
                   value={editAccount}
                   onChange={(e) => setEditAccount(e.target.value)}
                 />
+              </div>
+               <div className="space-y-2">
+                <Label htmlFor="editSettlementAmount">Settlement Amount</Label>
+                <Input
+                  id="editSettlementAmount"
+                  type="number"
+                  value={editSettlementAmount}
+                  onChange={(e) => setEditSettlementAmount(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editSource">Source</Label>
+                 <Select value={editSource} onValueChange={setEditSource}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sourceOptions.map((opt) => (
+                           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
               </div>
               <DialogFooter>
                 <Button
