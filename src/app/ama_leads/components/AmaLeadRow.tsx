@@ -11,7 +11,9 @@ import { createPortal } from "react-dom"
 import { FaEllipsisV, FaWhatsapp } from "react-icons/fa"
 import { httpsCallable } from "firebase/functions"
 import { functions, db } from "@/firebase/firebase"
+
 import { useWhatsAppTemplates } from "@/hooks/useWhatsAppTemplates"
+import LeadStatusHistoryModal from "@/components/modals/LeadStatusHistoryModal"
 
 // Utility function to check if user can edit a lead
 const canUserEditLead = (lead: any) => {
@@ -277,6 +279,7 @@ const AmaLeadRow = ({
   },
 }: AmaLeadRowProps) => {
   const [showQueryModal, setShowQueryModal] = useState(false)
+  const [showStatusHistoryModal, setShowStatusHistoryModal] = useState(false)
   const [showWhatsAppMenu, setShowWhatsAppMenu] = useState(false)
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)

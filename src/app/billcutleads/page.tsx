@@ -400,6 +400,9 @@ const BillCutLeadsPage = () => {
               lead.callbackInfo = callbackInfo
             }
 
+            // Include status history
+            lead.statusHistory = data.statusHistory || [];
+
             searchResults.push(lead)
           }
         }
@@ -1118,6 +1121,7 @@ const BillCutLeadsPage = () => {
                     callbackInfo: null,
                     debtRange: data.debt_range || 0,
                     convertedAt: data.convertedAt || null,
+                    statusHistory: data.statusHistory || [],
                 };
 
                 if (change.type === "added") {
@@ -1144,7 +1148,8 @@ const BillCutLeadsPage = () => {
                                 // Only update if relevant fields changed to avoid unnecessary re-renders
                                 if (l.status !== leadData.status || 
                                     l.assignedTo !== leadData.assignedTo || 
-                                    l.salesNotes !== latestNote) {
+                                    l.salesNotes !== latestNote ||
+                                    JSON.stringify(l.statusHistory) !== JSON.stringify(leadData.statusHistory)) {
                                     return { ...l, ...leadData, salesNotes: latestNote, callbackInfo: l.callbackInfo };
                                 }
                             }
@@ -1199,13 +1204,15 @@ const BillCutLeadsPage = () => {
 
                                 if (l.status !== newStatus || 
                                     l.assignedTo !== newAssignedTo || 
-                                    l.salesNotes !== newSalesNotes) {
+                                    l.salesNotes !== newSalesNotes ||
+                                    JSON.stringify(l.statusHistory) !== JSON.stringify(data.statusHistory || [])) {
                                     
                                     return {
                                         ...l,
                                         status: newStatus,
                                         assignedTo: newAssignedTo,
                                         salesNotes: newSalesNotes,
+                                        statusHistory: data.statusHistory || [],
                                     }
                                 }
                             }

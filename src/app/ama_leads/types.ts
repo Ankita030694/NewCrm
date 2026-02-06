@@ -34,6 +34,11 @@ export type Lead = {
     created_at: any;
   } | null;
   serviceRequired?: string;
+  statusHistory?: {
+    status: string;
+    timestamp: string;
+    updatedBy: string;
+  }[];
 };
 
 export type User = {

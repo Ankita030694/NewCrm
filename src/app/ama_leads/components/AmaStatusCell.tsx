@@ -1,4 +1,6 @@
 import { toast } from 'react-toastify';
+import { useState } from 'react';
+import LeadStatusHistoryModal from "@/components/modals/LeadStatusHistoryModal";
 
 type AmaStatusCellProps = {
   lead: any;
@@ -134,7 +136,7 @@ const AmaStatusCell = ({
   userRole,
   textColor,
 }: AmaStatusCellProps) => {
-  
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const canEdit = canUserEditLead(lead);
   
   const handleStatusChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -235,9 +237,28 @@ const AmaStatusCell = ({
             )}
           </div>
         )}
+
+        {userRole === 'overlord' && (
+          <>
+            <button
+              onClick={() => setShowHistoryModal(true)}
+              className="mt-1 text-[10px] text-blue-600 hover:text-blue-800 underline block w-full text-center"
+              title="View Status History"
+            >
+              History
+            </button>
+            <LeadStatusHistoryModal
+              isOpen={showHistoryModal}
+              onClose={() => setShowHistoryModal(false)}
+              leadName={lead.name || 'Lead'}
+              history={lead.statusHistory}
+            />
+          </>
+        )}
       </div>
     </td>
   );
 };
+
 
 export default AmaStatusCell; 

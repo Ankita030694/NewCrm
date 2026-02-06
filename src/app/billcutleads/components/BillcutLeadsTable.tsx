@@ -9,6 +9,7 @@ import CallbackSchedulingModal from "./CallbackSchedulingModal"
 import StatusChangeConfirmationModal from "./StatusChangeConfirmationModal"
 import type { Lead } from "../types"
 import { toast } from "react-toastify"
+import LeadStatusHistoryModal from "@/components/modals/LeadStatusHistoryModal"
 
 // Color mapping interface and function
 interface ColorMap {
@@ -93,6 +94,9 @@ const BillcutLeadsTableOptimized = React.memo(
     const [statusConfirmLeadName, setStatusConfirmLeadName] = useState("")
     const [pendingStatusChange, setPendingStatusChange] = useState("")
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+    const [showStatusHistoryModal, setShowStatusHistoryModal] = useState(false)
+    const [historyLeadName, setHistoryLeadName] = useState("")
+    const [historyData, setHistoryData] = useState<any[]>([])
 
     // Get user info from localStorage
     const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "" : ""
@@ -782,6 +786,20 @@ const BillcutLeadsTableOptimized = React.memo(
                 >
                   {lead.status || "Select Status"}
                 </span>
+
+                {userRole === "overlord" && (
+                    <button
+                    onClick={() => {
+                        setHistoryLeadName(lead.name);
+                        setHistoryData(lead.statusHistory || []);
+                        setShowStatusHistoryModal(true);
+                    }}
+                    className="mt-1 text-[10px] text-blue-600 hover:text-blue-800 underline block text-center w-full"
+                    title="View Status History"
+                    >
+                    History
+                    </button>
+                )}
                 
                 {/* Show lastModified and convertedAt info only for admin and overlord roles */}
                 {(userRole === "admin" || userRole === "overlord") && (
@@ -1075,6 +1093,12 @@ const BillcutLeadsTableOptimized = React.memo(
           leadName={statusConfirmLeadName}
           newStatus={pendingStatusChange}
           isLoading={isUpdatingStatus}
+        />
+        <LeadStatusHistoryModal
+            isOpen={showStatusHistoryModal}
+            onClose={() => setShowStatusHistoryModal(false)}
+            leadName={historyLeadName}
+            history={historyData}
         />
       </>
     )
