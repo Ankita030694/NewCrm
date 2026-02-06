@@ -457,7 +457,12 @@ const AmaLeadsPage = () => {
           payload = { salesNotes: data.salesNotes }
       } else if ('status' in data) {
           action = "update_status"
-          payload = { status: data.status, language: data.language, testEventCode: data.testEventCode }
+          payload = { 
+              status: data.status, 
+              language: data.language, 
+              testEventCode: data.testEventCode,
+              updatedBy: currentUser?.email || currentUser?.displayName || "Unknown User" 
+          }
       } else if ('assignedTo' in data) {
           action = "assign"
           payload = { assignedTo: data.assignedTo, assignedToId: data.assignedToId }
