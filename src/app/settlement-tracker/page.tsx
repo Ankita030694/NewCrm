@@ -69,6 +69,7 @@ interface Client {
     loanType: string
   }>
   source?: string
+  source_database?: string
 }
 
 // Separate component for the remark input to prevent re-rendering the whole list
@@ -388,7 +389,9 @@ const SettlementTracker = () => {
         clientsData.push({
           id: doc.id,
           name: data.name || 'Unknown',
-          banks: data.banks || []
+          banks: data.banks || [],
+          source: data.source || '',
+          source_database: data.source_database || ''
         })
       })
       
@@ -1422,10 +1425,26 @@ const SettlementTracker = () => {
                       value={selectedClient}
                       onChange={(clientId) => {
                         setSelectedClient(clientId)
-                        // Auto-populate source from client
+                        // Auto-populate source from client with robust matching (checking both source and source_database fields)
                         const client = clients.find(c => c.id === clientId)
-                        if (client?.source) {
-                          setSource(client.source)
+                        if (client) {
+                          const rawSource = client.source || client.source_database
+                          if (rawSource) {
+                            const dbSource = String(rawSource).trim().toLowerCase()
+                            const normalizedSource = sourceOptions.find(
+                              opt => opt.toLowerCase() === dbSource
+                            )
+                            if (normalizedSource) {
+                              setSource(normalizedSource)
+                            } else {
+                              // Fallback for substring matches
+                              const partialMatch = sourceOptions.find(
+                                opt => dbSource.includes(opt.toLowerCase()) || 
+                                       opt.toLowerCase().includes(dbSource)
+                              )
+                              if (partialMatch) setSource(partialMatch)
+                            }
+                          }
                         }
                       }}
                       placeholder="Search and select a client..."
