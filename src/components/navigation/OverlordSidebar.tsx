@@ -155,12 +155,11 @@ const OverlordSidebar: React.FC<OverlordSidebarProps> = ({ children }) => {
       icon: <FaMoneyBillWave />,
       label: 'Payments',
       children: [
-        { href: '/paymentrequests', icon: <FaMoneyBillWave />, label: 'Sales Payment Requests', isActive: false },
-        { href: '/advocate/ops-payments-approval', icon: <FaMoneyCheckAlt />, label: 'Ops Payment Approvals', isActive: false },
-        { href: '/advocate/ops-payments-request', icon: <FaMoneyCheckAlt />, label: 'Ops Payment Requests', isActive: false },
-        { href: '/monthlypayreq', icon: <FiCalendar />, label: 'Monthly Payment Requests', isActive: false },
-        { href: '/paymentreminder', icon: <FiCreditCard />, label: 'Payment Reminder', isActive: false },
-        { href: '/payapproval', icon: <FaMoneyCheckAlt />, label: 'Payment Approvals', isActive: false },
+        { href: '/paymentrequests', icon: <FaMoneyBillWave />, label: 'Approve Sales Payment', isActive: false },
+        { href: '/advocate/ops-payments-approval', icon: <FaMoneyCheckAlt />, label: 'Approve Ops Payment', isActive: false },
+        { href: '/advocate/ops-payments-request', icon: <FaMoneyCheckAlt />, label: 'Request Ops Payment', isActive: false },
+        { href: '/paymentreminder', icon: <FiCreditCard />, label: 'OPS Payment Details', isActive: false },
+        { href: '/payapproval', icon: <FaMoneyCheckAlt />, label: 'Request Sales Payment', isActive: false },
       ]
     },
     {
