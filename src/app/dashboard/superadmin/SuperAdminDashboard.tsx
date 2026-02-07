@@ -18,7 +18,10 @@ import {
   HistoryData,
   WeeklyHistoryData,
   getSourceAnalyticsData, // [NEW]
-  SourceAnalyticsData     // [NEW]
+  SourceAnalyticsData,     // [NEW]
+  getBillcutPayoutAnalytics,
+  getBillcutHistoryData,
+  BillcutHistoryData
 } from '../actions';
 
 // Lazy load Chart.js and heavy components
@@ -165,6 +168,9 @@ const SuperAdminDashboard = React.memo(() => {
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceMonth, setSourceMonth] = useState<number>(new Date().getMonth());
   const [sourceYear, setSourceYear] = useState<number>(new Date().getFullYear());
+  const [billcutPayoutAmount, setBillcutPayoutAmount] = useState<number>(0);
+  const [billcutHistory, setBillcutHistory] = useState<BillcutHistoryData[]>([]);
+  const [billcutHistoryLoading, setBillcutHistoryLoading] = useState(false);
 
   // Fetch weekly data when toggle is enabled
   useEffect(() => {
@@ -201,7 +207,29 @@ const SuperAdminDashboard = React.memo(() => {
         setSourceLoading(false);
       }
     }
+    async function fetchBillcutPayout() {
+      try {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const amount = await getBillcutPayoutAnalytics(monthNames[sourceMonth], sourceYear);
+        setBillcutPayoutAmount(amount);
+      } catch (error) {
+        console.error("Error fetching billcut payout:", error);
+      }
+    }
+    async function fetchBillcutHistory() {
+      setBillcutHistoryLoading(true);
+      try {
+        const history = await getBillcutHistoryData();
+        setBillcutHistory(history);
+      } catch (error) {
+        console.error("Error fetching billcut history:", error);
+      } finally {
+        setBillcutHistoryLoading(false);
+      }
+    }
     fetchSourceData();
+    fetchBillcutPayout();
+    fetchBillcutHistory();
   }, [sourceMonth, sourceYear]);
 
   // Helper function for Indian number formatting
@@ -819,6 +847,64 @@ const SuperAdminDashboard = React.memo(() => {
                       {sourceLoading ? (
                         <LoadingFallback height="h-[200px]" />
                       ) : (
+                        <>
+                        {/* Billcut History Graph [NEW] */}
+                        <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-md mb-4 overflow-hidden">
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-semibold text-gray-700 dark:text-gray-300">Billcut Performance History (Monthly Trend)</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="h-[250px] w-full">
+                              {billcutHistoryLoading ? (
+                                <div className="h-full w-full flex items-center justify-center">
+                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                                </div>
+                              ) : (
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <LineChart
+                                    data={billcutHistory}
+                                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                  >
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                                    <XAxis 
+                                      dataKey="fullLabel" 
+                                      stroke="#9CA3AF" 
+                                      tick={{ fill: '#9CA3AF', fontSize: 10 }} 
+                                    />
+                                    <YAxis 
+                                      stroke="#9CA3AF" 
+                                      tick={{ fill: '#9CA3AF', fontSize: 10 }}
+                                      tickFormatter={formatIndianCurrency}
+                                    />
+                                    <Tooltip 
+                                      contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
+                                      itemStyle={{ fontSize: '12px' }}
+                                      formatter={(value: number) => [formatFullCurrency(value), '']}
+                                    />
+                                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                                    <Line 
+                                      type="monotone" 
+                                      dataKey="earned" 
+                                      name="Amount Got (Revenue)" 
+                                      stroke="#818cf8" 
+                                      strokeWidth={2}
+                                      activeDot={{ r: 6 }} 
+                                    />
+                                    <Line 
+                                      type="monotone" 
+                                      dataKey="paid" 
+                                      name="Amount Paid (Payout)" 
+                                      stroke="#10b981" 
+                                      strokeWidth={2}
+                                      activeDot={{ r: 6 }} 
+                                    />
+                                  </LineChart>
+                                </ResponsiveContainer>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                             <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
@@ -855,6 +941,7 @@ const SuperAdminDashboard = React.memo(() => {
                             </tbody>
                           </table>
                         </div>
+                        </>
                       )}
                     </CardContent>
                   </Card>

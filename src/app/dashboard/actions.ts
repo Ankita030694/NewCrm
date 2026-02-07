@@ -747,3 +747,129 @@ export async function getSourceAnalyticsData(month: string, year: number): Promi
         return [];
     }
 }
+
+export async function getBillcutPayoutAnalytics(month: string, year: number): Promise<number> {
+    try {
+        if (!db) throw new Error('Firebase Admin SDK not initialized');
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthIndex = monthNames.indexOf(month);
+
+        if (monthIndex === -1) return 0;
+
+        const startOfMonth = new Date(year, monthIndex, 1);
+        const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+
+        const startISO = startOfMonth.toISOString().split('T')[0];
+        const endISO = endOfMonth.toISOString().split('T')[0];
+
+        const payoutSnap = await db.collection('billcutpay')
+            .where('date', '>=', startISO)
+            .where('date', '<=', endISO)
+            .get();
+
+        let totalPaid = 0;
+        payoutSnap.forEach(doc => {
+            totalPaid += doc.data().amount || 0;
+        });
+
+        return totalPaid;
+    } catch (error) {
+        console.error('Error fetching Billcut payout analytics:', error);
+        return 0;
+    }
+}
+
+export interface BillcutHistoryData {
+    month: string;
+    year: number;
+    fullLabel: string;
+    paid: number;
+    earned: number;
+}
+
+export async function getBillcutHistoryData(): Promise<BillcutHistoryData[]> {
+    try {
+        if (!db) throw new Error('Firebase Admin SDK not initialized');
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const billcutHistory: Record<string, BillcutHistoryData> = {};
+
+        // 1. Fetch all billcutpay (Paid)
+        const payoutSnap = await db.collection('billcutpay').get();
+        payoutSnap.forEach(doc => {
+            const data = doc.data();
+            const dateStr = data.date; // YYYY-MM-DD
+            if (dateStr) {
+                const [year, month, _] = dateStr.split('-');
+                const monthName = monthNames[parseInt(month) - 1];
+                const key = `${monthName}_${year}`;
+
+                if (!billcutHistory[key]) {
+                    billcutHistory[key] = {
+                        month: monthName,
+                        year: parseInt(year),
+                        fullLabel: `${monthName} ${year}`,
+                        paid: 0,
+                        earned: 0
+                    };
+                }
+                billcutHistory[key].paid += data.amount || 0;
+            }
+        });
+
+        // 2. Fetch all approved payments with source "BillCut" (Earned)
+        const paymentsSnap = await db.collection('payments')
+            .where('status', '==', 'approved')
+            .get();
+
+        paymentsSnap.forEach(doc => {
+            const data = doc.data();
+            const amount = parseFloat(data.amount) || 0;
+
+            // Normalize source
+            const rawSource = data.source || '';
+            const lower = rawSource.toLowerCase().trim();
+
+            if (lower === 'billcut') {
+                let date: Date;
+                if (typeof data.timestamp === 'string') {
+                    date = new Date(data.timestamp);
+                } else if (data.timestamp?.toDate) {
+                    date = data.timestamp.toDate();
+                } else if (data.timestamp?._seconds) {
+                    date = new Date(data.timestamp._seconds * 1000);
+                } else {
+                    date = new Date(data.timestamp);
+                }
+
+                if (!isNaN(date.getTime())) {
+                    const monthName = monthNames[date.getMonth()];
+                    const year = date.getFullYear();
+                    const key = `${monthName}_${year}`;
+
+                    if (!billcutHistory[key]) {
+                        billcutHistory[key] = {
+                            month: monthName,
+                            year: year,
+                            fullLabel: `${monthName} ${year}`,
+                            paid: 0,
+                            earned: 0
+                        };
+                    }
+                    billcutHistory[key].earned += amount;
+                }
+            }
+        });
+
+        // Sort and return
+        return Object.values(billcutHistory).sort((a, b) => {
+            if (a.year !== b.year) return a.year - b.year;
+            return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+        });
+
+    } catch (error) {
+        console.error('Error fetching Billcut history data:', error);
+        return [];
+    }
+}

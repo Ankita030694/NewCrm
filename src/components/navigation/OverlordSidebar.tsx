@@ -160,6 +160,7 @@ const OverlordSidebar: React.FC<OverlordSidebarProps> = ({ children }) => {
         { href: '/advocate/ops-payments-request', icon: <FaMoneyCheckAlt />, label: 'Request Ops Payment', isActive: false },
         { href: '/paymentreminder', icon: <FiCreditCard />, label: 'OPS Payment Details', isActive: false },
         { href: '/payapproval', icon: <FaMoneyCheckAlt />, label: 'Request Sales Payment', isActive: false },
+        { href: '/billcutpay', icon: <FaMoneyBillWave />, label: 'Billcut Pay', isActive: false },
       ]
     },
     {
