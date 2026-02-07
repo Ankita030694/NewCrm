@@ -460,3 +460,107 @@ export async function getOpsRevenueHistory(): Promise<HistoryData[]> {
         return [];
     }
 }
+export interface WeeklyHistoryData {
+    month: string;
+    year: number;
+    fullLabel: string;
+    weeks: {
+        week1: number; // Days 1-7
+        week2: number; // Days 8-14
+        week3: number; // Days 15-21
+        week4: number; // Days 22-End
+    };
+    total: number;
+    type: 'sales' | 'ops';
+}
+
+export async function getWeeklyRevenueHistory(): Promise<{ sales: WeeklyHistoryData[], ops: WeeklyHistoryData[] }> {
+    try {
+        if (!db) throw new Error('Firebase Admin SDK not initialized');
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        // Define relevant months (e.g., last 6 months to avoid fetching too much data if possible, 
+        // but for now we'll fetch all and filter in memory or just process all since we need history)
+        // For performance, we could limit to last 12 months. Let's process all for now as requested "history".
+
+        // --- Helper to process payments into weekly buckets ---
+        const processRefIntoWeeks = async (query: FirebaseFirestore.Query, type: 'sales' | 'ops'): Promise<WeeklyHistoryData[]> => {
+            const snapshot = await query.get();
+            const monthlyData: { [key: string]: WeeklyHistoryData } = {};
+
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (!data.timestamp) return;
+
+                let date: Date;
+                if (typeof data.timestamp === 'string') {
+                    date = new Date(data.timestamp);
+                } else if (data.timestamp.toDate) {
+                    date = data.timestamp.toDate();
+                } else if (data.timestamp._seconds) {
+                    date = new Date(data.timestamp._seconds * 1000);
+                } else {
+                    date = new Date(data.timestamp);
+                }
+
+                if (isNaN(date.getTime())) return;
+
+                const monthIndex = date.getMonth();
+                const year = date.getFullYear();
+                const day = date.getDate();
+                const monthName = monthNames[monthIndex];
+                const key = `${monthName}_${year}`;
+
+                if (!monthlyData[key]) {
+                    monthlyData[key] = {
+                        month: monthName,
+                        year: year,
+                        fullLabel: `${monthName} ${year}`,
+                        weeks: { week1: 0, week2: 0, week3: 0, week4: 0 },
+                        total: 0,
+                        type: type
+                    };
+                }
+
+                const amount = parseFloat(data.amount) || 0;
+                monthlyData[key].total += amount;
+
+                // Determine week (4 weeks logic)
+                if (day <= 7) monthlyData[key].weeks.week1 += amount;
+                else if (day <= 14) monthlyData[key].weeks.week2 += amount;
+                else if (day <= 21) monthlyData[key].weeks.week3 += amount;
+                else monthlyData[key].weeks.week4 += amount; // All remaining days in Week 4
+            });
+
+            // Convert map to sorted array
+            return Object.values(monthlyData).sort((a, b) => {
+                if (a.year !== b.year) return a.year - b.year;
+                return monthNames.indexOf(a.month) - monthNames.indexOf(b.month);
+            });
+        };
+
+        // 1. Fetch Sales Revenue (All approved payments)
+        const salesPromise = processRefIntoWeeks(
+            db.collection('payments').where('status', '==', 'approved'),
+            'sales'
+        );
+
+        // 2. Fetch Ops Revenue (All approved ops_payments)
+        const opsPromise = processRefIntoWeeks(
+            db.collection('ops_payments').where('status', '==', 'approved'),
+            'ops'
+        );
+
+        const [salesData, opsData] = await Promise.all([salesPromise, opsPromise]);
+
+        return {
+            sales: salesData,
+            ops: opsData
+        };
+
+    } catch (error) {
+        console.error('Error fetching weekly revenue history:', error);
+        return { sales: [], ops: [] };
+    }
+}

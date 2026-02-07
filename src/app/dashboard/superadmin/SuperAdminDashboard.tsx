@@ -12,7 +12,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
-import { getDashboardHistory, getOpsRevenueHistory, HistoryData } from '../actions';
+import { getDashboardHistory, getOpsRevenueHistory, HistoryData, WeeklyHistoryData } from '../actions';
 
 // Lazy load Chart.js and heavy components
 const LazyCharts = lazy(() => import('./components/LazyCharts'));
@@ -148,16 +148,50 @@ const SuperAdminDashboard = React.memo(() => {
     fetchHistory();
   }, []);
 
+  // --- Weekly Revenue Comparison State & Logic ---
+  const [showWeeklyComparison, setShowWeeklyComparison] = useState(false);
+  const [weeklyData, setWeeklyData] = useState<{ sales: WeeklyHistoryData[], ops: WeeklyHistoryData[] } | null>(null);
+  const [weeklyDataLoading, setWeeklyDataLoading] = useState(false);
+
+  // Fetch weekly data when toggle is enabled
+  useEffect(() => {
+    if (showWeeklyComparison && !weeklyData) {
+      const fetchWeekly = async () => {
+        setWeeklyDataLoading(true);
+        try {
+          // Dynamic import to avoid circular dependency issues if any, or just call action
+          const { getWeeklyRevenueHistory } = await import('../actions'); 
+          const data = await getWeeklyRevenueHistory();
+          setWeeklyData(data);
+        } catch (error) {
+          console.error("Error fetching weekly revenue data:", error);
+        } finally {
+          setWeeklyDataLoading(false);
+        }
+      };
+      fetchWeekly();
+    }
+  }, [showWeeklyComparison, weeklyData]);
+
   // Helper function for Indian number formatting
   const formatIndianCurrency = (value: number) => {
     if (value >= 10000000) {
-      return `₹${(value / 10000000).toFixed(0)}Cr`;
+      return `₹${(value / 10000000).toFixed(2)} Cr`;
     } else if (value >= 100000) {
-      return `₹${(value / 100000).toFixed(0)}L`;
+      return `₹${(value / 100000).toFixed(2)} L`;
     } else if (value >= 1000) {
-      return `₹${(value / 1000).toFixed(0)}k`;
+      return `₹${(value / 1000).toFixed(2)} K`;
     }
-    return `₹${value}`;
+    return `₹${value.toLocaleString('en-IN')}`;
+  };
+
+  // Helper for full amount display in tables
+  const formatFullCurrency = (value: number) => {
+    return value.toLocaleString('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    });
   };
 
   // Cache keys for different data types
@@ -613,6 +647,103 @@ const SuperAdminDashboard = React.memo(() => {
                       </div>
                     </CardContent>
                   </Card>
+                </div>
+
+                {/* Weekly Revenue Comparison Section (Toggleable) */}
+                <div className="mt-4">
+                  <button
+                    onClick={() => setShowWeeklyComparison(!showWeeklyComparison)}
+                    className="mb-4 text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition-colors flex items-center gap-2"
+                  >
+                    {showWeeklyComparison ? 'Hide' : 'Show'} Weekly Revenue Comparison
+                    {!showWeeklyComparison && <span className="text-xs opacity-70">(Click to compare weeks across months)</span>}
+                  </button>
+
+                  {showWeeklyComparison && weeklyData && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-in fade-in zoom-in duration-300">
+                      {/* Sales Revenue Weekly Comparison Table */}
+                      <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-gray-900 dark:text-white text-base">Sales Revenue - Weekly Breakdown</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {weeklyDataLoading ? (
+                            <LoadingFallback height="h-[300px]" />
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                                  <tr>
+                                    <th scope="col" className="px-3 py-3">Month</th>
+                                    <th scope="col" className="px-3 py-3">Week 1</th>
+                                    <th scope="col" className="px-3 py-3">Week 2</th>
+                                    <th scope="col" className="px-3 py-3">Week 3</th>
+                                    <th scope="col" className="px-3 py-3">Week 4+</th>
+                                    <th scope="col" className="px-3 py-3 text-right">Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {weeklyData.sales.slice().reverse().map((item, index) => (
+                                    <tr key={index} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                      <td className="px-3 py-4 font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                                        {item.fullLabel}
+                                      </td>
+                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week1)}</td>
+                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week2)}</td>
+                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week3)}</td>
+                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week4)}</td>
+                                      <td className="px-3 py-4 text-right font-bold text-emerald-500">{formatFullCurrency(item.total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Ops Revenue Weekly Comparison Table */}
+                      <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-gray-900 dark:text-white text-base">Ops Revenue - Weekly Breakdown</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {weeklyDataLoading ? (
+                            <LoadingFallback height="h-[300px]" />
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                                  <tr>
+                                    <th scope="col" className="px-3 py-3">Month</th>
+                                    <th scope="col" className="px-3 py-3">Week 1</th>
+                                    <th scope="col" className="px-3 py-3">Week 2</th>
+                                    <th scope="col" className="px-3 py-3">Week 3</th>
+                                    <th scope="col" className="px-3 py-3">Week 4+</th>
+                                    <th scope="col" className="px-3 py-3 text-right">Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {weeklyData.ops.slice().reverse().map((item, index) => (
+                                    <tr key={index} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                      <td className="px-3 py-4 font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                                        {item.fullLabel}
+                                      </td>
+                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week1)}</td>
+                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week2)}</td>
+                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week3)}</td>
+                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week4)}</td>
+                                      <td className="px-3 py-4 text-right font-bold text-amber-500">{formatFullCurrency(item.total)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
                 </div>
 
                 {/* CRM Leads Analytics Section - Deferred loading */}
