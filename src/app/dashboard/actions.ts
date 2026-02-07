@@ -564,3 +564,186 @@ export async function getWeeklyRevenueHistory(): Promise<{ sales: WeeklyHistoryD
         return { sales: [], ops: [] };
     }
 }
+// ... (interfaces)
+
+export interface SourceAnalyticsData {
+    source: string;
+    leadsCount: number;
+    revenue: number;
+    valuation: number; // Revenue / Leads
+}
+
+// ... (previous code)
+
+export interface SourceAnalyticsData {
+    source: string;
+    leadsCount: number;
+    revenue: number;
+    valuation: number; // Revenue / Leads
+}
+
+export async function getSourceAnalyticsData(month: string, year: number): Promise<SourceAnalyticsData[]> {
+    try {
+        if (!db) throw new Error('Firebase Admin SDK not initialized');
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthIndex = monthNames.indexOf(month);
+
+        if (monthIndex === -1) throw new Error('Invalid month');
+
+        const startOfMonth = new Date(year, monthIndex, 1);
+        const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+
+        // ISO Strings for string-based timestamp comparison
+        const startISO = startOfMonth.toISOString();
+        const endISO = endOfMonth.toISOString();
+
+        const analyticsData: SourceAnalyticsData[] = [];
+        const leadsBySource: Record<string, number> = {};
+
+        // Helper to normalize source names
+        const normalizeSource = (source: string): string => {
+            if (!source) return 'Unknown';
+            const lower = source.toLowerCase().trim();
+            if (lower === 'billcut') return 'BillCut';
+            if (lower === 'ama') return 'AMA';
+            if (lower === 'credsettle' || lower === 'credsettlee') return 'CredSettle';
+            if (lower === 'settleloans' || lower === 'settleloans contact') return 'SettleLoans';
+            return source; // Return original if no match, or capitalize? Let's keep original for now unless specific
+        };
+
+        // 1. Fetch AMA LEADS
+        try {
+            const amaLeadsRef = db.collection('ama_leads');
+            const amaLeadsSnap = await amaLeadsRef
+                .where('date', '>=', startOfMonth.getTime())
+                .where('date', '<=', endOfMonth.getTime())
+                .get();
+
+            amaLeadsSnap.forEach(doc => {
+                const data = doc.data();
+                const rawSource = data.source || 'AMA';
+                const source = normalizeSource(rawSource);
+                leadsBySource[source] = (leadsBySource[source] || 0) + 1;
+            });
+        } catch (e) {
+            console.error('Error fetching ama_leads:', e);
+        }
+
+        // 2. Fetch BILLCUT LEADS
+        try {
+            const billcutLeadsRef = db.collection('billcutLeads');
+            const billcutLeadsSnap = await billcutLeadsRef
+                .where('date', '>=', startOfMonth.getTime())
+                .where('date', '<=', endOfMonth.getTime())
+                .get();
+
+            billcutLeadsSnap.forEach(doc => {
+                const source = 'BillCut';
+                leadsBySource[source] = (leadsBySource[source] || 0) + 1;
+            });
+        } catch (e) {
+            console.error('Error fetching billcutLeads:', e);
+        }
+
+
+        // 3. Fetch PAYMENTS (Sales)
+        const paymentsRef = db.collection('payments');
+        const paymentsSnap = await paymentsRef
+            .where('status', '==', 'approved')
+            .where('timestamp', '>=', startISO)
+            .where('timestamp', '<=', endISO)
+            .get();
+
+        const revenueBySource: Record<string, number> = {};
+        const paymentEmails: Set<string> = new Set();
+        const paymentsMap: Record<string, number> = {}; // email -> amount sum (for those without source)
+
+        paymentsSnap.forEach(doc => {
+            const data = doc.data();
+            const amount = parseFloat(data.amount) || 0;
+
+            // Check if source is directly available
+            if (data.source) {
+                const source = normalizeSource(data.source);
+                revenueBySource[source] = (revenueBySource[source] || 0) + amount;
+            } else {
+                // If no source, fall back to email lookup
+                const email = data.email || data.clientEmail || data.userEmail || data.payerEmail;
+                if (email) {
+                    paymentEmails.add(email);
+                    paymentsMap[email] = (paymentsMap[email] || 0) + amount;
+                }
+            }
+        });
+
+        // 4. Resolve Sources for Payments MISSING source
+        if (paymentEmails.size > 0) {
+            const emailsArray = Array.from(paymentEmails);
+            const chunkSize = 10;
+            const matchedSources: Record<string, string> = {}; // email -> source
+
+            for (let i = 0; i < emailsArray.length; i += chunkSize) {
+                const chunk = emailsArray.slice(i, i + chunkSize);
+                if (chunk.length === 0) continue;
+
+                // Check AMA Leads
+                const amaCheckSnap = await db.collection('ama_leads')
+                    .where('email', 'in', chunk)
+                    .get();
+
+                amaCheckSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.email) {
+                        matchedSources[data.email] = data.source || 'AMA';
+                    }
+                });
+
+                // Check BillCut Leads (if not found in AMA)
+                // Filter out emails already found
+                const remainingChunk = chunk.filter(email => !matchedSources[email]);
+                if (remainingChunk.length > 0) {
+                    const billcutCheckSnap = await db.collection('billcutLeads')
+                        .where('email', 'in', remainingChunk)
+                        .get();
+
+                    billcutCheckSnap.forEach(doc => {
+                        const data = doc.data();
+                        if (data.email) {
+                            matchedSources[data.email] = 'BillCut';
+                        }
+                    });
+                }
+            }
+
+            // Aggregate Revenue for resolved emails
+            for (const [email, amount] of Object.entries(paymentsMap)) {
+                const source = matchedSources[email] || 'Unknown';
+                revenueBySource[source] = (revenueBySource[source] || 0) + amount;
+            }
+        }
+
+        // 5. Combine Data
+        const allSources = new Set([...Object.keys(leadsBySource), ...Object.keys(revenueBySource)]);
+
+        allSources.forEach(source => {
+            const leadsCount = leadsBySource[source] || 0;
+            const revenue = revenueBySource[source] || 0;
+            const valuation = leadsCount > 0 ? revenue / leadsCount : 0;
+
+            analyticsData.push({
+                source,
+                leadsCount,
+                revenue,
+                valuation
+            });
+        });
+
+        // Sort by Revenue descending
+        return analyticsData.sort((a, b) => b.revenue - a.revenue);
+
+    } catch (error) {
+        console.error('Error fetching source analytics:', error);
+        return [];
+    }
+}

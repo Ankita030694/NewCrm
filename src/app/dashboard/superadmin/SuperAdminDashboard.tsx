@@ -12,7 +12,14 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
-import { getDashboardHistory, getOpsRevenueHistory, HistoryData, WeeklyHistoryData } from '../actions';
+import {
+  getDashboardHistory,
+  getOpsRevenueHistory,
+  HistoryData,
+  WeeklyHistoryData,
+  getSourceAnalyticsData, // [NEW]
+  SourceAnalyticsData     // [NEW]
+} from '../actions';
 
 // Lazy load Chart.js and heavy components
 const LazyCharts = lazy(() => import('./components/LazyCharts'));
@@ -153,6 +160,12 @@ const SuperAdminDashboard = React.memo(() => {
   const [weeklyData, setWeeklyData] = useState<{ sales: WeeklyHistoryData[], ops: WeeklyHistoryData[] } | null>(null);
   const [weeklyDataLoading, setWeeklyDataLoading] = useState(false);
 
+  // --- Source Analytics State ---
+  const [sourceData, setSourceData] = useState<SourceAnalyticsData[]>([]);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceMonth, setSourceMonth] = useState<number>(new Date().getMonth());
+  const [sourceYear, setSourceYear] = useState<number>(new Date().getFullYear());
+
   // Fetch weekly data when toggle is enabled
   useEffect(() => {
     if (showWeeklyComparison && !weeklyData) {
@@ -160,8 +173,8 @@ const SuperAdminDashboard = React.memo(() => {
         setWeeklyDataLoading(true);
         try {
           // Dynamic import to avoid circular dependency issues if any, or just call action
-          const { getWeeklyRevenueHistory } = await import('../actions'); 
-          const data = await getWeeklyRevenueHistory();
+          // Note context: getWeeklyRevenueHistory is imported at top level now
+          const data = await import('../actions').then(mod => mod.getWeeklyRevenueHistory());
           setWeeklyData(data);
         } catch (error) {
           console.error("Error fetching weekly revenue data:", error);
@@ -172,6 +185,24 @@ const SuperAdminDashboard = React.memo(() => {
       fetchWeekly();
     }
   }, [showWeeklyComparison, weeklyData]);
+
+  // Fetch Source Analytics
+  useEffect(() => {
+    async function fetchSourceData() {
+      setSourceLoading(true);
+      try {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        const data = await getSourceAnalyticsData(monthNames[sourceMonth], sourceYear);
+        setSourceData(data);
+      } catch (error) {
+        console.error("Error fetching source analytics:", error);
+      } finally {
+        setSourceLoading(false);
+      }
+    }
+    fetchSourceData();
+  }, [sourceMonth, sourceYear]);
 
   // Helper function for Indian number formatting
   const formatIndianCurrency = (value: number) => {
@@ -674,25 +705,25 @@ const SuperAdminDashboard = React.memo(() => {
                               <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                                 <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                                   <tr>
-                                    <th scope="col" className="px-3 py-3">Month</th>
-                                    <th scope="col" className="px-3 py-3">Week 1</th>
-                                    <th scope="col" className="px-3 py-3">Week 2</th>
-                                    <th scope="col" className="px-3 py-3">Week 3</th>
-                                    <th scope="col" className="px-3 py-3">Week 4+</th>
-                                    <th scope="col" className="px-3 py-3 text-right">Total</th>
+                                    <th scope="col" className="px-2 py-2">Month</th>
+                                    <th scope="col" className="px-2 py-2">Week 1</th>
+                                    <th scope="col" className="px-2 py-2">Week 2</th>
+                                    <th scope="col" className="px-2 py-2">Week 3</th>
+                                    <th scope="col" className="px-2 py-2">Week 4+</th>
+                                    <th scope="col" className="px-2 py-2 text-right">Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {weeklyData.sales.slice().reverse().map((item, index) => (
                                     <tr key={index} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                      <td className="px-3 py-4 font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                                      <td className="px-2 py-2 font-medium text-gray-900 dark:text-white whitespace-nowrap">
                                         {item.fullLabel}
                                       </td>
-                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week1)}</td>
-                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week2)}</td>
-                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week3)}</td>
-                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week4)}</td>
-                                      <td className="px-3 py-4 text-right font-bold text-emerald-500">{formatFullCurrency(item.total)}</td>
+                                      <td className="px-2 py-2">{formatFullCurrency(item.weeks.week1)}</td>
+                                      <td className="px-2 py-2">{formatFullCurrency(item.weeks.week2)}</td>
+                                      <td className="px-2 py-2">{formatFullCurrency(item.weeks.week3)}</td>
+                                      <td className="px-2 py-2">{formatFullCurrency(item.weeks.week4)}</td>
+                                      <td className="px-2 py-2 text-right font-bold text-emerald-500">{formatFullCurrency(item.total)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -715,25 +746,25 @@ const SuperAdminDashboard = React.memo(() => {
                               <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                                 <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                                   <tr>
-                                    <th scope="col" className="px-3 py-3">Month</th>
-                                    <th scope="col" className="px-3 py-3">Week 1</th>
-                                    <th scope="col" className="px-3 py-3">Week 2</th>
-                                    <th scope="col" className="px-3 py-3">Week 3</th>
-                                    <th scope="col" className="px-3 py-3">Week 4+</th>
-                                    <th scope="col" className="px-3 py-3 text-right">Total</th>
+                                    <th scope="col" className="px-2 py-2">Month</th>
+                                    <th scope="col" className="px-2 py-2">Week 1</th>
+                                    <th scope="col" className="px-2 py-2">Week 2</th>
+                                    <th scope="col" className="px-2 py-2">Week 3</th>
+                                    <th scope="col" className="px-2 py-2">Week 4+</th>
+                                    <th scope="col" className="px-2 py-2 text-right">Total</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {weeklyData.ops.slice().reverse().map((item, index) => (
                                     <tr key={index} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                      <td className="px-3 py-4 font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                                      <td className="px-2 py-2 font-medium text-gray-900 dark:text-white whitespace-nowrap">
                                         {item.fullLabel}
                                       </td>
-                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week1)}</td>
-                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week2)}</td>
-                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week3)}</td>
-                                      <td className="px-3 py-4">{formatFullCurrency(item.weeks.week4)}</td>
-                                      <td className="px-3 py-4 text-right font-bold text-amber-500">{formatFullCurrency(item.total)}</td>
+                                      <td className="px-2 py-2">{formatFullCurrency(item.weeks.week1)}</td>
+                                      <td className="px-2 py-2">{formatFullCurrency(item.weeks.week2)}</td>
+                                      <td className="px-2 py-2">{formatFullCurrency(item.weeks.week3)}</td>
+                                      <td className="px-2 py-2">{formatFullCurrency(item.weeks.week4)}</td>
+                                      <td className="px-2 py-2 text-right font-bold text-amber-500">{formatFullCurrency(item.total)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -744,6 +775,89 @@ const SuperAdminDashboard = React.memo(() => {
                       </Card>
                     </div>
                   )}
+                </div>
+
+                {/* Source Analytics Section */}
+                <div className="mt-4">
+                  <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg">
+                    <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                      <CardTitle className="text-gray-900 dark:text-white text-base">Source Performance Analytics</CardTitle>
+                      
+                      {/* Source Analytics Filters */}
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={sourceMonth}
+                          onChange={(e) => setSourceMonth(parseInt(e.target.value))}
+                        >
+                          <option value="0">January</option>
+                          <option value="1">February</option>
+                          <option value="2">March</option>
+                          <option value="3">April</option>
+                          <option value="4">May</option>
+                          <option value="5">June</option>
+                          <option value="6">July</option>
+                          <option value="7">August</option>
+                          <option value="8">September</option>
+                          <option value="9">October</option>
+                          <option value="10">November</option>
+                          <option value="11">December</option>
+                        </select>
+                        
+                        <select
+                          className="bg-gray-700 border border-gray-600 text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={sourceYear}
+                          onChange={(e) => setSourceYear(parseInt(e.target.value))}
+                        >
+                          {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                            <option key={year} value={year}>{year}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {sourceLoading ? (
+                        <LoadingFallback height="h-[200px]" />
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                            <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                              <tr>
+                                <th scope="col" className="px-3 py-3">Source</th>
+                                <th scope="col" className="px-3 py-3 text-center">Leads Created</th>
+                                <th scope="col" className="px-3 py-3 text-right">Total Revenue</th>
+                                <th scope="col" className="px-3 py-3 text-right">Valuation (Rev/Lead)</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sourceData.length > 0 ? (
+                                sourceData.map((item, index) => (
+                                  <tr key={index} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                    <td className="px-3 py-3 font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                                      {item.source}
+                                    </td>
+                                    <td className="px-3 py-3 text-center">{item.leadsCount}</td>
+                                    <td className="px-3 py-3 text-right font-semibold text-emerald-500">
+                                      {formatFullCurrency(item.revenue)}
+                                    </td>
+                                    <td className="px-3 py-3 text-right font-medium text-blue-500">
+                                      {formatFullCurrency(item.valuation)}
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan={4} className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
+                                    No data available for this month
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
 
                 {/* CRM Leads Analytics Section - Deferred loading */}
