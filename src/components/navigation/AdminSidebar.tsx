@@ -71,6 +71,12 @@ const AdminSidebar = () => {
             </Link>
           </li>
           <li>
+            <Link href="/billcutpay" className={`flex items-center px-6 py-3 ${isActive('/billcutpay')} transition-all duration-200 hover:bg-gray-800/70 hover:text-indigo-400 group`}>
+              <FaMoneyBillWave className="mr-3 text-gray-500 group-hover:text-indigo-400 transition-colors duration-200" />
+              <span>Billcut Pay</span>
+            </Link>
+          </li>
+          <li>
             <Link href="/targets" className={`flex items-center px-6 py-3 ${isActive('/targets')} transition-all duration-200 hover:bg-gray-800/70 hover:text-indigo-400 group`}>
               <FaBriefcase className="mr-3 text-gray-500 group-hover:text-indigo-400 transition-colors duration-200" />
               <span>Targets</span>
