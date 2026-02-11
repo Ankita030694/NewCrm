@@ -862,6 +862,52 @@ export async function getBillcutHistoryData(): Promise<BillcutHistoryData[]> {
             }
         });
 
+        // 3. Fetch approved OPS payments with source "billcut" and type "Success Fees" (Earned)
+        const opsPaymentsSnap = await db.collection('ops_payments')
+            .where('status', '==', 'approved')
+            .where('source', '==', 'billcut')
+            .where('type', '==', 'Success Fees')
+            .get();
+
+        opsPaymentsSnap.forEach(doc => {
+            const data = doc.data();
+            // Double check strict equality just in case, though query should handle it
+            if (data.source === 'billcut' && data.type === 'Success Fees') {
+                const amount = parseFloat(data.amount) || 0;
+
+                let date: Date;
+                if (typeof data.timestamp === 'string') {
+                    date = new Date(data.timestamp);
+                } else if (data.timestamp?.toDate) {
+                    date = data.timestamp.toDate();
+                } else if (data.timestamp?._seconds) {
+                    date = new Date(data.timestamp._seconds * 1000);
+                } else if (data.approvedAt) {
+                    // Fallback to approvedAt if timestamp is missing/invalid
+                    date = new Date(data.approvedAt);
+                } else {
+                    date = new Date(); // Fallback to now? Or skip.
+                }
+
+                if (!isNaN(date.getTime())) {
+                    const monthName = monthNames[date.getMonth()];
+                    const year = date.getFullYear();
+                    const key = `${monthName}_${year}`;
+
+                    if (!billcutHistory[key]) {
+                        billcutHistory[key] = {
+                            month: monthName,
+                            year: year,
+                            fullLabel: `${monthName} ${year}`,
+                            paid: 0,
+                            earned: 0
+                        };
+                    }
+                    billcutHistory[key].earned += amount;
+                }
+            }
+        });
+
         // Sort and return
         return Object.values(billcutHistory).sort((a, b) => {
             if (a.year !== b.year) return a.year - b.year;
