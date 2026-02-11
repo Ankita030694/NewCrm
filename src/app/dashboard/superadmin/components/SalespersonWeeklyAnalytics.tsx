@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useSalespersonWeeklyAnalytics } from '../hooks/useSalespersonWeeklyAnalytics';
 
@@ -10,7 +10,7 @@ export const SalespersonWeeklyAnalyticsComponent: React.FC<SalespersonWeeklyAnal
     enabled = true
 }) => {
     const { data, isLoading } = useSalespersonWeeklyAnalytics(enabled);
-    const [historyCount, setHistoryCount] = React.useState(0);
+    const [historyCount, setHistoryCount] = useState(0);
 
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
@@ -33,12 +33,6 @@ export const SalespersonWeeklyAnalyticsComponent: React.FC<SalespersonWeeklyAnal
         }).format(amount);
     };
 
-    const formatShortCurrency = (amount: number) => {
-        if (amount >= 100000) return `${(amount / 100000).toFixed(1)}L`;
-        if (amount >= 1000) return `${(amount / 1000).toFixed(0)}K`;
-        return amount.toString();
-    };
-
     if (isLoading) {
         return (
             <div className="h-48 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
@@ -50,31 +44,25 @@ export const SalespersonWeeklyAnalyticsComponent: React.FC<SalespersonWeeklyAnal
     return (
         <Card className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 shadow-lg mt-4 overflow-hidden">
             <CardHeader className="pb-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <CardTitle className="text-gray-900 dark:text-white text-base">
-                        Salesperson Weekly Revenue Breakdown
+                        Salesperson Revenue Analytics
                     </CardTitle>
-                    <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">Previous Months:</span>
-                        <select 
-                            className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                            value={historyCount}
-                            onChange={(e) => setHistoryCount(parseInt(e.target.value))}
-                        >
-                            <option value={0}>None</option>
-                            <option value={1}>Last 1 Month</option>
-                            <option value={2}>Last 2 Months</option>
-                            <option value={3}>Last 3 Months</option>
-                            <option value={4}>Last 4 Months</option>
-                            <option value={5}>Last 5 Months</option>
-                            <option value={6}>Last 6 Months</option>
-                            <option value={7}>Last 7 Months</option>
-                            <option value={8}>Last 8 Months</option>
-                            <option value={9}>Last 9 Months</option>
-                            <option value={10}>Last 10 Months</option>
-                            <option value={11}>Last 11 Months</option>
-                            <option value={12}>Last 12 Months</option>
-                        </select>
+                    
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-bold text-gray-400">History:</span>
+                            <select 
+                                className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white px-2 py-1 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                                value={historyCount}
+                                onChange={(e) => setHistoryCount(parseInt(e.target.value))}
+                            >
+                                <option value={0}>Current Only</option>
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                                    <option key={n} value={n}>Last {n} Month{n > 1 ? 's' : ''}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </div>
             </CardHeader>
@@ -85,12 +73,10 @@ export const SalespersonWeeklyAnalyticsComponent: React.FC<SalespersonWeeklyAnal
                             <tr>
                                 <th className="px-4 py-3 sticky left-0 bg-gray-100 dark:bg-gray-800 z-10 border-b dark:border-gray-600">Salesperson</th>
                                 
-                                {/* Current Month Header */}
                                 <th colSpan={5} className="px-3 py-2 text-center border-l border-b dark:border-gray-600 bg-blue-50/50 dark:bg-blue-900/20">
                                     Current Month
                                 </th>
 
-                                {/* Historical Months Headers */}
                                 {historicalMonths.map(month => (
                                     <th key={month} colSpan={5} className="px-3 py-2 text-center border-l border-b dark:border-gray-600 bg-gray-200/50 dark:bg-gray-800/50 opacity-80">
                                         {month}
@@ -99,15 +85,12 @@ export const SalespersonWeeklyAnalyticsComponent: React.FC<SalespersonWeeklyAnal
                             </tr>
                             <tr className="bg-gray-50 dark:bg-gray-800/30">
                                 <th className="px-4 py-2 sticky left-0 bg-gray-50 dark:bg-gray-800 z-10 border-b dark:border-gray-700">Name</th>
-                                
-                                {/* Current Month Weeks */}
                                 <th className="px-2 py-2 text-center border-l dark:border-gray-700">W1</th>
                                 <th className="px-2 py-2 text-center">W2</th>
                                 <th className="px-2 py-2 text-center">W3</th>
                                 <th className="px-2 py-2 text-center">W4+</th>
                                 <th className="px-2 py-2 text-center font-bold text-blue-600 dark:text-blue-400">Total</th>
 
-                                {/* Historical Weeks */}
                                 {historicalMonths.map(month => (
                                     <React.Fragment key={`${month}-weeks`}>
                                         <th className="px-2 py-2 text-center border-l dark:border-gray-700 opacity-60">W1</th>
@@ -126,7 +109,6 @@ export const SalespersonWeeklyAnalyticsComponent: React.FC<SalespersonWeeklyAnal
                                         {item.salespersonName}
                                     </td>
                                     
-                                    {/* Current Month Data */}
                                     <td className="px-2 py-2 text-center border-l dark:border-gray-700">{formatCurrency(item.weeks.week1)}</td>
                                     <td className="px-2 py-2 text-center">{formatCurrency(item.weeks.week2)}</td>
                                     <td className="px-2 py-2 text-center">{formatCurrency(item.weeks.week3)}</td>
@@ -135,7 +117,6 @@ export const SalespersonWeeklyAnalyticsComponent: React.FC<SalespersonWeeklyAnal
                                         {formatCurrency(item.monthlyTotal)}
                                     </td>
 
-                                    {/* Historical Data */}
                                     {historicalMonths.map(month => {
                                         const hist = item.history[month] || { week1: 0, week2: 0, week3: 0, week4: 0, total: 0 };
                                         return (

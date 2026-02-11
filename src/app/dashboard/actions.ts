@@ -909,18 +909,20 @@ export async function getSalespersonWeeklyAnalytics(): Promise<SalespersonWeekly
             .get();
 
         const activeSalespeople = new Set<string>();
+        const activeSalespeopleById = new Map<string, string>();
+
         usersSnapshot.forEach(doc => {
             const userData = doc.data();
             const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
             // User is active if status is not 'inactive'
             if (userData.status !== 'inactive' && fullName) {
                 activeSalespeople.add(fullName);
+                activeSalespeopleById.set(doc.id, fullName);
             }
         });
 
         // 2. Fetch all approved payments
-        // We'll limit to last 12 months for historical weekly breakdown to avoid excessive data?
-        // Actually the user asked for previous months, let's just fetch all approved for now.
+        // Limit to reasonable range? Actually, fetching all for now but sorting later.
         const paymentsSnap = await db.collection('payments')
             .where('status', '==', 'approved')
             .get();
@@ -929,13 +931,23 @@ export async function getSalespersonWeeklyAnalytics(): Promise<SalespersonWeekly
 
         paymentsSnap.forEach(doc => {
             const data = doc.data();
-            const salespersonName = data.salesPersonName || 'Unknown';
 
-            // FILTER: Skip if salesperson is inactive in users collection
-            // Only filter if we have a name to check against
-            if (salespersonName !== 'Unknown' && !activeSalespeople.has(salespersonName)) {
-                return;
+            // Resolve salesperson name from various possible fields
+            let salespersonName = data.salesPersonName || data.salespersonName;
+
+            // If name is not directly available, try resolving from IDs
+            if (!salespersonName || salespersonName === 'Unknown') {
+                const possibleId = data.salesperson || data.userId || data.assignedTo;
+                if (possibleId && activeSalespeopleById.has(possibleId)) {
+                    salespersonName = activeSalespeopleById.get(possibleId);
+                }
             }
+
+            // Fallback or Skip
+            if (!salespersonName || salespersonName === 'Unknown') return;
+
+            // FILTER: Skip if salesperson is inactive
+            if (!activeSalespeople.has(salespersonName)) return;
 
             const amount = parseFloat(data.amount) || 0;
 
@@ -946,8 +958,10 @@ export async function getSalespersonWeeklyAnalytics(): Promise<SalespersonWeekly
                 date = new Date(data.timestamp.toDate());
             } else if (data.timestamp?._seconds) {
                 date = new Date(data.timestamp._seconds * 1000);
-            } else {
+            } else if (data.timestamp) {
                 date = new Date(data.timestamp);
+            } else {
+                return; // No date, skip
             }
 
             if (isNaN(date.getTime())) return;
@@ -976,7 +990,7 @@ export async function getSalespersonWeeklyAnalytics(): Promise<SalespersonWeekly
             const historyMonth = person.history[monthLabel];
             historyMonth.total += amount;
 
-            // Determine week
+            // Determine week (1-7, 8-14, 15-21, 22+)
             let weekKey: 'week1' | 'week2' | 'week3' | 'week4';
             if (paymentDay <= 7) weekKey = 'week1';
             else if (paymentDay <= 14) weekKey = 'week2';
@@ -985,15 +999,12 @@ export async function getSalespersonWeeklyAnalytics(): Promise<SalespersonWeekly
 
             historyMonth[weekKey] += amount;
 
-            // Add to current month weeks (as top-level accessor for convenience)
+            // Add to current month weeks (accessor for convenience)
             if (paymentMonth === currentMonth && paymentYear === currentYear) {
                 person.monthlyTotal += amount;
                 person.weeks[weekKey] += amount;
             }
         });
-
-        // Filter out records where salespersonName is Unknown if there are no payments? 
-        // No, let's keep it for now.
 
         return Object.values(salespersonData).sort((a, b) => b.monthlyTotal - a.monthlyTotal);
 
