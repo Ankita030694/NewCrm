@@ -51,6 +51,11 @@ const findClosestBankMatch = (clientBankName: string, availableBanks: string[]):
     'indifi': 'indifi capital private limited',
     'indifi capital': 'indifi capital private limited',
     'mintifi': 'mintifi',
+    'wizdom': 'money view',
+    'wizdomfinance': 'money view',
+    'wizdomfinancemoneyview': 'money view',
+    'whizdm': 'money view',
+    'whizdmfinance': 'money view',
   };
   
   // Normalize bank names for comparison
@@ -63,13 +68,7 @@ const findClosestBankMatch = (clientBankName: string, availableBanks: string[]):
   
   const normalizedClientBank = normalizeBankName(clientBankName);
   
-  // First, try exact match after normalization
-  const exactMatch = availableBanks.find(bank => 
-    normalizeBankName(bank) === normalizedClientBank
-  );
-  if (exactMatch) return exactMatch;
-  
-  // Try mapping-based match
+  // 1. Try mapping-based match FIRST (to allow explicit overrides)
   const mappedName = bankNameMappings[normalizedClientBank];
   if (mappedName) {
     const mappedMatch = availableBanks.find(bank => 
@@ -77,6 +76,12 @@ const findClosestBankMatch = (clientBankName: string, availableBanks: string[]):
     );
     if (mappedMatch) return mappedMatch;
   }
+  
+  // 2. Then try exact match after normalization
+  const exactMatch = availableBanks.find(bank => 
+    normalizeBankName(bank) === normalizedClientBank
+  );
+  if (exactMatch) return exactMatch;
   
   // Calculate similarity scores
   const similarityScores = availableBanks.map(bank => {
