@@ -47,7 +47,8 @@ import {
   MetricCard,
   SalesMetricsSkeleton,
   ChartSkeleton,
-  TableSkeleton
+  TableSkeleton,
+  SalespersonWeeklyAnalyticsComponent
 } from './components';
 
 import { ThemeToggle } from './components/ThemeToggle';
@@ -569,6 +570,9 @@ const SuperAdminDashboard = React.memo(() => {
                   opsPaymentsLoading={opsPaymentsLoading}
                   salesLoading={salesLoading}
                 />
+
+                {/* Salesperson Weekly & Historical Analytics */}
+                <SalespersonWeeklyAnalyticsComponent />
 
                 {/* History Charts Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">

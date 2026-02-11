@@ -873,3 +873,132 @@ export async function getBillcutHistoryData(): Promise<BillcutHistoryData[]> {
         return [];
     }
 }
+
+export interface SalespersonWeeklyAnalytics {
+    salespersonName: string;
+    weeks: {
+        week1: number;
+        week2: number;
+        week3: number;
+        week4: number;
+    };
+    monthlyTotal: number;
+    history: {
+        [monthLabel: string]: {
+            week1: number;
+            week2: number;
+            week3: number;
+            week4: number;
+            total: number;
+        };
+    };
+}
+
+export async function getSalespersonWeeklyAnalytics(): Promise<SalespersonWeeklyAnalytics[]> {
+    try {
+        if (!db) throw new Error('Firebase Admin SDK not initialized');
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        // 1. Fetch Active Salespeople to filter results
+        const usersSnapshot = await db.collection('users')
+            .where('role', 'in', ['sales', 'admin', 'superadmin']) // Include relevant roles that might have payments
+            .get();
+
+        const activeSalespeople = new Set<string>();
+        usersSnapshot.forEach(doc => {
+            const userData = doc.data();
+            const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim();
+            // User is active if status is not 'inactive'
+            if (userData.status !== 'inactive' && fullName) {
+                activeSalespeople.add(fullName);
+            }
+        });
+
+        // 2. Fetch all approved payments
+        // We'll limit to last 12 months for historical weekly breakdown to avoid excessive data?
+        // Actually the user asked for previous months, let's just fetch all approved for now.
+        const paymentsSnap = await db.collection('payments')
+            .where('status', '==', 'approved')
+            .get();
+
+        const salespersonData: Record<string, SalespersonWeeklyAnalytics> = {};
+
+        paymentsSnap.forEach(doc => {
+            const data = doc.data();
+            const salespersonName = data.salesPersonName || 'Unknown';
+
+            // FILTER: Skip if salesperson is inactive in users collection
+            // Only filter if we have a name to check against
+            if (salespersonName !== 'Unknown' && !activeSalespeople.has(salespersonName)) {
+                return;
+            }
+
+            const amount = parseFloat(data.amount) || 0;
+
+            let date: Date;
+            if (typeof data.timestamp === 'string') {
+                date = new Date(data.timestamp);
+            } else if (data.timestamp?.toDate) {
+                date = new Date(data.timestamp.toDate());
+            } else if (data.timestamp?._seconds) {
+                date = new Date(data.timestamp._seconds * 1000);
+            } else {
+                date = new Date(data.timestamp);
+            }
+
+            if (isNaN(date.getTime())) return;
+
+            const paymentMonth = date.getMonth();
+            const paymentYear = date.getFullYear();
+            const paymentDay = date.getDate();
+            const monthLabel = `${monthNames[paymentMonth]} ${paymentYear}`;
+
+            if (!salespersonData[salespersonName]) {
+                salespersonData[salespersonName] = {
+                    salespersonName,
+                    weeks: { week1: 0, week2: 0, week3: 0, week4: 0 },
+                    monthlyTotal: 0,
+                    history: {}
+                };
+            }
+
+            const person = salespersonData[salespersonName];
+
+            // Initialize historical month if not exists
+            if (!person.history[monthLabel]) {
+                person.history[monthLabel] = { week1: 0, week2: 0, week3: 0, week4: 0, total: 0 };
+            }
+
+            const historyMonth = person.history[monthLabel];
+            historyMonth.total += amount;
+
+            // Determine week
+            let weekKey: 'week1' | 'week2' | 'week3' | 'week4';
+            if (paymentDay <= 7) weekKey = 'week1';
+            else if (paymentDay <= 14) weekKey = 'week2';
+            else if (paymentDay <= 21) weekKey = 'week3';
+            else weekKey = 'week4';
+
+            historyMonth[weekKey] += amount;
+
+            // Add to current month weeks (as top-level accessor for convenience)
+            if (paymentMonth === currentMonth && paymentYear === currentYear) {
+                person.monthlyTotal += amount;
+                person.weeks[weekKey] += amount;
+            }
+        });
+
+        // Filter out records where salespersonName is Unknown if there are no payments? 
+        // No, let's keep it for now.
+
+        return Object.values(salespersonData).sort((a, b) => b.monthlyTotal - a.monthlyTotal);
+
+    } catch (error) {
+        console.error('Error fetching salesperson weekly analytics:', error);
+        return [];
+    }
+}
