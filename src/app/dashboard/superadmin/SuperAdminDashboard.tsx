@@ -571,9 +571,6 @@ const SuperAdminDashboard = React.memo(() => {
                   salesLoading={salesLoading}
                 />
 
-                {/* Salesperson Weekly & Historical Analytics */}
-                <SalespersonWeeklyAnalyticsComponent />
-
                 {/* History Charts Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
                   {/* Collection Trends Chart */}
@@ -808,6 +805,9 @@ const SuperAdminDashboard = React.memo(() => {
                     </div>
                   )}
                 </div>
+
+                {/* Salesperson Weekly & Historical Analytics */}
+                <SalespersonWeeklyAnalyticsComponent />
 
                 {/* Source Analytics Section */}
                 <div className="mt-4">
