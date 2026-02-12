@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-type Theme = 'dark' | 'light';
+type Theme = 'light' | 'dark';
 
 interface ThemeContextType {
   theme: Theme;
@@ -11,51 +11,47 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>('dark');
-  const [mounted, setMounted] = useState(false);
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [theme, setTheme] = useState<Theme>('dark'); // Default to dark as per project's chart configs
 
   useEffect(() => {
-    setMounted(true);
-    // Check local storage
-    const savedTheme = localStorage.getItem('theme') as Theme;
+    // Check local storage for theme preference
+    const savedTheme = localStorage.getItem('theme') as Theme | null;
     if (savedTheme) {
       setTheme(savedTheme);
+      updateDocumentTheme(savedTheme);
     } else {
-      // Default to dark
-      setTheme('dark');
+      // If no preference, use 'dark' and update document
+      updateDocumentTheme('dark');
     }
   }, []);
 
-  useEffect(() => {
-    if (!mounted) return;
-    
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-    localStorage.setItem('theme', theme);
-  }, [theme, mounted]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  const updateDocumentTheme = (newTheme: Theme) => {
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   };
 
-  // Prevent hydration mismatch by rendering nothing until mounted, 
-  // or render children with default theme (but might cause flash).
-  // For dashboard, rendering children is better, but we need to ensure class is applied.
-  // Since we default to 'dark' and dashboard is dark by default, it should be fine.
-  
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateDocumentTheme(newTheme);
+  };
+
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );
-}
+};
 
-export function useTheme() {
+export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (context === undefined) {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
-}
+};

@@ -20,7 +20,7 @@ export default function AppUsersPage() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [loggedInFilter, setLoggedInFilter] = useState('all');
-  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<string[]>(['admin', 'advocate', 'client', 'user']);
   const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -74,10 +74,10 @@ export default function AppUsersPage() {
         });
       } else {
         setUsers(data.users);
-        if (role === 'all' && status === 'all' && loggedIn === 'all' && !query) {
-             const uniqueRoles = Array.from(new Set(data.users.map((u: AppUser) => u.role).filter(Boolean))) as string[];
-             if (uniqueRoles.length > 0) setAvailableRoles(uniqueRoles);
-        }
+        const knownRoles = ['admin', 'advocate', 'client', 'user'];
+        const dynamicRoles = Array.from(new Set(data.users.map((u: AppUser) => u.role).filter(Boolean))) as string[];
+        const mergedRoles = Array.from(new Set([...knownRoles, ...dynamicRoles])).sort();
+        setAvailableRoles(mergedRoles);
       }
 
       setHasMore(data.hasMore);
@@ -245,14 +245,9 @@ export default function AppUsersPage() {
                         className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[#D2A02A] focus:border-[#D2A02A] sm:text-sm rounded-md"
                      >
                         <option value="all">All Roles</option>
-                        {availableRoles.length > 0 ? availableRoles.map(role => (
+                        {availableRoles.map(role => (
                              <option key={role} value={role}>{role}</option>
-                        )) : (
-                             <>
-                                <option value="admin">admin</option>
-                                <option value="user">user</option>
-                             </>
-                        )}
+                        ))}
                      </select>
 
                      <select 
