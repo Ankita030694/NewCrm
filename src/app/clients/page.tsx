@@ -36,7 +36,8 @@ import {
   Users, 
   MessageSquare, 
   MoreHorizontal,
-  Trash2
+  Trash2,
+  RefreshCw
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -370,6 +371,7 @@ function ClientsPageWithParams() {
   const [totalClientCount, setTotalClientCount] = useState<number>(0)
   const [filteredTotalCount, setFilteredTotalCount] = useState<number>(0)
   const [showFilters, setShowFilters] = useState(false)
+  const [isLoadingAll, setIsLoadingAll] = useState(false)
 
   // App Status states
   const [appStatuses, setAppStatuses] = useState<{ [key: string]: string }>({})
@@ -786,6 +788,45 @@ function ClientsPageWithParams() {
     },
     [debouncedSearchTerm, executeSearchQueries, enhanceClientData, mergeAndSortClients, buildBaseFilterConstraints, fetchFilteredCount, userRole],
   )
+
+  // Function to load ALL clients at once
+  const loadAllClients = useCallback(async () => {
+    setIsLoadingAll(true)
+    setError(null)
+    try {
+      const baseConstraints = buildBaseFilterConstraints()
+      const collectionRef = collection(db, "clients")
+      const allClientsQuery = query(collectionRef, ...baseConstraints, orderBy("startDate", "desc"))
+      const querySnapshot = await getDocs(allClientsQuery)
+
+      const allClientsData = await Promise.all(
+        querySnapshot.docs.map(async (docSnap) => {
+          const client = { id: docSnap.id, ...docSnap.data() } as Client
+          return enhanceClientData(client)
+        })
+      )
+
+      const sorted = mergeAndSortClients([], allClientsData)
+      setClients(sorted)
+      setFilteredClients(sorted)
+      setHasMore(false)
+      hasMoreRef.current = false
+      lastDocRef.current = querySnapshot.docs[querySnapshot.docs.length - 1] || null
+      setFilteredTotalCount(sorted.length)
+      setTotalClientCount(sorted.length)
+      showToast("All Clients Loaded", `Successfully loaded ${sorted.length} clients.`, "success")
+    } catch (err) {
+      console.error("Error loading all clients:", err)
+      if (err instanceof Error) {
+        setError(`Failed to load all clients: ${err.message}`)
+      } else {
+        setError("Failed to load all clients: Unknown error")
+      }
+      showToast("Error", "Failed to load all clients.", "error")
+    } finally {
+      setIsLoadingAll(false)
+    }
+  }, [buildBaseFilterConstraints, enhanceClientData, mergeAndSortClients])
 
   // Toast function to add new toast
   const showToast = (title: string, description: string, type: "success" | "error" | "info" = "info") => {
@@ -1932,6 +1973,12 @@ function ClientsPageWithParams() {
               userName: localStorage.getItem("userName") || "Unknown",
               message: `Template message: ${templateName}`,
               customParams: [
+                // Numbered params for templates using {{1}}, {{2}}, etc.
+                { name: "1", value: client.name || "Customer" },
+                { name: "2", value: "AMA Legal Solutions" },
+                { name: "3", value: localStorage.getItem("userName") || "Agent" },
+                { name: "4", value: formattedPhone },
+                // Named params for templates using {{name}}, {{Channel}}, etc.
                 { name: "name", value: client.name || "Customer" },
                 { name: "Channel", value: "AMA Legal Solutions" },
                 { name: "agent_name", value: localStorage.getItem("userName") || "Agent" },
@@ -2206,6 +2253,19 @@ function ClientsPageWithParams() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+               <Button
+                 onClick={loadAllClients}
+                 disabled={isLoadingAll}
+                 variant="outline"
+                 className={`${
+                   theme === "dark" 
+                     ? "bg-gray-800 border-gray-700 text-gray-200 hover:bg-gray-700" 
+                     : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                 } h-9 text-xs font-medium`}
+               >
+                 <RefreshCw className={`mr-2 h-3.5 w-3.5 ${isLoadingAll ? "animate-spin" : ""}`} />
+                 {isLoadingAll ? "Loading..." : "Load All Clients"}
+               </Button>
                {userRole !== "billcut" && userRole !== "assistant" && (
                   <Button
                     onClick={downloadCSV}
