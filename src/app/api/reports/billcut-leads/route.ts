@@ -329,11 +329,14 @@ export async function GET(request: Request) {
             const categoryDistribution = leads.reduce(
                 (acc, lead) => {
                     const category = lead.category || "Uncategorized"
+                    if (category === "Converted") return acc; // Skip "Converted" here, we'll set it accurately below
                     acc[category] = (acc[category] || 0) + 1
                     return acc
                 },
                 {} as Record<string, number>,
             )
+            // Ensure "Converted" count matches leads converted in the period
+            categoryDistribution["Converted"] = convertedLeadsCount;
 
             const categoryData = Object.entries(categoryDistribution).map(([name, value]) => ({
                 name,
@@ -470,7 +473,13 @@ export async function GET(request: Request) {
                     const conversionRate = totalCount > 0 ? ((interestedCount + convertedCount) / totalCount) * 100 : 0
 
                     const statusBreakdown = categoryData.reduce((acc, category) => {
-                        acc[category.name] = assigneeLeads.filter((lead) => lead.category === category.name).length
+                        if (category.name === "Converted") {
+                            // Use count of leads converted in this period for this salesperson
+                            acc[category.name] = convertedLeadsList.filter((lead) => lead.assigned_to === name).length
+                        } else {
+                            // Continue using leads created in this period for other statuses
+                            acc[category.name] = assigneeLeads.filter((lead) => lead.category === category.name).length
+                        }
                         return acc
                     }, {} as Record<string, number>)
 

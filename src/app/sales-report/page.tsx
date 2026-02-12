@@ -184,7 +184,7 @@ const getStatusBadgeColor = (status: string) => {
 }
 
 const SalesReportContent = () => {
-  const [leads, setLeads] = useState<CrmLead[]>([])
+  const [analytics, setAnalytics] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState({
     startDate: "",
@@ -614,104 +614,29 @@ const SalesReportContent = () => {
     }
   }, [showReportDropdown])
 
-  // Fetch leads data
+  // Fetch analytics data from API
   useEffect(() => {
-    const fetchLeads = async () => {
+    const fetchAnalyticsData = async () => {
       setIsLoading(true)
       try {
-        const amaLeadsRef = collection(crmDb, "ama_leads")
-
-        // Fetch all leads first, then filter in memory due to different date field structures
-        const querySnapshot = await getDocs(amaLeadsRef)
-
-        const fetchedLeads = querySnapshot.docs.map(
-          (doc) =>
-            ({
-              id: doc.id,
-              ...doc.data(),
-            }) as CrmLead,
-        )
-
-        // Debug: Log sample data structure
-        if (fetchedLeads.length > 0) {
-          console.log("Sample AMA lead data structure:", fetchedLeads[0])
-          console.log("Total AMA leads fetched:", fetchedLeads.length)
+        const url = `/api/reports/sales-report?type=analytics${dateRange.startDate ? `&startDate=${dateRange.startDate}` : ""}${dateRange.endDate ? `&endDate=${dateRange.endDate}` : ""}`
+        const response = await fetch(url)
+        const data = await response.json()
+        
+        if (data.error) {
+          throw new Error(data.error)
         }
-
-        // Helper function to get the creation date from ama_leads data structure
-        const getLeadCreationDate = (lead: CrmLead): Date | null => {
-          try {
-            // AMA leads structure: uses date field (number timestamp)
-            if (lead.date && typeof lead.date === 'number') {
-              return new Date(lead.date)
-            }
-            
-            // Fallback to synced_at if available
-            if (lead.synced_at) {
-              return lead.synced_at.toDate ? lead.synced_at.toDate() : new Date(lead.synced_at)
-            }
-            
-            // Fallback to synced_date if available (number timestamp)
-            if (lead.synced_date && typeof lead.synced_date === 'number') {
-              return new Date(lead.synced_date)
-            }
-            
-            return null
-          } catch (error) {
-            console.error('Error parsing date for lead:', lead.id, error)
-            return null
-          }
-        }
-
-        // Filter leads based on date range
-        let filteredLeads = fetchedLeads
-
-        if (dateRange.startDate || dateRange.endDate) {
-          filteredLeads = fetchedLeads.filter((lead) => {
-            const leadDate = getLeadCreationDate(lead)
-            if (!leadDate) return false
-
-            let includeInRange = true
-
-            if (dateRange.startDate) {
-              const startDate = new Date(dateRange.startDate)
-              startDate.setHours(0, 0, 0, 0)
-              if (leadDate < startDate) {
-                includeInRange = false
-              }
-            }
-
-            if (dateRange.endDate && includeInRange) {
-              const endDate = new Date(dateRange.endDate)
-              // If it's today, use current time, otherwise use end of day
-              if (endDate.toDateString() === new Date().toDateString()) {
-                endDate.setTime(new Date().getTime())
-              } else {
-                endDate.setHours(23, 59, 59, 999)
-              }
-              if (leadDate > endDate) {
-                includeInRange = false
-              }
-            }
-
-            return includeInRange
-          })
-        }
-
-        console.log('Total leads fetched:', fetchedLeads.length)
-        console.log('Leads after date filtering:', filteredLeads.length)
-        console.log('Date range applied:', dateRange)
-
-        setLeads(filteredLeads)
+        
+        setAnalytics(data.analytics)
       } catch (error) {
-        console.error("Error fetching AMA leads:", error)
-        toast.error("Failed to load AMA leads data")
+        console.error("Error fetching analytics data:", error)
+        toast.error("Failed to load analytics data")
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchLeads()
+    fetchAnalyticsData()
   }, [dateRange])
 
   // Separate useEffect for productivity tracking with proper timezone handling
@@ -1029,136 +954,7 @@ const SalesReportContent = () => {
     return lead.assigned_to || "Unassigned"
   }
 
-  // Analytics calculations
-  const analytics = useMemo(() => {
-    if (!leads.length) return null
-
-    // Helper function to get the creation date from ama_leads data structure (same as in fetchLeads)
-    const getLeadCreationDate = (lead: CrmLead): Date | null => {
-      try {
-        // AMA leads structure: uses date field (number timestamp)
-        if (lead.date && typeof lead.date === 'number') {
-          return new Date(lead.date)
-        }
-        
-        // Fallback to synced_at if available
-        if (lead.synced_at) {
-          return lead.synced_at.toDate ? lead.synced_at.toDate() : new Date(lead.synced_at)
-        }
-        
-        // Fallback to synced_date if available (number timestamp)
-        if (lead.synced_date && typeof lead.synced_date === 'number') {
-          return new Date(lead.synced_date)
-        }
-        
-        return null
-      } catch (error) {
-        console.error('Error parsing date for lead in analytics:', lead.id, error)
-        return null
-      }
-    }
-
-    // Basic metrics
-    const totalLeads = leads.length
-    const uniqueAssignees = new Set(leads.map((lead) => getAssignedTo(lead))).size
-
-    // Calculate conversion rate
-    const convertedLeads = leads.filter((lead) => lead.status === "Converted").length
-    const conversionRate = (convertedLeads / totalLeads) * 100
-
-    // Category distribution with percentage
-    const categoryDistribution = leads.reduce(
-      (acc, lead) => {
-        // Normalize status: convert em dash (–) to "No Status"
-        const category = lead.status === "–" ? "No Status" : (lead.status || "No Status")
-        acc[category] = (acc[category] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    const categoryData = Object.entries(categoryDistribution).map(([name, value]) => ({
-      name,
-      value,
-      percentage: (value / totalLeads) * 100,
-    }))
-
-    // Assigned to distribution
-    const assigneeDistribution = leads.reduce(
-      (acc, lead) => {
-        const assignee = getAssignedTo(lead)
-        acc[assignee] = (acc[assignee] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    // Source database distribution
-    const sourceDatabaseDistribution = leads.reduce(
-      (acc, lead) => {
-        const source = lead.source_database || "Unknown"
-        acc[source] = (acc[source] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    // Sales performance
-    const salesPerformance = Object.entries(assigneeDistribution).map(([name, count]) => {
-      const assigneeLeads = leads.filter((lead) => getAssignedTo(lead) === name)
-      const interestedCount = assigneeLeads.filter((lead) => lead.status === "Interested").length
-      const convertedCount = assigneeLeads.filter((lead) => lead.status === "Converted").length
-      const conversionRate = count > 0 ? ((interestedCount + convertedCount) / count) * 100 : 0
-
-      return {
-        name,
-        totalLeads: count,
-        interested: interestedCount,
-        converted: convertedCount,
-        conversionRate: Math.round(conversionRate * 100) / 100,
-      }
-    })
-
-    // Contact info analysis
-    const contactAnalysis = {
-      hasEmail: leads.filter((lead) => {
-        return lead.email && lead.email !== ""
-      }).length,
-      hasPhone: leads.filter((lead) => {
-        return lead.mobile && lead.mobile > 0
-      }).length,
-      hasQuery: leads.filter((lead) => lead.query && lead.query !== "").length,
-      hasNotes: leads.filter((lead) => lead.lastNote && lead.lastNote !== "").length,
-      hasSalesNotes: leads.filter((lead) => lead.salesNotes && lead.salesNotes !== "").length,
-    }
-
-    // Time-based analysis with unified date handling
-    const monthlyDistribution = leads.reduce(
-      (acc, lead) => {
-        const date = getLeadCreationDate(lead)
-        if (date) {
-          const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
-          acc[monthYear] = (acc[monthYear] || 0) + 1
-        }
-        return acc
-      },
-      {} as Record<string, number>,
-    )
-
-    return {
-      totalLeads,
-      uniqueAssignees,
-      conversionRate: Math.round(conversionRate * 100) / 100,
-      categoryDistribution: categoryData,
-      assigneeDistribution: Object.entries(assigneeDistribution).map(([name, value]) => ({ name, value })),
-      sourceDatabaseDistribution: Object.entries(sourceDatabaseDistribution).map(([name, value]) => ({ name, value })),
-      monthlyDistribution: Object.entries(monthlyDistribution)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-      salesPerformance,
-      contactAnalysis,
-    }
-  }, [leads])
+  // Removed client-side analytics calculation
 
   if (isLoading) {
     return (
@@ -1707,7 +1503,7 @@ const SalesReportContent = () => {
                     dataKey="value"
                     label={({ name, value }) => `${name}: ${value}`}
                   >
-                    {analytics.sourceDatabaseDistribution.map((entry, index) => (
+                    {analytics.sourceDatabaseDistribution.map((entry: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -1795,7 +1591,7 @@ const SalesReportContent = () => {
                 Column Visibility Controls
               </h4>
               <div className="flex flex-wrap gap-2">
-                {analytics.categoryDistribution.map((category) => (
+                {analytics.categoryDistribution.map((category: any) => (
                   <button
                     key={category.name}
                     onClick={() => toggleColumnVisibility(category.name)}
@@ -1836,7 +1632,7 @@ const SalesReportContent = () => {
                         </button>
                       </div>
                     </th>
-                    {analytics.categoryDistribution.map((category) => (
+                    {analytics.categoryDistribution.map((category: any) => (
                       <th
                         key={category.name}
                         className={`px-3 lg:px-6 py-3 text-left text-xs font-medium uppercase tracking-wider border-2 ${
@@ -1882,18 +1678,9 @@ const SalesReportContent = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {analytics.salesPerformance.map((rep) => {
-                    // Get detailed status breakdown for this salesperson
-                    const repLeads = leads.filter((lead) => getAssignedTo(lead) === rep.name)
-                    const statusBreakdown = analytics.categoryDistribution.reduce(
-                      (acc, category) => {
-                        // Handle both regular status and em dash for "No Status"
-                        const normalizedStatus = category.name === "No Status" ? ["No Status", "–"] : [category.name]
-                        acc[category.name] = repLeads.filter((lead) => normalizedStatus.includes(lead.status)).length
-                        return acc
-                      },
-                      {} as Record<string, number>,
-                    )
+                  {analytics.salesPerformance.map((rep: any) => {
+                    // Use status breakdown provided by the API
+                    const statusBreakdown = rep.statusBreakdown || {}
 
                     return (
                       <tr key={rep.name} className="hover:opacity-80 transition-opacity duration-200">
@@ -1902,7 +1689,7 @@ const SalesReportContent = () => {
                         }`}>
                           {rep.name}
                         </td>
-                        {analytics.categoryDistribution.map((category) => (
+                        {analytics.categoryDistribution.map((category: any) => (
                           <td
                             key={category.name}
                             className={`px-3 lg:px-6 py-4 whitespace-nowrap text-sm border-2 ${
@@ -1957,7 +1744,7 @@ const SalesReportContent = () => {
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                 <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">Top Performer</h4>
                 {(() => {
-                  const topPerformer = analytics.salesPerformance.reduce((max, rep) =>
+                  const topPerformer = analytics.salesPerformance.reduce((max: any, rep: any) =>
                     rep.conversionRate > max.conversionRate ? rep : max,
                   )
                   return (
@@ -1974,7 +1761,7 @@ const SalesReportContent = () => {
               <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
                 <h4 className="font-semibold text-green-900 dark:text-green-200 mb-2">Most Leads</h4>
                 {(() => {
-                  const mostLeads = analytics.salesPerformance.reduce((max, rep) =>
+                  const mostLeads = analytics.salesPerformance.reduce((max: any, rep: any) =>
                     rep.totalLeads > max.totalLeads ? rep : max,
                   )
                   return (

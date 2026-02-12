@@ -143,8 +143,11 @@ export async function GET(request: Request) {
                     stats.totalLeads++
                     const status = lead.status === "–" ? "No Status" : (lead.status || "No Status")
                     if (status === "Interested") stats.interested++
-                    // We don't count converted here for the `converted` metric, but we keep it in statusBreakdown for breakdown of leads CREATED in this period
-                    stats.statusBreakdown[status] = (stats.statusBreakdown[status] || 0) + 1
+
+                    // Skip "Converted" here in statusBreakdown as it will be set by the conversion date logic below
+                    if (status !== "Converted") {
+                        stats.statusBreakdown[status] = (stats.statusBreakdown[status] || 0) + 1
+                    }
                 }
             })
 
@@ -162,6 +165,8 @@ export async function GET(request: Request) {
                         }
                     }
                     spStats[name].converted++
+                    // Also update statusBreakdown for the "Converted" bucket
+                    spStats[name].statusBreakdown["Converted"] = (spStats[name].statusBreakdown["Converted"] || 0) + 1
                 }
             })
 
