@@ -5,3 +5,5 @@ export * from './MetricCard';
 export * from './LoadingSkeletons';
 export * from './ThemeToggle';
 export * from './SalespersonWeeklyAnalytics';
+export * from './ClientAdvocateWeeklyAnalytics';
+export * from './ClientSourceWeeklyAnalytics';

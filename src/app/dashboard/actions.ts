@@ -940,6 +940,46 @@ export interface SalespersonWeeklyAnalytics {
     };
 }
 
+export interface ClientAdvocateWeeklyAnalytics {
+    advocateName: string;
+    weeks: {
+        week1: number;
+        week2: number;
+        week3: number;
+        week4: number;
+    };
+    monthlyTotal: number;
+    history: {
+        [monthLabel: string]: {
+            week1: number;
+            week2: number;
+            week3: number;
+            week4: number;
+            total: number;
+        };
+    };
+}
+
+export interface ClientSourceWeeklyAnalytics {
+    source: string;
+    weeks: {
+        week1: number;
+        week2: number;
+        week3: number;
+        week4: number;
+    };
+    monthlyTotal: number;
+    history: {
+        [monthLabel: string]: {
+            week1: number;
+            week2: number;
+            week3: number;
+            week4: number;
+            total: number;
+        };
+    };
+}
+
 export async function getSalespersonWeeklyAnalytics(): Promise<SalespersonWeeklyAnalytics[]> {
     try {
         if (!db) throw new Error('Firebase Admin SDK not initialized');
@@ -1056,6 +1096,186 @@ export async function getSalespersonWeeklyAnalytics(): Promise<SalespersonWeekly
 
     } catch (error) {
         console.error('Error fetching salesperson weekly analytics:', error);
+        return [];
+    }
+}
+
+export async function getClientAdvocateWeeklyAnalytics(): Promise<ClientAdvocateWeeklyAnalytics[]> {
+    try {
+        if (!db) throw new Error('Firebase Admin SDK not initialized');
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        // reference date "2025-05-03" (string) as deciding factor
+        // This is a Saturday. W1 starts on the 3rd.
+
+        const clientsSnap = await db.collection('clients').get();
+        const advocateData: Record<string, ClientAdvocateWeeklyAnalytics> = {};
+
+        clientsSnap.forEach(doc => {
+            const data = doc.data();
+            const advocateName = data.alloc_adv || 'Unassigned';
+
+            // Use convertedAt exclusively as requested
+            let date: Date;
+            const rawDate = data.convertedAt;
+
+            if (!rawDate) return;
+
+            if (typeof rawDate === 'string') {
+                date = new Date(rawDate);
+            } else if (rawDate.toDate) {
+                date = rawDate.toDate();
+            } else if (rawDate._seconds) {
+                date = new Date(rawDate._seconds * 1000);
+            } else {
+                date = new Date(rawDate);
+            }
+
+            if (isNaN(date.getTime())) return;
+
+            const paymentMonth = date.getMonth();
+            const paymentYear = date.getFullYear();
+            const paymentDay = date.getDate();
+            const monthLabel = `${monthNames[paymentMonth]} ${paymentYear}`;
+
+            if (!advocateData[advocateName]) {
+                advocateData[advocateName] = {
+                    advocateName,
+                    weeks: { week1: 0, week2: 0, week3: 0, week4: 0 },
+                    monthlyTotal: 0,
+                    history: {}
+                };
+            }
+
+            const adv = advocateData[advocateName];
+
+            if (!adv.history[monthLabel]) {
+                adv.history[monthLabel] = { week1: 0, week2: 0, week3: 0, week4: 0, total: 0 };
+            }
+
+            const historyMonth = adv.history[monthLabel];
+            historyMonth.total += 1;
+
+            // Determine week based on "2025-05-03" as W1 start (Day 3)
+            // W1 (3-9), W2 (10-16), W3 (17-23), W4+ (24-end)
+            // If day is 1-2, it falls into the "previous" month's W4+? 
+            // Or just treat it as W1 for simplicity but aligned to the 3rd?
+            // "use startDate 2025-05-03 as the week deciding factor"
+            // If the user wants W1 to start on the 3rd:
+
+            let weekKey: 'week1' | 'week2' | 'week3' | 'week4';
+            if (paymentDay >= 3 && paymentDay <= 9) weekKey = 'week1';
+            else if (paymentDay >= 10 && paymentDay <= 16) weekKey = 'week2';
+            else if (paymentDay >= 17 && paymentDay <= 23) weekKey = 'week3';
+            else if (paymentDay >= 24 || paymentDay < 3) weekKey = 'week4';
+            else weekKey = 'week1'; // Should not happen with logic above
+
+            historyMonth[weekKey] += 1;
+
+            if (paymentMonth === currentMonth && paymentYear === currentYear) {
+                adv.monthlyTotal += 1;
+                adv.weeks[weekKey] += 1;
+            }
+        });
+
+        return Object.values(advocateData).sort((a, b) => b.monthlyTotal - a.monthlyTotal);
+
+    } catch (error) {
+        console.error('Error fetching client advocate weekly analytics:', error);
+        return [];
+    }
+}
+
+export async function getClientSourceWeeklyAnalytics(): Promise<ClientSourceWeeklyAnalytics[]> {
+    try {
+        if (!db) throw new Error('Firebase Admin SDK not initialized');
+
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        const clientsSnap = await db.collection('clients').get();
+        const sourceData: Record<string, ClientSourceWeeklyAnalytics> = {};
+
+        // Helper to normalize source names
+        const normalizeSource = (source: string): string => {
+            if (!source) return 'Unknown';
+            const lower = source.toLowerCase().trim();
+            if (lower === 'billcut' || lower === 'bill cut') return 'BillCut';
+            if (lower === 'ama') return 'AMA';
+            if (lower === 'credsettle' || lower === 'credsettlee' || lower === 'manual') return 'CredSettle';
+            if (lower === 'settleloans' || lower === 'settleloans contact' || lower === 'settleloans home') return 'SettleLoans';
+            return source;
+        };
+
+        clientsSnap.forEach(doc => {
+            const data = doc.data();
+            const sourceName = normalizeSource(data.source || data.source_database);
+
+            let date: Date;
+            const rawDate = data.convertedAt;
+
+            if (!rawDate) return;
+
+            if (typeof rawDate === 'string') {
+                date = new Date(rawDate);
+            } else if (rawDate.toDate) {
+                date = rawDate.toDate();
+            } else if (rawDate._seconds) {
+                date = new Date(rawDate._seconds * 1000);
+            } else {
+                date = new Date(rawDate);
+            }
+
+            if (isNaN(date.getTime())) return;
+
+            const paymentMonth = date.getMonth();
+            const paymentYear = date.getFullYear();
+            const paymentDay = date.getDate();
+            const monthLabel = `${monthNames[paymentMonth]} ${paymentYear}`;
+
+            if (!sourceData[sourceName]) {
+                sourceData[sourceName] = {
+                    source: sourceName,
+                    weeks: { week1: 0, week2: 0, week3: 0, week4: 0 },
+                    monthlyTotal: 0,
+                    history: {}
+                };
+            }
+
+            const src = sourceData[sourceName];
+
+            if (!src.history[monthLabel]) {
+                src.history[monthLabel] = { week1: 0, week2: 0, week3: 0, week4: 0, total: 0 };
+            }
+
+            const historyMonth = src.history[monthLabel];
+            historyMonth.total += 1;
+
+            let weekKey: 'week1' | 'week2' | 'week3' | 'week4';
+            if (paymentDay >= 3 && paymentDay <= 9) weekKey = 'week1';
+            else if (paymentDay >= 10 && paymentDay <= 16) weekKey = 'week2';
+            else if (paymentDay >= 17 && paymentDay <= 23) weekKey = 'week3';
+            else if (paymentDay >= 24 || paymentDay < 3) weekKey = 'week4';
+            else weekKey = 'week1';
+
+            historyMonth[weekKey] += 1;
+
+            if (paymentMonth === currentMonth && paymentYear === currentYear) {
+                src.monthlyTotal += 1;
+                src.weeks[weekKey] += 1;
+            }
+        });
+
+        return Object.values(sourceData).sort((a, b) => b.monthlyTotal - a.monthlyTotal);
+
+    } catch (error) {
+        console.error('Error fetching client source weekly analytics:', error);
         return [];
     }
 }

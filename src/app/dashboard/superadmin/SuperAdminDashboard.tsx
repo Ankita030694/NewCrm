@@ -48,7 +48,8 @@ import {
   SalesMetricsSkeleton,
   ChartSkeleton,
   TableSkeleton,
-  SalespersonWeeklyAnalyticsComponent
+  SalespersonWeeklyAnalyticsComponent,
+  ClientSourceWeeklyAnalyticsComponent
 } from './components';
 
 import { ThemeToggle } from './components/ThemeToggle';
@@ -1051,6 +1052,9 @@ const SuperAdminDashboard = React.memo(() => {
               </Card>
             </div>
           )}
+
+          {/* Client Source Weekly & Historical Analytics */}
+          <ClientSourceWeeklyAnalyticsComponent />
         </div>
       </div>
       </ThemeProvider>

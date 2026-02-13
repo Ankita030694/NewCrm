@@ -5,3 +5,4 @@ export { usePaymentAnalytics } from './usePaymentAnalytics';
 export { useOpsPaymentsAnalytics } from './useOpsPaymentsAnalytics';
 export { useProgressiveDataLoading } from './useProgressiveDataLoading';
 export { useSalespersonWeeklyAnalytics } from './useSalespersonWeeklyAnalytics';
+export { useClientAdvocateWeeklyAnalytics } from './useClientAdvocateWeeklyAnalytics';
